@@ -28,4 +28,20 @@ export async function initSchema(db: DbAdapter): Promise<void> {
   for (const statement of SCHEMA_STATEMENTS) {
     await db.execAsync(statement);
   }
+  await ensureContactsPhoneColumn(db);
+}
+
+/**
+ * Additive migration: Contacts didn't originally have a phone number (the
+ * Phase 1 contract locked id/name/is_ghost). The Nudge feature needs one to
+ * deep-link WhatsApp, so add it as a nullable column. Existing DBs created
+ * before this migration get it retrofitted; the ALTER throws "duplicate
+ * column name" on DBs that already have it, which we swallow.
+ */
+async function ensureContactsPhoneColumn(db: DbAdapter): Promise<void> {
+  try {
+    await db.execAsync(`ALTER TABLE Contacts ADD COLUMN phone TEXT;`);
+  } catch {
+    // Column already exists.
+  }
 }

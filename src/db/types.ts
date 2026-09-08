@@ -12,6 +12,18 @@ export interface ContactRow {
   id: number;
   name: string;
   is_ghost: number; // 0 | 1
+  phone: string | null;
+}
+
+/** Open IOU joined with its contact and originating transaction, for UI display. */
+export interface OpenIOUDetail {
+  id: number;
+  contactId: number;
+  contactName: string;
+  contactPhone: string | null;
+  transactionId: number;
+  merchant: string;
+  splitAmount: number;
 }
 
 export interface IOURow {

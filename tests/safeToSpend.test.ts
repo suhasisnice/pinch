@@ -1,4 +1,11 @@
-import { computeSafeToSpend, currentYearMonth, getSafeToSpend } from '../src/math/safeToSpend';
+import {
+  computeSafeToSpend,
+  currentYearMonth,
+  getSafeToSpend,
+  effectiveDaysRemaining,
+  getCalibratedSafeToSpend,
+  CalibrationBaseline,
+} from '../src/math/safeToSpend';
 import * as dbService from '../src/db/dbService';
 import { createSqlJsAdapter } from './utils/sqljsAdapter';
 
@@ -80,5 +87,85 @@ describe('safeToSpend.getSafeToSpend (DB-integrated, real SQLite via sql.js)', (
     const breakdown = await getSafeToSpend(200, currentYearMonth());
     expect(breakdown.grossMonthlyExpenses).toBe(0);
     expect(breakdown.safeToSpend).toBe(200);
+  });
+});
+
+describe('safeToSpend.effectiveDaysRemaining (pure)', () => {
+  test('equals daysRemaining when calibrated just now', () => {
+    const baseline: CalibrationBaseline = {
+      balance: 1000,
+      daysRemaining: 10,
+      calibratedAt: new Date().toISOString(),
+    };
+    expect(effectiveDaysRemaining(baseline, new Date())).toBe(10);
+  });
+
+  test('counts down by full days elapsed since calibration', () => {
+    const baseline: CalibrationBaseline = {
+      balance: 1000,
+      daysRemaining: 10,
+      calibratedAt: '2026-09-01T00:00:00.000Z',
+    };
+    const threeDaysLater = new Date('2026-09-04T00:00:00.000Z');
+    expect(effectiveDaysRemaining(baseline, threeDaysLater)).toBe(7);
+  });
+
+  test('floors at 1 even if the window has technically run out', () => {
+    const baseline: CalibrationBaseline = {
+      balance: 1000,
+      daysRemaining: 5,
+      calibratedAt: '2026-09-01T00:00:00.000Z',
+    };
+    const wayLater = new Date('2026-10-01T00:00:00.000Z');
+    expect(effectiveDaysRemaining(baseline, wayLater)).toBe(1);
+  });
+});
+
+describe('safeToSpend.getCalibratedSafeToSpend (DB-integrated, real SQLite via sql.js)', () => {
+  beforeEach(async () => {
+    dbService.__resetDatabaseForTests();
+    const adapter = await createSqlJsAdapter();
+    await dbService.initDatabase(adapter);
+  });
+
+  test('rebases on the calibration balance, only counting spending logged after calibration', async () => {
+    // Spending before calibration is already baked into the balance the
+    // user typed in — it must not be double-counted.
+    await dbService.addTransaction(300, 'Before calibration', 'DEBIT');
+
+    const baseline: CalibrationBaseline = {
+      balance: 1000,
+      daysRemaining: 10,
+      calibratedAt: new Date(Date.now() + 10).toISOString(),
+    };
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    await dbService.addTransaction(150, 'After calibration', 'DEBIT');
+
+    const contactId = await dbService.addContact('Roommate');
+    const txId = await dbService.addTransaction(80, 'Fronted for roommate', 'DEBIT');
+    await dbService.createIOU(txId, contactId, 30);
+
+    const breakdown = await getCalibratedSafeToSpend(baseline);
+
+    // Gross since calibration = 150 + 80 = 230; open IOU = 30 isolated out.
+    expect(breakdown.grossMonthlyExpenses).toBe(230);
+    expect(breakdown.openIOUTotal).toBe(30);
+    expect(breakdown.safeToSpend).toBe(1000 - 200);
+    expect(breakdown.daysRemaining).toBe(10);
+  });
+
+  test('with no spending since calibration, safe-to-spend equals the calibrated balance', async () => {
+    await dbService.addTransaction(9999, 'Long before calibration', 'DEBIT');
+
+    const baseline: CalibrationBaseline = {
+      balance: 400,
+      daysRemaining: 6,
+      calibratedAt: new Date(Date.now() + 10).toISOString(),
+    };
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const breakdown = await getCalibratedSafeToSpend(baseline);
+    expect(breakdown.safeToSpend).toBe(400);
   });
 });
