@@ -109,6 +109,25 @@ export async function getContacts(): Promise<ContactRow[]> {
   return db.getAllAsync<ContactRow>(`SELECT * FROM Contacts;`);
 }
 
+/**
+ * Looks up a contact by exact name (case-insensitive) and returns its id,
+ * creating a new Contacts row if none exists yet. Lets callers that only
+ * have a name (e.g. an SMS sender) resolve it to the contact_id createIOU
+ * requires without duplicating a contact on every call.
+ */
+export async function findOrCreateContactByName(name: string): Promise<number> {
+  const db = getAdapter();
+  const trimmed = name.trim();
+  const existing = await db.getFirstAsync<ContactRow>(
+    `SELECT * FROM Contacts WHERE lower(name) = lower(?);`,
+    [trimmed]
+  );
+  if (existing) {
+    return existing.id;
+  }
+  return addContact(trimmed);
+}
+
 export async function getTransactionById(id: number): Promise<TransactionRow | null> {
   const db = getAdapter();
   return db.getFirstAsync<TransactionRow>(`SELECT * FROM Transactions WHERE id = ?;`, [id]);
