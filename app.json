@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "Pinch",
+    "slug": "pinch",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {}
+  }
+}
