@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StatusBar, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { initDatabase } from './src/db/dbService';
-import ParserScreen from './src/screens/ParserScreen';
+import RootNavigator from './src/navigation/RootNavigator';
+import { palette } from './src/theme/theme';
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -12,20 +14,29 @@ export default function App() {
 
   if (!ready) {
     return (
-      <View style={styles.container}>
-        <Text>Pinch — initializing...</Text>
+      <View style={styles.loading}>
+        <StatusBar barStyle="light-content" />
+        <Text style={styles.loadingText}>Pinch — initializing...</Text>
       </View>
     );
   }
 
-  return <ParserScreen />;
+  return (
+    <SafeAreaProvider>
+      <StatusBar barStyle="light-content" />
+      <RootNavigator />
+    </SafeAreaProvider>
+  );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  loading: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: palette.background,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  loadingText: {
+    color: palette.textSecondary,
   },
 });

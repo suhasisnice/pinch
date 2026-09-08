@@ -1,6 +1,6 @@
 import { initSchema } from './schema';
 import { createExpoAdapter } from './expoAdapter';
-import { ContactRow, DbAdapter, IOURow, TransactionRow } from './types';
+import { ContactRow, DbAdapter, IOURow, OpenIOUDetail, TransactionRow } from './types';
 
 let adapter: DbAdapter | null = null;
 
@@ -95,18 +95,42 @@ export async function resolveIOUByAmount(creditAmount: number): Promise<boolean>
 // Used by src/math/safeToSpend.ts and by tests.
 // ---------------------------------------------------------------------------
 
-export async function addContact(name: string, isGhost: boolean = false): Promise<number> {
+export async function addContact(
+  name: string,
+  isGhost: boolean = false,
+  phone?: string
+): Promise<number> {
   const db = getAdapter();
-  const result = await db.runAsync(`INSERT INTO Contacts (name, is_ghost) VALUES (?, ?);`, [
-    name,
-    isGhost ? 1 : 0,
-  ]);
+  const result = await db.runAsync(
+    `INSERT INTO Contacts (name, is_ghost, phone) VALUES (?, ?, ?);`,
+    [name, isGhost ? 1 : 0, phone?.trim() || null]
+  );
   return result.lastInsertRowId;
 }
 
 export async function getContacts(): Promise<ContactRow[]> {
   const db = getAdapter();
   return db.getAllAsync<ContactRow>(`SELECT * FROM Contacts;`);
+}
+
+/** Open IOUs joined with contact name/phone and the originating transaction's merchant. */
+export async function getOpenIOUsWithDetails(): Promise<OpenIOUDetail[]> {
+  const db = getAdapter();
+  return db.getAllAsync<OpenIOUDetail>(
+    `SELECT
+       IOUs.id as id,
+       IOUs.contact_id as contactId,
+       Contacts.name as contactName,
+       Contacts.phone as contactPhone,
+       IOUs.transaction_id as transactionId,
+       Transactions.merchant as merchant,
+       IOUs.split_amount as splitAmount
+     FROM IOUs
+     JOIN Contacts ON Contacts.id = IOUs.contact_id
+     JOIN Transactions ON Transactions.id = IOUs.transaction_id
+     WHERE IOUs.is_settled = 0
+     ORDER BY Transactions.timestamp DESC;`
+  );
 }
 
 /**
@@ -164,6 +188,39 @@ export async function getOpenIOUTotalForMonth(yearMonth: string): Promise<number
      JOIN Transactions ON Transactions.id = IOUs.transaction_id
      WHERE IOUs.is_settled = 0 AND substr(Transactions.timestamp, 1, 7) = ?;`,
     [yearMonth]
+  );
+  return row?.total ?? 0;
+}
+
+/**
+ * Sum of DEBIT transactions logged at or after the given ISO timestamp.
+ * Used for Mid-Month Calibration, where the user supplies a fresh starting
+ * balance "as of today" and only spending after that point should count
+ * against it (spending before it is already baked into the balance they
+ * typed in).
+ */
+export async function getDebitTotalSince(isoTimestamp: string): Promise<number> {
+  const db = getAdapter();
+  const row = await db.getFirstAsync<{ total: number | null }>(
+    `SELECT SUM(amount) as total FROM Transactions WHERE type = 'DEBIT' AND timestamp >= ?;`,
+    [isoTimestamp]
+  );
+  return row?.total ?? 0;
+}
+
+/**
+ * Sum of split_amount for still-open IOUs whose underlying transaction was
+ * logged at or after the given ISO timestamp. Calibration counterpart to
+ * getOpenIOUTotalForMonth.
+ */
+export async function getOpenIOUTotalSince(isoTimestamp: string): Promise<number> {
+  const db = getAdapter();
+  const row = await db.getFirstAsync<{ total: number | null }>(
+    `SELECT SUM(IOUs.split_amount) as total
+     FROM IOUs
+     JOIN Transactions ON Transactions.id = IOUs.transaction_id
+     WHERE IOUs.is_settled = 0 AND Transactions.timestamp >= ?;`,
+    [isoTimestamp]
   );
   return row?.total ?? 0;
 }

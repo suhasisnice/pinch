@@ -113,4 +113,61 @@ describe('dbService (real SQLite via sql.js)', () => {
     dbService.__resetDatabaseForTests();
     await expect(dbService.addTransaction(1, 'X', 'DEBIT')).rejects.toThrow(/not initialized/i);
   });
+
+  test('addContact persists an optional phone number, defaulting to null', async () => {
+    const withPhone = await dbService.addContact('Rahul', false, '+91 98765 43210');
+    const withoutPhone = await dbService.addContact('Priya');
+
+    const contacts = await dbService.getContacts();
+    expect(contacts.find((c) => c.id === withPhone)?.phone).toBe('+91 98765 43210');
+    expect(contacts.find((c) => c.id === withoutPhone)?.phone).toBeNull();
+  });
+
+  test('getOpenIOUsWithDetails joins contact and merchant info, excluding settled IOUs', async () => {
+    const contactId = await dbService.addContact('Rahul', false, '+911234567890');
+    const txId = await dbService.addTransaction(80, 'Movie Night', 'DEBIT');
+    await dbService.createIOU(txId, contactId, 40);
+
+    const settledContactId = await dbService.addContact('Sam');
+    const settledTxId = await dbService.addTransaction(20, 'Snacks', 'DEBIT');
+    await dbService.createIOU(settledTxId, settledContactId, 20);
+    await dbService.resolveIOUByAmount(20);
+
+    const details = await dbService.getOpenIOUsWithDetails();
+    expect(details).toHaveLength(1);
+    expect(details[0]).toMatchObject({
+      contactId,
+      contactName: 'Rahul',
+      contactPhone: '+911234567890',
+      transactionId: txId,
+      merchant: 'Movie Night',
+      splitAmount: 40,
+    });
+  });
+
+  test('getDebitTotalSince only counts DEBIT transactions at or after the timestamp', async () => {
+    await dbService.addTransaction(100, 'Before', 'DEBIT');
+    const cutoff = new Date(Date.now() + 10).toISOString();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await dbService.addTransaction(50, 'After', 'DEBIT');
+    await dbService.addTransaction(999, 'After Credit', 'CREDIT');
+
+    const total = await dbService.getDebitTotalSince(cutoff);
+    expect(total).toBe(50);
+  });
+
+  test('getOpenIOUTotalSince only counts open IOUs whose transaction is at or after the timestamp', async () => {
+    const contactId = await dbService.addContact('Jordan');
+    const earlyTxId = await dbService.addTransaction(60, 'Early', 'DEBIT');
+    await dbService.createIOU(earlyTxId, contactId, 30);
+
+    const cutoff = new Date(Date.now() + 10).toISOString();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const lateTxId = await dbService.addTransaction(60, 'Late', 'DEBIT');
+    await dbService.createIOU(lateTxId, contactId, 25);
+
+    const total = await dbService.getOpenIOUTotalSince(cutoff);
+    expect(total).toBe(25);
+  });
 });

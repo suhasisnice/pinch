@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
-  Button,
+  Pressable,
+  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -8,18 +9,15 @@ import {
   View,
 } from 'react-native';
 
-import {
-  addTransaction,
-  createIOU,
-  findOrCreateContactByName,
-  resolveIOUByAmount,
-} from '../db/dbService';
+import { addTransaction, resolveIOUByAmount } from '../db/dbService';
 import { parseCreditSms, parseDebitSms } from '../services/parserService';
+import SplitModal from '../components/SplitModal';
+import { palette, radii, spacing, typography } from '../theme/theme';
 
 const DEBIT_EXAMPLE = 'Rs. 700 spent at Olive Cafe via UPI';
 const CREDIT_EXAMPLE = 'Received Rs. 175 from Rahul via UPI';
 
-interface SplitPromptState {
+interface PendingSplit {
   transactionId: number;
   amount: number;
   merchant: string;
@@ -29,16 +27,13 @@ interface SplitPromptState {
  * Developer-only screen for exercising the SMS parsing pipeline without
  * relying on device SMS permissions. Two buttons simulate the two message
  * types a bank sends and drive them through the same Phase 1 database calls
- * a real SMS listener would use.
+ * a real SMS listener would use. Logging a debit opens the Phase 3 Split
+ * Modal, matching what a live SMS listener would trigger.
  */
 export default function ParserScreen() {
   const [smsText, setSmsText] = useState(DEBIT_EXAMPLE);
   const [statusMessage, setStatusMessage] = useState('');
-  const [splitPrompt, setSplitPrompt] = useState<SplitPromptState | null>(
-    null
-  );
-  const [splitCounterparty, setSplitCounterparty] = useState('');
-  const [splitAmount, setSplitAmount] = useState('');
+  const [pendingSplit, setPendingSplit] = useState<PendingSplit | null>(null);
 
   async function handleSimulateDebit() {
     const parsed = parseDebitSms(smsText);
@@ -47,22 +42,10 @@ export default function ParserScreen() {
       return;
     }
 
-    const transactionId = await addTransaction(
-      parsed.amount,
-      parsed.merchant,
-      'DEBIT'
-    );
+    const transactionId = await addTransaction(parsed.amount, parsed.merchant, 'DEBIT');
 
-    setStatusMessage(
-      `Logged debit: Rs ${parsed.amount} at ${parsed.merchant}`
-    );
-    setSplitAmount(String(parsed.amount));
-    setSplitCounterparty('');
-    setSplitPrompt({
-      transactionId,
-      amount: parsed.amount,
-      merchant: parsed.merchant,
-    });
+    setStatusMessage(`Logged debit: Rs ${parsed.amount} at ${parsed.merchant}`);
+    setPendingSplit({ transactionId, amount: parsed.amount, merchant: parsed.merchant });
   }
 
   async function handleSimulateCredit() {
@@ -87,141 +70,107 @@ export default function ParserScreen() {
     );
   }
 
-  async function handleConfirmSplit() {
-    if (!splitPrompt) return;
-    const amountNum = parseFloat(splitAmount);
-    if (!splitCounterparty.trim() || Number.isNaN(amountNum)) {
-      setStatusMessage('Enter a valid split amount and person to continue.');
-      return;
-    }
-
-    const contactId = await findOrCreateContactByName(splitCounterparty.trim());
-    await createIOU(splitPrompt.transactionId, contactId, amountNum);
-
-    setStatusMessage(
-      `Created IOU: ${splitCounterparty.trim()} owes Rs ${amountNum}.`
-    );
-    setSplitPrompt(null);
-  }
-
-  function handleDismissSplit() {
-    setSplitPrompt(null);
-  }
-
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>SMS Parser Simulator</Text>
-      <Text style={styles.subtitle}>
-        Paste a bank SMS below, then simulate it as a debit or credit.
-      </Text>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={typography.cardTitle}>SMS Parser Simulator</Text>
+        <Text style={styles.subtitle}>
+          Paste a bank SMS below, then simulate it as a debit or credit.
+        </Text>
 
-      <TextInput
-        style={styles.smsInput}
-        value={smsText}
-        onChangeText={setSmsText}
-        multiline
-        placeholder="Paste bank SMS text here"
-      />
-
-      <View style={styles.buttonRow}>
-        <Button title="Simulate Debit SMS" onPress={handleSimulateDebit} />
-        <Button title="Simulate Credit SMS" onPress={handleSimulateCredit} />
-      </View>
-
-      <View style={styles.exampleRow}>
-        <Button
-          title="Fill debit example"
-          onPress={() => setSmsText(DEBIT_EXAMPLE)}
+        <TextInput
+          style={styles.smsInput}
+          value={smsText}
+          onChangeText={setSmsText}
+          multiline
+          placeholder="Paste bank SMS text here"
+          placeholderTextColor={palette.textMuted}
         />
-        <Button
-          title="Fill credit example"
-          onPress={() => setSmsText(CREDIT_EXAMPLE)}
-        />
-      </View>
 
-      {statusMessage ? (
-        <Text style={styles.status}>{statusMessage}</Text>
-      ) : null}
-
-      {splitPrompt ? (
-        <View style={styles.splitPrompt}>
-          <Text style={styles.splitTitle}>Split this expense?</Text>
-          <Text>
-            Rs {splitPrompt.amount} at {splitPrompt.merchant}
-          </Text>
-
-          <TextInput
-            style={styles.input}
-            value={splitCounterparty}
-            onChangeText={setSplitCounterparty}
-            placeholder="Who owes you? (e.g. Rahul)"
-          />
-          <TextInput
-            style={styles.input}
-            value={splitAmount}
-            onChangeText={setSplitAmount}
-            placeholder="Split amount"
-            keyboardType="numeric"
-          />
-
-          <View style={styles.buttonRow}>
-            <Button title="Create IOU" onPress={handleConfirmSplit} />
-            <Button title="Skip" onPress={handleDismissSplit} />
-          </View>
+        <View style={styles.buttonRow}>
+          <Pressable style={styles.actionButton} onPress={handleSimulateDebit}>
+            <Text style={styles.actionButtonText}>Simulate Debit SMS</Text>
+          </Pressable>
+          <Pressable style={styles.actionButton} onPress={handleSimulateCredit}>
+            <Text style={styles.actionButtonText}>Simulate Credit SMS</Text>
+          </Pressable>
         </View>
-      ) : null}
-    </ScrollView>
+
+        <View style={styles.buttonRow}>
+          <Pressable style={styles.secondaryButton} onPress={() => setSmsText(DEBIT_EXAMPLE)}>
+            <Text style={styles.secondaryButtonText}>Fill debit example</Text>
+          </Pressable>
+          <Pressable style={styles.secondaryButton} onPress={() => setSmsText(CREDIT_EXAMPLE)}>
+            <Text style={styles.secondaryButtonText}>Fill credit example</Text>
+          </Pressable>
+        </View>
+
+        {statusMessage ? <Text style={styles.status}>{statusMessage}</Text> : null}
+      </ScrollView>
+
+      <SplitModal
+        visible={pendingSplit !== null}
+        transactionId={pendingSplit?.transactionId ?? null}
+        amount={pendingSplit?.amount ?? 0}
+        merchant={pendingSplit?.merchant ?? ''}
+        onClose={() => setPendingSplit(null)}
+        onCreated={() => setStatusMessage((prev) => `${prev} Split saved.`)}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-    gap: 12,
+  safeArea: {
+    flex: 1,
+    backgroundColor: palette.background,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
+  container: {
+    padding: spacing.lg,
+    gap: spacing.md,
   },
   subtitle: {
-    color: '#555',
+    ...typography.body,
+    color: palette.textSecondary,
   },
   smsInput: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 10,
+    borderColor: palette.border,
+    borderRadius: radii.input,
+    padding: spacing.md,
     minHeight: 70,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 8,
-    marginTop: 8,
+    color: palette.textPrimary,
   },
   buttonRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
+    gap: spacing.sm,
   },
-  exampleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  actionButton: {
+    flex: 1,
+    backgroundColor: palette.neonGreen,
+    borderRadius: radii.pill,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  actionButtonText: {
+    ...typography.bodyBold,
+    color: '#0A0A0A',
+  },
+  secondaryButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radii.pill,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    ...typography.caption,
+    color: palette.textSecondary,
   },
   status: {
-    marginTop: 8,
+    ...typography.body,
+    color: palette.textSecondary,
     fontStyle: 'italic',
-  },
-  splitPrompt: {
-    marginTop: 16,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#999',
-    borderRadius: 8,
-  },
-  splitTitle: {
-    fontWeight: '700',
-    marginBottom: 4,
   },
 });
