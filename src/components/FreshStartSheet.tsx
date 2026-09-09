@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
     gap: 2,
     paddingVertical: spacing.md,
     backgroundColor: palette.surfaceElevated,
-    borderRadius: radii.input,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: palette.border,
   },

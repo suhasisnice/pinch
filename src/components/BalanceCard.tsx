@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     backgroundColor: 'rgba(255,191,0,0.10)',
-    borderRadius: radii.input,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: palette.warningAmber,
     padding: spacing.sm,

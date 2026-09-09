@@ -26,6 +26,24 @@ import Icon, { IconName } from './Icon';
  * writing.
  */
 
+/**
+ * The atmospheric wash MD3 puts behind a surface: a large, heavily diffused
+ * shape sitting partly off-canvas.
+ *
+ * Kept to a tenth of an opacity on purpose. At this strength it is not a
+ * shape anyone will notice or name — it just stops the background reading
+ * as a flat sheet of near-black, which is the difference between a dark
+ * theme and a dark *design*.
+ */
+function ScreenAtmosphere() {
+  return (
+    <View pointerEvents="none" style={styles.atmosphere}>
+      <BlurOrb color={palette.primary} size={340} opacity={0.1} style={styles.atmosphereTop} />
+      <BlurOrb color={palette.tertiary} size={260} opacity={0.07} style={styles.atmosphereBottom} />
+    </View>
+  );
+}
+
 export function Screen({
   children,
   scroll = true,
@@ -38,12 +56,14 @@ export function Screen({
   if (!scroll) {
     return (
       <SafeAreaView style={styles.screen} edges={['top']}>
+        <ScreenAtmosphere />
         {children}
       </SafeAreaView>
     );
   }
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
+      <ScreenAtmosphere />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -514,6 +534,11 @@ export function Dot({ color, size = 10 }: { color: string; size?: number }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.background },
+  // Anchored off-canvas so only the falloff is ever on screen — the shape
+  // itself never resolves into an object you could point at.
+  atmosphere: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
+  atmosphereTop: { position: 'absolute', top: -190, right: -120 },
+  atmosphereBottom: { position: 'absolute', bottom: -140, left: -110 },
   scrollContent: { padding: spacing.md, paddingBottom: spacing.xxl * 2, gap: spacing.md },
 
   titleBlock: { marginBottom: spacing.xs },

@@ -496,7 +496,7 @@ const styles = StyleSheet.create({
   iconChoice: {
     width: 44,
     height: 44,
-    borderRadius: radii.input,
+    borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: palette.surfaceElevated,

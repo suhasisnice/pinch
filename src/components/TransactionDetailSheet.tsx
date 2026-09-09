@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
 
   rawBox: {
     backgroundColor: palette.surfaceElevated,
-    borderRadius: radii.input,
+    borderRadius: radii.md,
     padding: spacing.sm,
     borderWidth: 1,
     borderColor: palette.border,
