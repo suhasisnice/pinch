@@ -289,13 +289,34 @@ export async function updateContact(
 
 /** Resolves a name to a contact id, creating the contact if it is new. */
 export async function findOrCreateContactByName(name: string): Promise<number> {
+  return findOrCreateContact({ name });
+}
+
+/**
+ * Same, but carries a phone number through when one is known — picking someone
+ * from the phone's contacts should mean the WhatsApp nudge works, and an
+ * existing contact that was typed by hand earlier gets its number filled in
+ * rather than being duplicated.
+ */
+export async function findOrCreateContact(input: {
+  name: string;
+  phone?: string | null;
+}): Promise<number> {
   const db = getAdapter();
-  const trimmed = name.trim();
+  const trimmed = input.name.trim();
+  const phone = input.phone?.trim() || null;
+
   const existing = await db.getFirstAsync<ContactRow>(
     `SELECT * FROM Contacts WHERE lower(name) = lower(?);`,
     [trimmed]
   );
-  return existing ? existing.id : addContact(trimmed);
+
+  if (!existing) return addContact(trimmed, false, phone);
+
+  if (phone && !existing.phone) {
+    await updateContact(existing.id, { phone });
+  }
+  return existing.id;
 }
 
 /** Total still owed to you across everyone. Feeds Safe-to-Spend. */

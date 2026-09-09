@@ -1,5 +1,5 @@
-import { NativeModulesProxy, EventEmitter, Subscription } from 'expo-modules-core';
-import { Platform } from 'react-native';
+import { EventEmitter, Subscription, requireOptionalNativeModule } from 'expo-modules-core';
+import { PermissionsAndroid, Platform } from 'react-native';
 
 export interface CapturedMessage {
   source: 'SMS' | 'NOTIFICATION';
@@ -10,10 +10,17 @@ export interface CapturedMessage {
   receivedAt: number;
 }
 
+export interface PhoneContact {
+  name: string;
+  phone: string | null;
+}
+
 interface PinchCaptureNative {
   hasSmsPermission(): boolean;
   requestSmsPermission(): Promise<boolean>;
   readRecentSms(limit: number): Promise<CapturedMessage[]>;
+  hasContactsPermission(): boolean;
+  readContacts(): Promise<PhoneContact[]>;
   isNotificationListenerEnabled(): boolean;
   openNotificationListenerSettings(): void;
   openAppSettings(): void;
@@ -21,9 +28,16 @@ interface PinchCaptureNative {
   pendingCount(): number;
 }
 
-const native: PinchCaptureNative | undefined = NativeModulesProxy.PinchCapture as
-  | PinchCaptureNative
-  | undefined;
+/**
+ * requireOptionalNativeModule, not NativeModulesProxy.
+ *
+ * The legacy proxy wraps every native method in a Promise and stubs out
+ * addListener, so `hasSmsPermission()` came back as a pending Promise (always
+ * truthy — the UI reported "granted" for a permission that had never been
+ * asked for) and no captured message ever reached JS. The JSI module returned
+ * here supports genuinely synchronous functions and real events.
+ */
+const native = requireOptionalNativeModule<PinchCaptureNative>('PinchCapture');
 
 /**
  * True when the native capture module is present. It is Android-only, and
@@ -43,10 +57,25 @@ export function hasSmsPermission(): boolean {
   }
 }
 
+/**
+ * Asks for SMS access and resolves with the user's actual answer.
+ *
+ * React Native's PermissionsAndroid is used rather than the module's own
+ * requestPermissions call because it delivers the dialog result back to JS;
+ * the native path resolved immediately and left the caller guessing on a
+ * timer.
+ */
 export async function requestSmsPermission(): Promise<boolean> {
   if (!isCaptureAvailable) return false;
   try {
-    return await native!.requestSmsPermission();
+    const result = await PermissionsAndroid.requestMultiple([
+      PermissionsAndroid.PERMISSIONS.RECEIVE_SMS,
+      PermissionsAndroid.PERMISSIONS.READ_SMS,
+    ]);
+    return (
+      result[PermissionsAndroid.PERMISSIONS.RECEIVE_SMS] === 'granted' &&
+      result[PermissionsAndroid.PERMISSIONS.READ_SMS] === 'granted'
+    );
   } catch {
     return false;
   }
@@ -57,6 +86,41 @@ export async function readRecentSms(limit = 100): Promise<CapturedMessage[]> {
   if (!isCaptureAvailable) return [];
   try {
     return await native!.readRecentSms(limit);
+  } catch {
+    return [];
+  }
+}
+
+export function hasContactsPermission(): boolean {
+  if (!isCaptureAvailable) return false;
+  try {
+    return native!.hasContactsPermission();
+  } catch {
+    return false;
+  }
+}
+
+export async function requestContactsPermission(): Promise<boolean> {
+  if (!isCaptureAvailable) return false;
+  try {
+    const result = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.READ_CONTACTS
+    );
+    return result === 'granted';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The phone's contacts, for picking who a bill is split with. Read on demand
+ * and never copied wholesale — a contact only enters the database once the
+ * user picks them.
+ */
+export async function readContacts(): Promise<PhoneContact[]> {
+  if (!isCaptureAvailable) return [];
+  try {
+    return await native!.readContacts();
   } catch {
     return [];
   }
@@ -116,5 +180,9 @@ export function addMessageListener(
   handler: (message: CapturedMessage) => void
 ): Subscription | null {
   if (!emitter) return null;
-  return emitter.addListener<CapturedMessage>('onMessage', handler);
+  try {
+    return emitter.addListener<CapturedMessage>('onMessage', handler);
+  } catch {
+    return null;
+  }
 }

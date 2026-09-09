@@ -38,6 +38,11 @@ export function Screen({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={refreshControl}
+        // Without this, the first tap on any button while the keyboard is up
+        // is swallowed to dismiss the keyboard and never reaches onPress. On
+        // numeric fields — which have no return key to dismiss with — that
+        // reads as a button that simply does nothing.
+        keyboardShouldPersistTaps="handled"
       >
         {children}
       </ScrollView>

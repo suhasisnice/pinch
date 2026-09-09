@@ -5,6 +5,8 @@ import { ContactRow, TransactionRow } from '../db/types';
 import { calculateSplit } from '../math/splitEngine';
 import { formatMoney } from '../utils/format';
 import { Button, Chip, Field, Sheet } from './ui';
+import ContactPicker from './ContactPicker';
+import { isCaptureAvailable } from '../../modules/pinch-capture';
 import { palette, radii, spacing, typography } from '../theme/theme';
 
 interface Participant {
@@ -39,6 +41,7 @@ export default function SplitModal({
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [newName, setNewName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [pickerVisible, setPickerVisible] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -85,10 +88,10 @@ export default function SplitModal({
     );
   }
 
-  async function addPerson() {
-    const name = newName.trim();
+  async function addPerson(picked?: { name: string; phone: string | null }) {
+    const name = (picked?.name ?? newName).trim();
     if (!name) return;
-    const id = await db.findOrCreateContactByName(name);
+    const id = await db.findOrCreateContact({ name, phone: picked?.phone ?? null });
     const rows = await db.getContacts();
     setContacts(rows);
     setParticipants(
@@ -144,12 +147,34 @@ export default function SplitModal({
             value={newName}
             onChangeText={setNewName}
             placeholder="Name"
-            onSubmitEditing={addPerson}
+            onSubmitEditing={() => addPerson()}
             returnKeyType="done"
           />
         </View>
-        <Button label="Add" variant="secondary" onPress={addPerson} style={styles.addButton} />
+        <Button
+          label="Add"
+          variant="secondary"
+          onPress={() => addPerson()}
+          style={styles.addButton}
+        />
       </View>
+
+      {isCaptureAvailable ? (
+        <Button
+          label="Pick from contacts"
+          variant="ghost"
+          onPress={() => setPickerVisible(true)}
+        />
+      ) : null}
+
+      <ContactPicker
+        visible={pickerVisible}
+        onClose={() => setPickerVisible(false)}
+        onPick={(contact) => {
+          setPickerVisible(false);
+          addPerson(contact);
+        }}
+      />
 
       {contacts.length === 0 ? (
         <Text style={styles.hint}>Add the people who were there to split this with them.</Text>

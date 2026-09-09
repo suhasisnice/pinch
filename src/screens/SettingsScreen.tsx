@@ -3,11 +3,13 @@ import { Alert, AppState, StyleSheet, Switch, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import {
+  hasContactsPermission,
   hasSmsPermission,
   isCaptureAvailable,
   isNotificationListenerEnabled,
   openAppSettings,
   openNotificationListenerSettings,
+  requestContactsPermission,
   requestSmsPermission,
 } from '../../modules/pinch-capture';
 import { backfillFromInbox } from '../services/captureService';
@@ -23,28 +25,31 @@ import { formatMoney } from '../utils/format';
 import { palette, spacing, typography } from '../theme/theme';
 import { Button, Card, CardTitle, Field, Loading, Row, Screen, ScreenTitle } from '../components/ui';
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
 export default function SettingsScreen() {
   const navigation = useNavigation<any>();
   const [allowance, setAllowance] = useState('');
   const [periodDays, setPeriodDays] = useState('30');
   const [notifications, setNotifications] = useState<NotificationSettings | null>(null);
   const [smsGranted, setSmsGranted] = useState(false);
+  const [contactsGranted, setContactsGranted] = useState(false);
   const [listenerEnabled, setListenerEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const refreshPermissions = useCallback(() => {
     setSmsGranted(hasSmsPermission());
+    setContactsGranted(hasContactsPermission());
     setListenerEnabled(isNotificationListenerEnabled());
   }, []);
 
   const load = useCallback(async () => {
-    const [amount, notificationSettings] = await Promise.all([
+    const [amount, notificationSettings, period] = await Promise.all([
       getMonthlyAllowance(),
       getNotificationSettings(),
+      db.getCurrentBudgetPeriod(),
     ]);
-    setAllowance(String(amount));
+    // Show the period actually in force, not the last thing typed into the box.
+    setAllowance(String(period?.allowance ?? amount));
+    setPeriodDays(String(period?.daysTotal ?? 30));
     setNotifications(notificationSettings);
     refreshPermissions();
   }, [refreshPermissions]);
@@ -72,16 +77,27 @@ export default function SettingsScreen() {
   async function saveAllowance() {
     const parsed = Number(allowance.replace(/[^\d.]/g, ''));
     const days = Number(periodDays.replace(/[^\d]/g, '')) || 30;
-    if (!Number.isFinite(parsed) || parsed <= 0) return;
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      // Silently doing nothing here was indistinguishable from a broken button.
+      Alert.alert('Enter an allowance', 'How much do you have for this period?');
+      return;
+    }
 
-    await setMonthlyAllowance(parsed);
-    const now = new Date();
-    await db.createBudgetPeriod({
-      startsOn: now.toISOString(),
-      endsOn: new Date(now.getTime() + days * MS_PER_DAY).toISOString(),
-      allowance: parsed,
-    });
-    Alert.alert('Budget updated', `${formatMoney(parsed)} over ${days} days.`);
+    try {
+      await setMonthlyAllowance(parsed);
+      const period = await db.startBudgetPeriod({ allowance: parsed, days });
+      Alert.alert(
+        'Budget updated',
+        `${formatMoney(parsed)} over ${days} days — about ${formatMoney(
+          parsed / period.daysTotal
+        )} a day.`
+      );
+    } catch (error) {
+      Alert.alert(
+        'Could not save',
+        error instanceof Error ? error.message : 'Something went wrong saving the period.'
+      );
+    }
   }
 
   async function update(patch: Partial<NotificationSettings>) {
@@ -91,10 +107,29 @@ export default function SettingsScreen() {
   }
 
   async function enableSms() {
-    await requestSmsPermission();
-    // The dialog resolves before the user answers, so re-check shortly after
-    // rather than trusting the immediate return value.
-    setTimeout(refreshPermissions, 1500);
+    const granted = await requestSmsPermission();
+    refreshPermissions();
+    if (!granted) {
+      Alert.alert(
+        'SMS access needed',
+        'Pinch reads bank texts on your phone to log spending automatically. You can turn it on under Permissions in app settings.'
+      );
+      return;
+    }
+    // Granting is the moment the backfill is wanted; making the user find a
+    // second button for it left new installs looking empty and broken.
+    await runBackfill();
+  }
+
+  async function enableContacts() {
+    const granted = await requestContactsPermission();
+    refreshPermissions();
+    if (!granted) {
+      Alert.alert(
+        'Contacts access needed',
+        'Only used to pick who a bill is split with, so nudges have a number to open.'
+      );
+    }
   }
 
   async function runBackfill() {
@@ -151,6 +186,17 @@ export default function SettingsScreen() {
                   <Text style={styles.ok}>On</Text>
                 ) : (
                   <Button label="Allow" variant="secondary" onPress={enableSms} />
+                )
+              }
+            />
+            <Row
+              title="Pick friends from contacts"
+              subtitle={contactsGranted ? 'Granted' : 'For splitting bills and WhatsApp nudges'}
+              right={
+                contactsGranted ? (
+                  <Text style={styles.ok}>On</Text>
+                ) : (
+                  <Button label="Allow" variant="secondary" onPress={enableContacts} />
                 )
               }
             />

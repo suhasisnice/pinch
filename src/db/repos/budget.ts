@@ -1,5 +1,6 @@
 import { getAdapter } from '../connection';
 import { BudgetPeriodRow } from '../types';
+import { startOfDayIso } from '../../utils/format';
 
 /**
  * A budget period is the window one allowance has to last.
@@ -21,10 +22,22 @@ export interface BudgetPeriod {
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+/**
+ * Whole days between two instants, counted on the local calendar.
+ *
+ * Slicing the ISO strings to their date part counted UTC days instead, which
+ * disagrees with the local midnight a period starts on: anywhere east of UTC,
+ * a period created today began "yesterday" in UTC, so day one already reported
+ * one day elapsed and the daily limit was divided by 29 instead of 30 — every
+ * day of every period, in the same direction.
+ */
 function dayDiff(fromIso: string, toIso: string): number {
-  const from = Date.parse(fromIso.slice(0, 10));
-  const to = Date.parse(toIso.slice(0, 10));
-  return Math.round((to - from) / MS_PER_DAY);
+  const from = new Date(fromIso);
+  from.setHours(0, 0, 0, 0);
+  const to = new Date(toIso);
+  to.setHours(0, 0, 0, 0);
+  // Rounded rather than floored so a DST shift cannot lose or add a day.
+  return Math.round((to.getTime() - from.getTime()) / MS_PER_DAY);
 }
 
 function decorate(row: BudgetPeriodRow, now: Date): BudgetPeriod {
@@ -64,13 +77,14 @@ export async function getCurrentBudgetPeriod(
   const nowIso = now.toISOString();
 
   const covering = await db.getFirstAsync<BudgetPeriodRow>(
-    `SELECT * FROM BudgetPeriods WHERE starts_on <= ? AND ends_on > ? ORDER BY starts_on DESC LIMIT 1;`,
+    `SELECT * FROM BudgetPeriods WHERE starts_on <= ? AND ends_on > ?
+     ORDER BY starts_on DESC, id DESC LIMIT 1;`,
     [nowIso, nowIso]
   );
   if (covering) return decorate(covering, now);
 
   const latest = await db.getFirstAsync<BudgetPeriodRow>(
-    `SELECT * FROM BudgetPeriods ORDER BY starts_on DESC LIMIT 1;`
+    `SELECT * FROM BudgetPeriods ORDER BY starts_on DESC, id DESC LIMIT 1;`
   );
   return latest ? decorate(latest, now) : null;
 }
@@ -113,12 +127,61 @@ export async function ensureBudgetPeriod(
   const existing = await getCurrentBudgetPeriod(now);
   if (existing && existing.endsOn > now.toISOString()) return existing;
 
-  const startsOn = now.toISOString();
-  const endsOn = new Date(now.getTime() + 30 * MS_PER_DAY).toISOString();
+  // Midnight, for the same reason as startBudgetPeriod: a period that begins
+  // at the moment of first launch would exclude everything spent earlier today.
+  const startsOn = startOfDayIso(now);
+  const endsOn = new Date(Date.parse(startsOn) + 30 * MS_PER_DAY).toISOString();
   const id = await createBudgetPeriod({ startsOn, endsOn, allowance });
 
   return decorate(
     { id, starts_on: startsOn, ends_on: endsOn, allowance, created_at: startsOn },
+    now
+  );
+}
+
+/**
+ * Starts (or restarts) the period the user just configured in Settings.
+ *
+ * Two things this does that a bare insert did not:
+ *
+ * - The period starts at midnight, not at the moment the button was pressed.
+ *   Starting mid-afternoon silently excluded everything already spent today
+ *   from the period totals, so the app disagreed with the user's own memory of
+ *   the day within seconds of being set up.
+ * - Re-running it on the same day updates that day's period instead of
+ *   stacking another row on top of it. Correcting a typo in the allowance is a
+ *   normal thing to do, and it should not leave a trail of dead periods that
+ *   `getCurrentBudgetPeriod` then has to break a tie between.
+ */
+export async function startBudgetPeriod(input: {
+  allowance: number;
+  days: number;
+  now?: Date;
+}): Promise<BudgetPeriod> {
+  const now = input.now ?? new Date();
+  const days = Math.max(1, Math.round(input.days));
+
+  // The user's local midnight, matching every other day boundary in the app.
+  const startsOn = startOfDayIso(now);
+  const endsOn = new Date(Date.parse(startsOn) + days * MS_PER_DAY).toISOString();
+
+  const db = getAdapter();
+  const sameDay = await db.getFirstAsync<BudgetPeriodRow>(
+    `SELECT * FROM BudgetPeriods WHERE substr(starts_on, 1, 10) = ? ORDER BY id DESC LIMIT 1;`,
+    [startsOn.slice(0, 10)]
+  );
+
+  if (sameDay) {
+    await updateBudgetPeriod(sameDay.id, { allowance: input.allowance, startsOn, endsOn });
+    return decorate(
+      { ...sameDay, starts_on: startsOn, ends_on: endsOn, allowance: input.allowance },
+      now
+    );
+  }
+
+  const id = await createBudgetPeriod({ startsOn, endsOn, allowance: input.allowance });
+  return decorate(
+    { id, starts_on: startsOn, ends_on: endsOn, allowance: input.allowance, created_at: startsOn },
     now
   );
 }

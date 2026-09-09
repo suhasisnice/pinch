@@ -12,10 +12,11 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "native:prebuild": "expo prebuild --platform android --clean && npm run android:sdk",
-    "apk:release": "npm run android:sdk && cd android && gradlew.bat assembleRelease",
+    "apk:release": "npm run android:sdk && node scripts/gradle.js assembleRelease",
     "typecheck": "tsc --noEmit",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "apk:debug": "npm run android:sdk && node scripts/gradle.js assembleDebug"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "1.23.1",
