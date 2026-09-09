@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Modal,
   Pressable,
   ScrollView,
@@ -13,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { palette, radii, spacing, typography } from '../theme/theme';
+import { duration, easing, usePressScale, useReducedMotion } from './motion';
 import Icon, { IconName } from './Icon';
 
 /** Shared primitives. Kept in one file so spacing and radii stay consistent. */
@@ -69,17 +71,22 @@ export function Card({
   style?: ViewStyle;
   onPress?: () => void;
 }) {
-  if (onPress) {
-    return (
+  const press = usePressScale();
+
+  if (!onPress) return <View style={[styles.card, style]}>{children}</View>;
+
+  return (
+    <Animated.View style={press.style}>
       <Pressable
         onPress={onPress}
-        style={({ pressed }) => [styles.card, style, pressed && styles.pressed]}
+        onPressIn={press.onPressIn}
+        onPressOut={press.onPressOut}
+        style={[styles.card, style]}
       >
         {children}
       </Pressable>
-    );
-  }
-  return <View style={[styles.card, style]}>{children}</View>;
+    </Animated.View>
+  );
 }
 
 export function CardTitle({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
@@ -120,20 +127,22 @@ export function Button({
         ? styles.buttonDangerLabel
         : styles.buttonSecondaryLabel;
 
+  const press = usePressScale();
+
+  // The caller's style carries layout (a flex:1 in a button row), so it rides
+  // on the wrapper; the visual styles stay on the pressable that is scaling.
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      style={({ pressed }) => [
-        styles.button,
-        variantStyle,
-        style,
-        pressed && styles.pressed,
-        disabled && styles.buttonDisabled,
-      ]}
-    >
-      <Text style={labelStyle}>{label}</Text>
-    </Pressable>
+    <Animated.View style={[style, press.style]}>
+      <Pressable
+        onPress={onPress}
+        disabled={disabled}
+        onPressIn={disabled ? undefined : press.onPressIn}
+        onPressOut={disabled ? undefined : press.onPressOut}
+        style={[styles.button, variantStyle, disabled && styles.buttonDisabled]}
+      >
+        <Text style={labelStyle}>{label}</Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -194,11 +203,37 @@ export function ProgressBar({
   height?: number;
 }) {
   const clamped = Math.max(0, Math.min(1, Number.isFinite(fraction) ? fraction : 0));
+  const reduced = useReducedMotion();
+  const progress = useRef(new Animated.Value(clamped)).current;
+  // A bar that slides to its new length shows the direction of the change,
+  // which a bar that simply appears at a different width does not.
+  const seeded = useRef(false);
+
+  useEffect(() => {
+    if (!seeded.current || reduced) {
+      seeded.current = true;
+      progress.setValue(clamped);
+      return;
+    }
+    const animation = Animated.timing(progress, {
+      toValue: clamped,
+      duration: duration.quick,
+      easing,
+      // Width is a layout property, so this one cannot leave the JS thread.
+      useNativeDriver: false,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [clamped, progress, reduced]);
+
   return (
     <View style={[styles.progressTrack, { height, borderRadius: height / 2 }]}>
-      <View
+      <Animated.View
         style={{
-          width: `${clamped * 100}%`,
+          width: progress.interpolate({
+            inputRange: [0, 1],
+            outputRange: ['0%', '100%'],
+          }),
           height: '100%',
           backgroundColor: color,
           borderRadius: height / 2,
