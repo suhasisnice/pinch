@@ -17,6 +17,7 @@ import MarkAsLoanSheet from '../components/MarkAsLoanSheet';
 import FreshStartSheet from '../components/FreshStartSheet';
 import BudgetBreakdownSheet from '../components/BudgetBreakdownSheet';
 import BalanceCard from '../components/BalanceCard';
+import { AnimatedMoney, FadeSlideIn } from '../components/motion';
 import Icon from '../components/Icon';
 
 export default function TodayScreen() {
@@ -134,11 +135,15 @@ export default function TodayScreen() {
       {balance ? <BalanceCard state={balance} onChanged={load} /> : null}
 
       {/* The number. Everything else on this screen explains it. */}
+      <FadeSlideIn>
       <Card style={styles.hero} onPress={() => setBreakdownVisible(true)}>
         <Text style={[styles.heroLabel, { color: accent }]}>Safe to spend today</Text>
-        <Text style={[styles.heroAmount, { color: accent }]} numberOfLines={1} adjustsFontSizeToFit>
-          {formatMoney(Math.max(0, snapshot.today.remainingToday))}
-        </Text>
+        <AnimatedMoney
+          amount={Math.max(0, snapshot.today.remainingToday)}
+          style={[styles.heroAmount, { color: accent }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+        />
         <Text style={styles.heroSub}>
           of {formatMoney(snapshot.today.dailyLimit)} · {formatMoney(snapshot.today.spentToday)} spent
         </Text>
@@ -157,8 +162,10 @@ export default function TodayScreen() {
           </View>
         ) : null}
       </Card>
+      </FadeSlideIn>
 
       {/* The question people actually have. */}
+      <FadeSlideIn delay={70}>
       <Card>
         <CardTitle>Can I afford it?</CardTitle>
         <Field
@@ -184,8 +191,9 @@ export default function TodayScreen() {
           </View>
         ) : null}
       </Card>
+      </FadeSlideIn>
 
-      <View style={styles.actionRow}>
+      <FadeSlideIn delay={140} style={styles.actionRow}>
         <Button
           label="Add expense"
           onPress={() => {
@@ -203,8 +211,9 @@ export default function TodayScreen() {
           }}
           style={styles.flex}
         />
-      </View>
+      </FadeSlideIn>
 
+      <FadeSlideIn delay={210}>
       <Card>
         <CardTitle
           right={
@@ -239,6 +248,7 @@ export default function TodayScreen() {
           ))
         )}
       </Card>
+      </FadeSlideIn>
 
       {brokeIn !== null && brokeIn < snapshot.daysRemaining ? (
         <Card style={{ borderColor: palette.warningAmber }}>
