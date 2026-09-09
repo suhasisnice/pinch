@@ -199,7 +199,7 @@ export async function getMonthlySpend(
             COUNT(*) AS count,
             COUNT(DISTINCT substr(occurred_at, 1, 10)) AS days
      FROM Transactions
-     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND occurred_at >= ?
+     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL AND occurred_at >= ?
      GROUP BY month
      ORDER BY month DESC;`,
     [start.toISOString()]
@@ -219,7 +219,7 @@ export async function getCategoryByMonth(
             COALESCE(category, 'Uncategorised') AS category,
             SUM(amount) AS total
      FROM Transactions
-     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND occurred_at >= ?
+     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL AND occurred_at >= ?
      GROUP BY month, category
      ORDER BY month DESC, total DESC;`,
     [start.toISOString()]
@@ -252,7 +252,7 @@ export async function getRepeatMerchants(
             SUM(amount) AS total,
             MAX(occurred_at) AS lastAt
      FROM Transactions
-     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND occurred_at >= ?
+     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL AND occurred_at >= ?
      GROUP BY lower(merchant)
      HAVING months >= 2
      ORDER BY total DESC;`,
@@ -316,7 +316,7 @@ export async function getGrossSpendBetween(startIso: string, endIso: string): Pr
        COALESCE(SUM(CASE WHEN kind = 'SPEND' THEN amount ELSE 0 END), 0)
        - COALESCE(SUM(CASE WHEN kind = 'REFUND' THEN amount ELSE 0 END), 0) AS total
      FROM Transactions
-     WHERE kind IN ('SPEND', 'REFUND') AND excluded_at IS NULL AND transfer_pair_id IS NULL
+     WHERE kind IN ('SPEND', 'REFUND') AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL
        AND occurred_at >= ? AND occurred_at < ?;`,
     [startIso, endIso]
   );
@@ -328,7 +328,7 @@ export async function getIncomeBetween(startIso: string, endIso: string): Promis
   const db = getAdapter();
   const row = await db.getFirstAsync<{ total: number | null }>(
     `SELECT COALESCE(SUM(amount), 0) AS total FROM Transactions
-     WHERE kind = 'INCOME' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND occurred_at >= ? AND occurred_at < ?;`,
+     WHERE kind = 'INCOME' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL AND occurred_at >= ? AND occurred_at < ?;`,
     [startIso, endIso]
   );
   return row?.total ?? 0;
@@ -374,7 +374,7 @@ export async function getSpendByCategory(
             SUM(amount) AS total,
             COUNT(*) AS count
      FROM Transactions
-     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL
+     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL
        AND occurred_at >= ? AND occurred_at < ?
      GROUP BY COALESCE(category, 'Uncategorised')
      ORDER BY total DESC;`,
@@ -391,7 +391,7 @@ export async function getDailySpend(
   return db.getAllAsync<{ day: string; total: number }>(
     `SELECT substr(occurred_at, 1, 10) AS day, SUM(amount) AS total
      FROM Transactions
-     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL
+     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL
        AND occurred_at >= ? AND occurred_at < ?
      GROUP BY day
      ORDER BY day ASC;`,
@@ -495,7 +495,7 @@ export async function getBorneBetween(
   }>(
     `SELECT
        (SELECT COALESCE(SUM(amount), 0) FROM Transactions
-         WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL
+         WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL
            AND occurred_at >= ?1 AND occurred_at < ?2) AS paid,
 
        (SELECT COALESCE(SUM(i.amount), 0) FROM IOUs i
@@ -526,4 +526,25 @@ export async function getBorneBetween(
     // else, whether or not they have actually paid yet.
     borne: paid - splitAway,
   };
+}
+
+/** Records that a payment moved money rather than spending it. */
+export async function setNonSpendReason(id: number, reason: string | null): Promise<void> {
+  const db = getAdapter();
+  await db.runAsync(`UPDATE Transactions SET non_spend_reason = ? WHERE id = ?;`, [reason, id]);
+}
+
+/** True when any card purchase has been captured, not just the bill. */
+export async function hasCardTransactions(): Promise<boolean> {
+  const db = getAdapter();
+  const row = await db.getFirstAsync<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM Transactions
+     WHERE kind = 'SPEND'
+       AND excluded_at IS NULL
+       AND non_spend_reason IS NULL
+       AND raw_text IS NOT NULL
+       AND (lower(raw_text) LIKE '%credit card%' OR lower(raw_text) LIKE '%card x%'
+            OR lower(raw_text) LIKE '%card ending%' OR lower(raw_text) LIKE '%card no%');`
+  );
+  return (row?.n ?? 0) > 0;
 }

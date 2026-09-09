@@ -46,6 +46,8 @@ const GLYPHS = {
   archive: feather('archive'),
   play: feather('play'),
   lock: feather('lock'),
+  eye: feather('eye'),
+  eyeOff: feather('eye-off'),
 
   // States and signals
   warning: feather('alert-triangle'),

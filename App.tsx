@@ -59,6 +59,15 @@ export default function App() {
                 } no longer counted as spending — ${formatMoney(result.transferSpend)}.`
               );
             }
+            if (result.reclassified > 0) {
+              lines.push(
+                `${result.reclassified} payment${
+                  result.reclassified === 1 ? '' : 's'
+                } turned out to be moving money rather than spending it — wallet top-ups, card bills — worth ${formatMoney(
+                  result.reclassifiedSpend
+                )}.`
+              );
+            }
             lines.push('Anything here can be restored in Settings.');
 
             Alert.alert('Cleaned up your history', lines.join('\n\n'));

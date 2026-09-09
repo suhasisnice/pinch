@@ -35,6 +35,8 @@ export interface TransactionRow {
   note: string | null;
   /** The other leg, when this row is one half of a move between your accounts. */
   transfer_pair_id: number | null;
+  /** Set when this left the account but was not spent on anything. */
+  non_spend_reason: string | null;
   excluded_at: string | null;
   created_at: string;
 }

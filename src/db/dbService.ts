@@ -13,3 +13,4 @@ export * from './repos/capture';
 export * from './repos/notifications';
 export * from './repos/budget';
 export * from './repos/maintenance';
+export * from './repos/balance';

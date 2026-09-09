@@ -17,6 +17,7 @@ function tx(overrides: Partial<TransactionRow>): TransactionRow {
     outing_id: null,
     note: null,
     transfer_pair_id: null,
+    non_spend_reason: null,
     excluded_at: null,
     created_at: '2026-09-08T12:00:00.000Z',
     ...overrides,
