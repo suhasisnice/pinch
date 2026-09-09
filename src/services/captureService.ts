@@ -10,6 +10,8 @@ import {
   getRoundUpGoalId,
 } from '../settings/settingsStore';
 import { roundUpAmount } from '../math/budget';
+import { classifyNewTransaction } from './classificationService';
+import { checkForTransferMatch } from './transferService';
 
 export interface IngestResult {
   processed: number;
@@ -197,6 +199,21 @@ export async function postTransaction(input: PostTransactionInput): Promise<numb
       outingId,
       input.silent === true
     );
+  }
+
+  // Money moving rather than being spent — a wallet top-up, a self-transfer,
+  // a friend's money sent straight back — used to only get recognised from a
+  // Settings button or the next app update's rule-version bump, so it sat
+  // wrong in "safe to spend" for however long until then. Checking right
+  // here means it is correct within the same session it happened in.
+  // Every kind runs through this, not just SPEND: the transfer's credit leg
+  // needs the same check as its debit leg, and neither is a SPEND.
+  try {
+    await classifyNewTransaction(transactionId);
+    await checkForTransferMatch(transactionId);
+  } catch {
+    // Never lets a classification hiccup block a transaction that already
+    // wrote successfully — the next full sweep still catches it later.
   }
 
   return transactionId;

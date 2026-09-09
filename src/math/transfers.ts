@@ -40,7 +40,7 @@ export interface TransferPair {
 export const TRANSFER_AUTO_THRESHOLD = 0.8;
 
 /** Beyond this gap, two legs are not the same movement of money. */
-const MAX_GAP_MS = 24 * 60 * 60 * 1000;
+export const MAX_GAP_MS = 24 * 60 * 60 * 1000;
 
 /** Phrases banks use when the money is going to you. */
 const SELF_MARKERS =
