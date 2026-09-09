@@ -8,7 +8,7 @@ import { goalReserve } from '../math/budget';
 import { getBudgetSnapshot } from '../services/budgetService';
 import { getMonthlyAllowance } from '../settings/settingsStore';
 import { formatMoney } from '../utils/format';
-import { palette, radii, spacing, typography } from '../theme/theme';
+import { layer, palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Card, CardTitle, Chip, EmptyState, Field, Loading, ProgressBar, Screen, ScreenTitle, Sheet } from '../components/ui';
 import Icon, { GOAL_ICONS } from '../components/Icon';
 import { LabelIconBadge } from '../components/LabelIcon';
@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.border,
   },
-  iconChoiceOn: { borderColor: palette.violet, backgroundColor: 'rgba(167,139,250,0.14)' },
+  iconChoiceOn: { borderColor: palette.violet, backgroundColor: layer(palette.violet, 0.14) },
   dangerNote: { ...typography.micro, color: palette.textMuted, textAlign: 'center' },
   contributeMeta: { ...typography.body, color: palette.textSecondary, textAlign: 'center' },
 });

@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BalanceState } from '../db/repos/balance';
 import * as db from '../db/dbService';
 import { formatMoney } from '../utils/format';
-import { palette, radii, spacing, typography } from '../theme/theme';
+import { layer, palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Card, Field, Sheet } from './ui';
 import Icon from './Icon';
 
@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
   driftBox: {
     flexDirection: 'row',
     gap: spacing.sm,
-    backgroundColor: 'rgba(255,191,0,0.10)',
+    backgroundColor: layer(palette.warningAmber, 0.1),
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: palette.warningAmber,
