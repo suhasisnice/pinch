@@ -18,6 +18,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 export default function GoalsScreen() {
   const [goals, setGoals] = useState<GoalProgress[] | null>(null);
   const [daysRemaining, setDaysRemaining] = useState(30);
+  const [reserveCapped, setReserveCapped] = useState(false);
   const [roundUpGoal, setRoundUpGoal] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [createVisible, setCreateVisible] = useState(false);
@@ -32,6 +33,7 @@ export default function GoalsScreen() {
     setGoals(nextGoals);
     setRoundUpGoal(roundUp);
     setDaysRemaining(snapshot.daysRemaining);
+    setReserveCapped(snapshot.goalReserveCapped);
   }, []);
 
   useFocusEffect(
@@ -79,6 +81,13 @@ export default function GoalsScreen() {
           <Text style={styles.reserveNote}>
             Already subtracted from your daily number — you don't have to remember to save it.
           </Text>
+          {reserveCapped ? (
+            <Text style={styles.reserveCapped}>
+              Your goals wanted more than half your allowance, so Pinch is holding back less
+              than they asked for. They will take longer than planned. Lower a target, add a
+              longer deadline, or delete one to change that.
+            </Text>
+          ) : null}
         </Card>
       ) : null}
 
@@ -99,7 +108,7 @@ export default function GoalsScreen() {
             goal={goal}
             daysRemaining={daysRemaining}
             isRoundUp={roundUpGoal === goal.id}
-            onContribute={() => setContributeTo(goal)}
+            onOpen={() => setContributeTo(goal)}
             onToggleRoundUp={async () => {
               const next = roundUpGoal === goal.id ? null : goal.id;
               await setRoundUpGoalId(next);
@@ -134,13 +143,13 @@ function GoalCard({
   goal,
   daysRemaining,
   isRoundUp,
-  onContribute,
+  onOpen,
   onToggleRoundUp,
 }: {
   goal: GoalProgress;
   daysRemaining: number;
   isRoundUp: boolean;
-  onContribute: () => void;
+  onOpen: () => void;
   onToggleRoundUp: () => void;
 }) {
   const daysLeft = goal.deadline
@@ -151,7 +160,7 @@ function GoalCard({
   const overdue = daysLeft !== null && daysLeft < 0 && !goal.isComplete;
 
   return (
-    <Card>
+    <Card onPress={onOpen}>
       <View style={styles.goalHead}>
         <LabelIconBadge label={goal.emoji} color={palette.violet} />
         <View style={styles.goalHeadText}>
@@ -185,7 +194,7 @@ function GoalCard({
       )}
 
       <View style={styles.goalActions}>
-        <Button label="Add money" variant="secondary" onPress={onContribute} style={styles.flex} />
+        <Button label="Add money or edit" variant="secondary" onPress={onOpen} style={styles.flex} />
         <Chip
           label={isRoundUp ? 'Round-ups on' : 'Round-ups'}
           selected={isRoundUp}
@@ -374,8 +383,15 @@ function ManageGoalSheet({
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            await db.deleteGoal(goal!.id);
-            onSaved();
+            try {
+              await db.deleteGoal(goal!.id);
+              onSaved();
+            } catch (error) {
+              Alert.alert(
+                'Could not delete',
+                error instanceof Error ? error.message : 'Something went wrong.'
+              );
+            }
           },
         },
       ]
@@ -459,6 +475,12 @@ const styles = StyleSheet.create({
   reserveLabel: { ...typography.micro, color: palette.textSecondary, textTransform: 'uppercase', letterSpacing: 1 },
   reserveAmount: { ...typography.heroCompact, color: palette.violet, marginTop: 4 },
   reserveNote: { ...typography.caption, color: palette.textMuted, marginTop: spacing.xs, lineHeight: 17 },
+  reserveCapped: {
+    ...typography.caption,
+    color: palette.warningAmber,
+    marginTop: spacing.sm,
+    lineHeight: 17,
+  },
 
   goalHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   goalHeadText: { flex: 1 },

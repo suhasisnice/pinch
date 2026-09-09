@@ -114,8 +114,52 @@ export function goalReserve(goal: GoalReserveInput): number {
   return alreadySetAside + stillNeeded * share;
 }
 
+/**
+ * The largest share of an allowance that goals may claim.
+ *
+ * Without a ceiling, an ambitious goal silently eats the whole budget: a
+ * 10,000 target with no deadline reserves a third of itself over 90 days,
+ * which against a 3,000 allowance is 3,333 — more than exists. The user is
+ * then told they have negative money to spend, with no visible cause, because
+ * the goal card is on a different screen and the reserve is invisible.
+ *
+ * Saving first is the right default. Saving *everything* is not a budget, it
+ * is a wall, and a wall gets uninstalled.
+ */
+export const MAX_GOAL_RESERVE_SHARE = 0.5;
+
+export interface GoalReserveResult {
+  /** What goals actually claim, after the ceiling. */
+  reserved: number;
+  /** What they asked for. */
+  requested: number;
+  /** True when the ceiling had to hold them back. */
+  capped: boolean;
+}
+
 export function totalGoalReserve(goals: GoalReserveInput[]): number {
   return goals.reduce((sum, g) => sum + goalReserve(g), 0);
+}
+
+/**
+ * Goal reserve with a ceiling relative to what is actually coming in.
+ *
+ * `capacity` is the money the period has to work with — the allowance plus
+ * anything topped up. Goals never take more than half of it, so the headline
+ * number can go negative from real spending or real debt, but never from
+ * ambition alone.
+ */
+export function cappedGoalReserve(
+  goals: GoalReserveInput[],
+  capacity: number
+): GoalReserveResult {
+  const requested = totalGoalReserve(goals);
+  if (capacity <= 0) return { reserved: 0, requested, capped: requested > 0 };
+
+  const ceiling = capacity * MAX_GOAL_RESERVE_SHARE;
+  const reserved = Math.min(requested, ceiling);
+
+  return { reserved, requested, capped: reserved < requested - 0.009 };
 }
 
 // ---------------------------------------------------------------------------

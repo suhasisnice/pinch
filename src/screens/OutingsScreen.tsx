@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { OutingSummary } from '../db/repos/outings';
@@ -364,6 +364,40 @@ function OutingDetailSheet({
           }}
         />
       )}
+
+      <Button
+        label="Delete outing"
+        variant="danger"
+        onPress={() => {
+          Alert.alert(
+            'Delete this outing?',
+            `"${outing.name}" will be removed. The ${outing.transactionCount} item${
+              outing.transactionCount === 1 ? '' : 's'
+            } and any debts stay in your ledger — they just stop being grouped under it.`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: async () => {
+                  try {
+                    await db.deleteOuting(outing.id);
+                    onDismissed();
+                  } catch (error) {
+                    Alert.alert(
+                      'Could not delete',
+                      error instanceof Error ? error.message : 'Something went wrong.'
+                    );
+                  }
+                },
+              },
+            ]
+          );
+        }}
+      />
+      <Text style={styles.note}>
+        Deleting an outing never deletes the spending inside it.
+      </Text>
 
       <AddExpenseSheet
         visible={addVisible}

@@ -6,7 +6,7 @@ import {
   computeBudget,
   computeToday,
   expectedRecovery,
-  totalGoalReserve,
+  cappedGoalReserve,
 } from '../math/budget';
 import { GoalProgress } from '../db/repos/goals';
 import { averageDailySpend, computeStreak } from '../math/insights';
@@ -24,6 +24,10 @@ export interface BudgetSnapshot {
   totalReceivable: number;
   totalPayable: number;
   pendingCaptures: number;
+  /** True when goals wanted more than the period could safely give them. */
+  goalReserveCapped: boolean;
+  /** What goals asked for before the ceiling was applied. */
+  goalReserveRequested: number;
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -81,7 +85,7 @@ export async function getBudgetSnapshot(
       };
     });
 
-  const goalReserve = totalGoalReserve(
+  const goalReserveResult = cappedGoalReserve(
     goals.map((goal) => ({
       targetAmount: goal.targetAmount,
       savedAmount: goal.savedAmount,
@@ -89,8 +93,10 @@ export async function getBudgetSnapshot(
         ? Math.ceil((new Date(goal.deadline).getTime() - now.getTime()) / MS_PER_DAY)
         : null,
       daysRemainingInPeriod: period.daysRemaining,
-    }))
+    })),
+    period.allowance + income
   );
+  const goalReserve = goalReserveResult.reserved;
 
   const budget = computeBudget({
     allowance: period.allowance,
@@ -119,6 +125,8 @@ export async function getBudgetSnapshot(
     totalReceivable,
     totalPayable,
     pendingCaptures,
+    goalReserveCapped: goalReserveResult.capped,
+    goalReserveRequested: goalReserveResult.requested,
   };
 }
 

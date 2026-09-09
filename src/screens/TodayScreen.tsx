@@ -23,6 +23,7 @@ export default function TodayScreen() {
   const [today, setToday] = useState<TransactionRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [addVisible, setAddVisible] = useState(false);
+  const [addThenSplit, setAddThenSplit] = useState(false);
   const [splitFor, setSplitFor] = useState<TransactionRow | null>(null);
   const [detailFor, setDetailFor] = useState<TransactionRow | null>(null);
   const [freshVisible, setFreshVisible] = useState(false);
@@ -178,11 +179,21 @@ export default function TodayScreen() {
       </Card>
 
       <View style={styles.actionRow}>
-        <Button label="Add expense" onPress={() => setAddVisible(true)} style={styles.flex} />
+        <Button
+          label="Add expense"
+          onPress={() => {
+            setAddThenSplit(false);
+            setAddVisible(true);
+          }}
+          style={styles.flex}
+        />
         <Button
           label="Split a bill"
           variant="secondary"
-          onPress={() => navigation.navigate('Squad')}
+          onPress={() => {
+            setAddThenSplit(true);
+            setAddVisible(true);
+          }}
           style={styles.flex}
         />
       </View>
@@ -234,9 +245,19 @@ export default function TodayScreen() {
 
       <AddExpenseSheet
         visible={addVisible}
+        title={addThenSplit ? 'Split a bill' : 'Add expense'}
+        saveLabel={addThenSplit ? 'Next: who was there' : 'Save'}
         onClose={() => setAddVisible(false)}
-        onSaved={() => {
+        onSaved={async (transactionId) => {
           setAddVisible(false);
+          if (addThenSplit && transactionId !== null) {
+            // Straight into the picker with the bill already recorded, so the
+            // three split modes are reachable without hunting for something
+            // to tap.
+            const created = await db.getTransactionById(transactionId);
+            if (created) setSplitFor(created);
+          }
+          setAddThenSplit(false);
           load();
         }}
       />
