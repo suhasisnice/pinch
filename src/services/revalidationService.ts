@@ -11,8 +11,9 @@ const REVALIDATION_KEY = 'pinch.revalidatedRules';
  *
  * 2 — an SMS must name the account the money moved through.
  * 3 — money moved between the user's own accounts is detected and set aside.
+ * 4 — money sent to a person and returned by them is cancelled out.
  */
-export const PARSER_RULES_VERSION = 3;
+export const PARSER_RULES_VERSION = 4;
 
 export interface RevalidationResult {
   /** Transactions examined: captured, and still carrying their original text. */

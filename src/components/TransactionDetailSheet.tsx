@@ -23,12 +23,15 @@ export default function TransactionDetailSheet({
   onClose,
   onChanged,
   onSplit,
+  onMarkLoan,
 }: {
   transaction: TransactionRow | null;
   onClose: () => void;
   onChanged: () => void;
   /** Hands off to the split flow instead of handling it here. */
   onSplit: (transaction: TransactionRow) => void;
+  /** Hands off to recording this payment as a debt. */
+  onMarkLoan: (transaction: TransactionRow) => void;
 }) {
   const [amount, setAmount] = useState('');
   const [merchant, setMerchant] = useState('');
@@ -191,6 +194,17 @@ export default function TransactionDetailSheet({
             ) : null}
           </View>
 
+          <Button
+            label={transaction.direction === 'DEBIT' ? 'I lent this' : 'I borrowed this'}
+            variant="secondary"
+            onPress={() => onMarkLoan(transaction)}
+          />
+          <Text style={styles.loanHint}>
+            {transaction.direction === 'DEBIT'
+              ? 'Records who owes it back, so it stops counting as money spent on yourself.'
+              : 'Records that you owe it, so it is not treated as allowance to spend.'}
+          </Text>
+
           {isCaptured ? (
             <View style={styles.excludeBlock}>
               <Chip
@@ -248,6 +262,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
 
   excludeBlock: { gap: spacing.sm, alignItems: 'center' },
+  loanHint: { ...typography.micro, color: palette.textMuted, lineHeight: 15 },
 
   group: { gap: spacing.sm },
   groupLabel: {

@@ -13,6 +13,7 @@ import { Button, Card, CardTitle, Dot, EmptyState, Field, Loading, ProgressBar, 
 import AddExpenseSheet from '../components/AddExpenseSheet';
 import SplitModal from '../components/SplitModal';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
+import MarkAsLoanSheet from '../components/MarkAsLoanSheet';
 import FreshStartSheet from '../components/FreshStartSheet';
 import BudgetBreakdownSheet from '../components/BudgetBreakdownSheet';
 import Icon from '../components/Icon';
@@ -26,6 +27,7 @@ export default function TodayScreen() {
   const [addThenSplit, setAddThenSplit] = useState(false);
   const [splitFor, setSplitFor] = useState<TransactionRow | null>(null);
   const [detailFor, setDetailFor] = useState<TransactionRow | null>(null);
+  const [loanFor, setLoanFor] = useState<TransactionRow | null>(null);
   const [freshVisible, setFreshVisible] = useState(false);
   const [breakdownVisible, setBreakdownVisible] = useState(false);
   const [testAmount, setTestAmount] = useState('');
@@ -284,6 +286,19 @@ export default function TodayScreen() {
         onSplit={(tx) => {
           setDetailFor(null);
           setSplitFor(tx);
+        }}
+        onMarkLoan={(tx) => {
+          setDetailFor(null);
+          setLoanFor(tx);
+        }}
+      />
+
+      <MarkAsLoanSheet
+        transaction={loanFor}
+        onClose={() => setLoanFor(null)}
+        onSaved={() => {
+          setLoanFor(null);
+          load();
         }}
       />
 
