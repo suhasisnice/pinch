@@ -12,11 +12,16 @@ export default function AddExpenseSheet({
   onClose,
   onSaved,
   defaultOutingId = null,
+  saveLabel = 'Save',
+  title = 'Add expense',
 }: {
   visible: boolean;
   onClose: () => void;
-  onSaved: () => void;
+  /** Receives the new transaction id, so callers can continue with it. */
+  onSaved: (transactionId: number | null) => void;
   defaultOutingId?: number | null;
+  saveLabel?: string;
+  title?: string;
 }) {
   const [amount, setAmount] = useState('');
   const [merchant, setMerchant] = useState('');
@@ -43,7 +48,7 @@ export default function AddExpenseSheet({
     if (!canSave || saving) return;
     setSaving(true);
     try {
-      await postTransaction({
+      const transactionId = await postTransaction({
         amount: parsedAmount,
         direction,
         merchant: merchant.trim(),
@@ -51,14 +56,14 @@ export default function AddExpenseSheet({
         outingId,
         source: 'MANUAL',
       });
-      onSaved();
+      onSaved(transactionId);
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="Add expense">
+    <Sheet visible={visible} onClose={onClose} title={title}>
       <View style={styles.toggleRow}>
         <Chip label="Spent" selected={direction === 'DEBIT'} onPress={() => setDirection('DEBIT')} />
         <Chip
@@ -117,7 +122,7 @@ export default function AddExpenseSheet({
         </View>
       ) : null}
 
-      <Button label={saving ? 'Saving…' : 'Save'} onPress={save} disabled={!canSave || saving} />
+      <Button label={saving ? 'Saving…' : saveLabel} onPress={save} disabled={!canSave || saving} />
     </Sheet>
   );
 }

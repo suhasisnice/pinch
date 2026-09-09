@@ -2,7 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { Alert, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
-import { ContactBalance, IOUDetail } from '../db/types';
+import { ContactBalance, IOUDetail, TransactionRow } from '../db/types';
 import { postTransaction } from '../services/captureService';
 import { sendNudge } from '../utils/nudge';
 import { receivableConfidence } from '../math/budget';
@@ -10,6 +10,8 @@ import { formatMoney, formatRelative, daysBetween } from '../utils/format';
 import { balanceColor, palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Card, CardTitle, EmptyState, Field, Loading, Row, Screen, ScreenTitle, Sheet } from '../components/ui';
 import ContactPicker from '../components/ContactPicker';
+import AddExpenseSheet from '../components/AddExpenseSheet';
+import SplitModal from '../components/SplitModal';
 import Icon, { IconName } from '../components/Icon';
 import { isCaptureAvailable } from '../../modules/pinch-capture';
 
@@ -19,6 +21,9 @@ export default function SquadScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [detailFor, setDetailFor] = useState<ContactBalance | null>(null);
   const [addVisible, setAddVisible] = useState(false);
+  const [expenseVisible, setExpenseVisible] = useState(false);
+  const [addThenSplit, setAddThenSplit] = useState(false);
+  const [splitFor, setSplitFor] = useState<TransactionRow | null>(null);
 
   const load = useCallback(async () => {
     const [nextBalances, nextIOUs] = await Promise.all([db.getContactBalances(), db.getOpenIOUs()]);
@@ -69,6 +74,13 @@ export default function SquadScreen() {
         </Card>
       </View>
 
+      <Button
+        label="Split a bill"
+        onPress={() => {
+          setAddThenSplit(true);
+          setExpenseVisible(true);
+        }}
+      />
       <Button label="Add a debt" variant="secondary" onPress={() => setAddVisible(true)} />
 
       {balances.length === 0 ? (
@@ -94,6 +106,32 @@ export default function SquadScreen() {
         onClose={() => setDetailFor(null)}
         onChanged={() => {
           setDetailFor(null);
+          load();
+        }}
+      />
+
+      <AddExpenseSheet
+        visible={expenseVisible}
+        title="Split a bill"
+        saveLabel="Next: who was there"
+        onClose={() => setExpenseVisible(false)}
+        onSaved={async (transactionId) => {
+          setExpenseVisible(false);
+          if (addThenSplit && transactionId !== null) {
+            const created = await db.getTransactionById(transactionId);
+            if (created) setSplitFor(created);
+          }
+          setAddThenSplit(false);
+          load();
+        }}
+      />
+
+      <SplitModal
+        visible={splitFor !== null}
+        transaction={splitFor}
+        onClose={() => setSplitFor(null)}
+        onSplit={() => {
+          setSplitFor(null);
           load();
         }}
       />

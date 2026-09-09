@@ -60,7 +60,14 @@ export default function BudgetBreakdownSheet({
       positive: true,
     },
     { label: 'You still owe others', amount: b.openPayables, window: 'all open debts', positive: false },
-    { label: 'Set aside for goals', amount: b.goalReserve, window: 'all active goals', positive: false },
+    {
+      label: 'Set aside for goals',
+      amount: b.goalReserve,
+      window: snapshot.goalReserveCapped
+        ? `held back from ${formatMoney(snapshot.goalReserveRequested)} your goals asked for`
+        : 'all active goals',
+      positive: false,
+    },
   ].filter((line) => Math.abs(line.amount) > 0.009);
 
   const carriedOver = b.expectedRecovery - b.openPayables - b.goalReserve;
