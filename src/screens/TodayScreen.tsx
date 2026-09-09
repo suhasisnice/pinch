@@ -8,8 +8,21 @@ import { getMonthlyAllowance } from '../settings/settingsStore';
 import { canIAfford, daysUntilBroke } from '../math/budget';
 import { TransactionRow } from '../db/types';
 import { formatMoney, formatRelative } from '../utils/format';
-import { accentForState, categoryColor, palette, radii, spacing, typography } from '../theme/theme';
-import { Button, Card, CardTitle, Dot, EmptyState, Field, Loading, ProgressBar, Row, Screen, ScreenTitle } from '../components/ui';
+import { accentForState, categoryColor, layer, palette, radii, spacing, typography } from '../theme/theme';
+import {
+  BlurOrb,
+  Button,
+  Card,
+  CardTitle,
+  Dot,
+  EmptyState,
+  Field,
+  Loading,
+  ProgressBar,
+  Row,
+  Screen,
+  ScreenTitle,
+} from '../components/ui';
 import AddExpenseSheet from '../components/AddExpenseSheet';
 import SplitModal from '../components/SplitModal';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
@@ -137,6 +150,7 @@ export default function TodayScreen() {
       {/* The number. Everything else on this screen explains it. */}
       <FadeSlideIn>
       <Card style={styles.hero} onPress={() => setBreakdownVisible(true)}>
+        <BlurOrb color={accent} size={260} opacity={0.22} style={styles.heroGlow} />
         <Text style={[styles.heroLabel, { color: accent }]}>Safe to spend today</Text>
         <AnimatedMoney
           amount={Math.max(0, snapshot.today.remainingToday)}
@@ -251,7 +265,7 @@ export default function TodayScreen() {
       </FadeSlideIn>
 
       {brokeIn !== null && brokeIn < snapshot.daysRemaining ? (
-        <Card style={{ borderColor: palette.warningAmber }}>
+        <Card style={{ backgroundColor: layer(palette.warningAmber, 0.12) }}>
           <Text style={styles.projection}>
             At your current pace you run out in{' '}
             <Text style={{ color: palette.warningAmber, fontWeight: '800' }}>{brokeIn} days</Text>, with{' '}
@@ -367,7 +381,20 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'flex-start' },
   gear: { fontSize: 22, paddingTop: 4, paddingLeft: spacing.sm },
 
-  hero: { alignItems: 'center', paddingVertical: spacing.lg, gap: 2 },
+  // The one container in the app that gets the extra-extra-large radius.
+  // MD3 reserves that shape for the thing a screen is actually about, and
+  // on this screen that is unambiguous: the number.
+  hero: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    gap: 2,
+    borderRadius: radii.hero,
+    backgroundColor: palette.surfaceContainer,
+    overflow: 'hidden',
+  },
+  /** Sits behind the figure, tinted by the same accent the figure carries. */
+  heroGlow: { position: 'absolute', top: -110, alignSelf: 'center' },
   heroLabel: { ...typography.heroLabel },
   heroAmount: { ...typography.hero, marginTop: spacing.xs },
   heroSub: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
@@ -386,20 +413,29 @@ const styles = StyleSheet.create({
   txAmount: { ...typography.bodyBold, color: palette.textPrimary },
   link: { ...typography.caption, color: palette.primary },
 
+  // A tonal container rather than an outlined one: in MD3 the fill is what
+  // says "this is a different kind of thing", and a coloured hairline around
+  // an otherwise identical card says it much more quietly.
   reviewBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: palette.surfaceElevated,
-    borderColor: palette.violet,
-    paddingVertical: 13,
+    backgroundColor: palette.secondaryContainer,
+    paddingVertical: 14,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.lg,
   },
-  reviewText: { ...typography.bodyBold, color: palette.violet },
-  reviewChevron: { color: palette.violet, fontSize: 22 },
+  reviewText: { ...typography.bodyBold, color: palette.onSecondaryContainer },
+  reviewChevron: { color: palette.onSecondaryContainer, fontSize: 22 },
 
   projection: { ...typography.body, color: palette.textSecondary, lineHeight: 20 },
 
-  troubleBanner: { borderColor: palette.warningAmber, gap: spacing.sm },
+  // Amber stays: this is a status, and the colour is the fastest read on
+  // the card. It is the container that becomes tonal, not the meaning.
+  troubleBanner: {
+    backgroundColor: 'rgba(255,191,0,0.12)',
+    gap: spacing.sm,
+  },
   troubleHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   troubleTitle: { ...typography.cardTitle, color: palette.warningAmber },
   troubleBody: { ...typography.body, color: palette.textSecondary, lineHeight: 20 },
