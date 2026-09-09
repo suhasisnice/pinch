@@ -9,7 +9,7 @@ import {
   cappedGoalReserve,
 } from '../math/budget';
 import { GoalProgress } from '../db/repos/goals';
-import { averageDailySpend, computeStreak } from '../math/insights';
+import { averageDailySpend, categoryBreakdown, computeStreak, detectRecurring } from '../math/insights';
 import { daysBetween, endOfDayIso, startOfDayIso, formatMoney, formatDayLabel } from '../utils/format';
 
 export interface BudgetSnapshot {
@@ -217,4 +217,52 @@ export function budgetPreview(
     : `About ${formatMoney(daily)} / day over the next ${days} day${days === 1 ? '' : 's'}`;
 
   return { daily, days, paydayIso, previewString };
+}
+
+export interface SpendingHistorySummary {
+  /** What subscriptions and other repeating charges cost per month, typically. */
+  recurringMonthly: number;
+  recurringCount: number;
+  /** Largest few categories over the window, largest first. */
+  topCategories: Array<{ category: string; total: number; fraction: number }>;
+  totalSpend: number;
+}
+
+/**
+ * What the last few months actually looked like, for someone about to set a
+ * new budget rather than drift into another one.
+ *
+ * Deliberately not used to set the new allowance — that number should come
+ * from what the person actually has now, not from a habit they are trying to
+ * leave behind (see FreshStartSheet). This exists for the question the
+ * allowance figure can't answer on its own: where does it tend to go. A
+ * strict number chosen blind gets blown by the first subscription renewal
+ * nobody remembered was still running; this is what lets it get chosen with
+ * eyes open instead.
+ *
+ * Returns null when there is not enough history to say anything real, so the
+ * caller can simply show nothing rather than a summary of almost no data.
+ */
+export async function getSpendingHistorySummary(
+  now: Date = new Date(),
+  windowDays = 90
+): Promise<SpendingHistorySummary | null> {
+  const windowStart = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
+
+  const [categories, repeatRows] = await Promise.all([
+    db.getSpendByCategory(windowStart.toISOString(), now.toISOString()),
+    db.getRepeatMerchants(6, now),
+  ]);
+
+  const totalSpend = categories.reduce((sum, row) => sum + row.total, 0);
+  if (totalSpend <= 0) return null;
+
+  const recurring = detectRecurring(repeatRows);
+  const recurringMonthly = recurring.reduce((sum, charge) => sum + charge.typicalAmount, 0);
+
+  const topCategories = categoryBreakdown(categories)
+    .slice(0, 3)
+    .map((slice) => ({ category: slice.category, total: slice.total, fraction: slice.fraction }));
+
+  return { recurringMonthly, recurringCount: recurring.length, topCategories, totalSpend };
 }
