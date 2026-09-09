@@ -16,7 +16,9 @@
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch",
-    "apk:debug": "npm run android:sdk && node scripts/gradle.js assembleDebug"
+    "apk:debug": "npm run android:sdk && node scripts/gradle.js assembleDebug",
+    "phone": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/copy-to-phone.ps1",
+    "postapk:release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/copy-to-phone.ps1"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "1.23.1",
