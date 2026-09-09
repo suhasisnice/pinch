@@ -345,9 +345,57 @@ export async function acceptCapture(
     rawText: capture.raw_text,
     dedupKey: capture.dedup_key,
     category: overrides.category,
+    outingId: overrides.outingId,
     settlesContactId: overrides.settlesContactId,
   });
 
   await db.setCaptureStatus(captureId, 'ACCEPTED', transactionId);
   return transactionId;
+}
+
+/**
+ * Accepts several pending captures at their parsed values.
+ *
+ * Built on acceptCapture, so each one still goes through postTransaction and
+ * picks up outing tagging, round-ups and notifications. Captures that are no
+ * longer pending are skipped rather than treated as failures.
+ */
+export async function acceptCapturesByIds(ids: number[]): Promise<number> {
+  let accepted = 0;
+  for (const id of ids) {
+    if ((await acceptCapture(id)) !== null) accepted += 1;
+  }
+  return accepted;
+}
+
+/**
+ * Rejects several pending captures, optionally blocking each distinct sender.
+ *
+ * Blocking is the useful half: the reason a review queue fills with junk is
+ * one sender, and rejecting them one by one never stops the next message.
+ */
+export async function rejectCapturesByIds(
+  ids: number[],
+  blockSenders = false
+): Promise<{ rejected: number; blocked: string[] }> {
+  const blocked = new Set<string>();
+  let rejected = 0;
+
+  for (const id of ids) {
+    const capture = await db.getCaptureById(id);
+    if (!capture || capture.status !== 'PENDING') continue;
+
+    if (blockSenders) {
+      const sender = capture.sender?.trim();
+      if (sender && !blocked.has(sender)) {
+        await db.addToBlocklist(sender, 'Blocked from bulk review');
+        blocked.add(sender);
+      }
+    }
+
+    await db.rejectCapture(id);
+    rejected += 1;
+  }
+
+  return { rejected, blocked: [...blocked] };
 }

@@ -10,7 +10,7 @@ import {
 } from '../math/budget';
 import { GoalProgress } from '../db/repos/goals';
 import { averageDailySpend, computeStreak } from '../math/insights';
-import { daysBetween, endOfDayIso, startOfDayIso } from '../utils/format';
+import { daysBetween, endOfDayIso, startOfDayIso, formatMoney, formatDayLabel } from '../utils/format';
 
 export interface BudgetSnapshot {
   budget: BudgetBreakdown;
@@ -138,4 +138,83 @@ async function getKindTotal(kind: string, startIso: string, endIso: string): Pro
     [kind, startIso, endIso]
   );
   return row?.total ?? 0;
+}
+
+/**
+ * Reads a payday as either a plain number of days ("28") or a day/month
+ * ("25/12", "5/3").
+ *
+ * A date in the past is taken to mean next year's one, so entering "05/01" on
+ * New Year's Eve means the coming January, not one that has already gone.
+ * Both ends are pinned to midnight so the answer is a count of calendar days
+ * and does not quietly drop one depending on the time of day it was typed.
+ */
+export function parsePaydayDateOrDays(
+  input: string,
+  now: Date = new Date()
+): { days: number; paydayDateIso: string } | null {
+  const trimmed = input.trim();
+
+  if (/^\d+$/.test(trimmed)) {
+    const days = parseInt(trimmed, 10);
+    const payday = new Date(now);
+    payday.setDate(payday.getDate() + days);
+    return { days, paydayDateIso: payday.toISOString() };
+  }
+
+  const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (!match) return null;
+
+  const day = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  if (day < 1 || day > 31 || month < 1 || month > 12) return null;
+
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+
+  let target = new Date(today.getFullYear(), month - 1, day);
+  // Rejects the likes of 30/02, which JS would roll forward into March.
+  if (target.getDate() !== day || target.getMonth() !== month - 1) return null;
+
+  if (target.getTime() < today.getTime()) {
+    target = new Date(today.getFullYear() + 1, month - 1, day);
+  }
+
+  return {
+    days: daysBetween(today.toISOString(), target.toISOString()),
+    paydayDateIso: target.toISOString(),
+  };
+}
+
+/**
+ * What an allowance works out to per day, phrased for the budget editor.
+ *
+ * Returns null rather than Infinity when the period is empty, so the caller
+ * shows nothing instead of a nonsense daily rate.
+ */
+export function budgetPreview(
+  allowance: number,
+  daysOrPayday: number | string,
+  now: Date = new Date()
+): { daily: number; days: number; paydayIso: string | null; previewString: string } | null {
+  let days: number;
+  let paydayIso: string | null = null;
+
+  if (typeof daysOrPayday === 'number') {
+    days = daysOrPayday;
+  } else {
+    const parsed = parsePaydayDateOrDays(daysOrPayday, now);
+    if (!parsed) return null;
+    days = parsed.days;
+    paydayIso = parsed.paydayDateIso;
+  }
+
+  if (days <= 0) return null;
+
+  const daily = Math.floor(allowance / days);
+  const previewString = paydayIso
+    ? `About ${formatMoney(daily)} / day from today until ${formatDayLabel(paydayIso)}`
+    : `About ${formatMoney(daily)} / day over the next ${days} day${days === 1 ? '' : 's'}`;
+
+  return { daily, days, paydayIso, previewString };
 }
