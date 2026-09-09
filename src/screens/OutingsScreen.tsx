@@ -5,7 +5,7 @@ import * as db from '../db/dbService';
 import { OutingSummary } from '../db/repos/outings';
 import { IOUDetail, TransactionRow } from '../db/types';
 import { formatMoney, formatRelative } from '../utils/format';
-import { categoryColor, palette, radii, spacing, typography } from '../theme/theme';
+import { categoryColor, layer, palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Card, CardTitle, Chip, Dot, EmptyState, Field, Loading, ProgressBar, Row, Screen, ScreenTitle, Sheet } from '../components/ui';
 import AddExpenseSheet from '../components/AddExpenseSheet';
 import SplitModal from '../components/SplitModal';
@@ -272,7 +272,7 @@ function OutingDetailSheet({
       <Button label="Add an expense" variant="secondary" onPress={() => setAddVisible(true)} />
 
       {candidates.length > 0 ? (
-        <Card style={{ borderColor: palette.violet }}>
+        <Card style={{ backgroundColor: layer(palette.violet, 0.12) }}>
           <CardTitle>Spent during this outing</CardTitle>
           {candidates.map((tx) => (
             <Row

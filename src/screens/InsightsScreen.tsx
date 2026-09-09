@@ -24,7 +24,7 @@ import {
 } from '../math/insights';
 import { daysUntilBroke } from '../math/budget';
 import { formatMoney, formatMoneyCompact } from '../utils/format';
-import { categoryColor, palette, radii, spacing, typography } from '../theme/theme';
+import { categoryColor, layer, palette, radii, spacing, typography } from '../theme/theme';
 import { Card, CardTitle, Dot, EmptyState, Loading, ProgressBar, Row, Screen, ScreenTitle } from '../components/ui';
 import Icon from '../components/Icon';
 
@@ -528,7 +528,7 @@ export default function InsightsScreen() {
         </Card>
       ) : null}
 
-      <Card style={brokeIn !== null && brokeIn < snapshot.daysRemaining ? { borderColor: palette.warningAmber } : undefined}>
+      <Card style={brokeIn !== null && brokeIn < snapshot.daysRemaining ? { backgroundColor: layer(palette.warningAmber, 0.12) } : undefined}>
         <CardTitle>Projection</CardTitle>
         <Text style={styles.projection}>
           {brokeIn === null
