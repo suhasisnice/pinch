@@ -1,6 +1,7 @@
 import * as db from '../db/dbService';
 import { TransactionRow } from '../db/types';
 import { parseMessage } from './parserService';
+import { markDetectedTransfers } from './transferService';
 
 const REVALIDATION_KEY = 'pinch.revalidatedRules';
 
@@ -9,8 +10,9 @@ const REVALIDATION_KEY = 'pinch.revalidatedRules';
  * every device re-checks its imported history once on the next launch.
  *
  * 2 — an SMS must name the account the money moved through.
+ * 3 — money moved between the user's own accounts is detected and set aside.
  */
-export const PARSER_RULES_VERSION = 2;
+export const PARSER_RULES_VERSION = 3;
 
 export interface RevalidationResult {
   /** Transactions examined: captured, and still carrying their original text. */
@@ -19,6 +21,10 @@ export interface RevalidationResult {
   rejected: TransactionRow[];
   /** Money those rejected rows were wrongly counting as spending. */
   rejectedSpend: number;
+  /** Movements between the user's own accounts that were set aside. */
+  transfersFound: number;
+  /** Spending those transfers were wrongly adding to the total. */
+  transferSpend: number;
 }
 
 /**
@@ -36,7 +42,13 @@ export interface RevalidationResult {
  */
 export async function findStaleCaptures(): Promise<RevalidationResult> {
   const all = await db.getAllTransactions();
-  const result: RevalidationResult = { checked: 0, rejected: [], rejectedSpend: 0 };
+  const result: RevalidationResult = {
+    checked: 0,
+    rejected: [],
+    rejectedSpend: 0,
+    transfersFound: 0,
+    transferSpend: 0,
+  };
 
   for (const row of all) {
     if (row.source === 'MANUAL') continue;
@@ -68,6 +80,12 @@ export async function revalidateHistory(): Promise<RevalidationResult> {
     await db.setTransactionExcluded(row.id, true);
   }
 
+  // Run transfer detection after the junk has gone, so a promotional message
+  // can never be paired with a real credit and hide a genuine expense.
+  const transfers = await markDetectedTransfers();
+  result.transfersFound = transfers.pairs.length;
+  result.transferSpend = transfers.removedFromSpending;
+
   return result;
 }
 
@@ -88,5 +106,5 @@ export async function revalidateIfRulesChanged(): Promise<RevalidationResult | n
   const result = await revalidateHistory();
   await AsyncStorage.setItem(REVALIDATION_KEY, String(PARSER_RULES_VERSION));
 
-  return result.rejected.length > 0 ? result : null;
+  return result.rejected.length > 0 || result.transfersFound > 0 ? result : null;
 }

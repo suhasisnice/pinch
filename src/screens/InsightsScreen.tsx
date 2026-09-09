@@ -52,6 +52,8 @@ export default function InsightsScreen() {
   const [recurring, setRecurring] = useState<RecurringCharge[]>([]);
   const [weekdays, setWeekdays] = useState<WeekdayPattern[]>([]);
   const [allDaily, setAllDaily] = useState<Array<{ day: string; total: number }>>([]);
+  const [borne, setBorne] = useState<Awaited<ReturnType<typeof db.getBorneBetween>> | null>(null);
+  const [transfers, setTransfers] = useState<number>(0);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
@@ -77,6 +79,8 @@ export default function InsightsScreen() {
       categoryMonths,
       repeatRows,
       everyDay,
+      borneRows,
+      transferRows,
     ] = await Promise.all([
       db.getSpendByCategory(next.periodStart, next.periodEnd),
       db.getDailySpend(next.periodStart, next.periodEnd),
@@ -88,6 +92,8 @@ export default function InsightsScreen() {
       db.getCategoryByMonth(6, now),
       db.getRepeatMerchants(6, now),
       db.getDailySpend(historyStart, now.toISOString()),
+      db.getBorneBetween(next.periodStart, next.periodEnd),
+      db.getTransfers(),
     ]);
 
     setSnapshot(next);
@@ -100,6 +106,9 @@ export default function InsightsScreen() {
     setRecurring(detectRecurring(repeatRows));
     setWeekdays(weekdayPattern(everyDay));
     setAllDaily(everyDay);
+    setBorne(borneRows);
+    // Both legs are stored, so the count of movements is half the rows.
+    setTransfers(Math.floor(transferRows.length / 2));
   }, []);
 
   useFocusEffect(
@@ -281,6 +290,49 @@ export default function InsightsScreen() {
           />
         ) : null}
       </Card>
+
+      {borne && borne.paid > 0 ? (
+        <Card>
+          <CardTitle>What you actually bore</CardTitle>
+          <Text style={styles.cardIntro}>
+            What left your account is not what the period cost you — the rest was other
+            people's share of bills you happened to pay.
+          </Text>
+
+          <View style={styles.borneRow}>
+            <Text style={styles.borneLabel}>Left your account</Text>
+            <Text style={styles.borneValue}>{formatMoney(borne.paid)}</Text>
+          </View>
+          {borne.splitAway > 0 ? (
+            <View style={styles.borneRow}>
+              <Text style={styles.borneLabel}>Charged to other people</Text>
+              <Text style={[styles.borneValue, { color: palette.mint }]}>
+                −{formatMoney(borne.splitAway)}
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={styles.borneTotal}>
+            <Text style={styles.borneTotalLabel}>Actually yours</Text>
+            <Text style={styles.borneTotalValue}>{formatMoney(borne.borne)}</Text>
+          </View>
+
+          {borne.stillOwed > 0 ? (
+            <Text style={styles.historyNote}>
+              {formatMoney(borne.recovered)} has come back so far.{' '}
+              {formatMoney(borne.stillOwed)} is still owed to you — until that arrives you are
+              out of pocket {formatMoney(borne.paid - borne.recovered)}.
+            </Text>
+          ) : null}
+
+          {transfers > 0 ? (
+            <Text style={styles.historyNote}>
+              {transfers} transfer{transfers === 1 ? '' : 's'} between your own accounts
+              {transfers === 1 ? ' was' : ' were'} left out of all of this.
+            </Text>
+          ) : null}
+        </Card>
+      ) : null}
 
       {months.length > 1 ? (
         <Card>
@@ -511,6 +563,26 @@ const styles = StyleSheet.create({
   monthBar: { width: '100%', borderRadius: 4 },
   monthAmount: { ...typography.micro, color: palette.textSecondary, fontSize: 9 },
   monthLabel: { ...typography.micro, color: palette.textMuted },
+
+  borneRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 7,
+  },
+  borneLabel: { ...typography.body, color: palette.textSecondary },
+  borneValue: { ...typography.bodyBold, color: palette.textPrimary },
+  borneTotal: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: spacing.sm,
+    marginTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
+  },
+  borneTotalLabel: { ...typography.cardTitle, color: palette.textPrimary },
+  borneTotalValue: { ...typography.bodyBold, fontSize: 22, color: palette.neonGreen },
 
   trendPill: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   trendPillText: { ...typography.micro, fontWeight: '700' },

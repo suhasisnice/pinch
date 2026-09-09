@@ -199,7 +199,7 @@ export async function getMonthlySpend(
             COUNT(*) AS count,
             COUNT(DISTINCT substr(occurred_at, 1, 10)) AS days
      FROM Transactions
-     WHERE kind = 'SPEND' AND excluded_at IS NULL AND occurred_at >= ?
+     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND occurred_at >= ?
      GROUP BY month
      ORDER BY month DESC;`,
     [start.toISOString()]
@@ -219,7 +219,7 @@ export async function getCategoryByMonth(
             COALESCE(category, 'Uncategorised') AS category,
             SUM(amount) AS total
      FROM Transactions
-     WHERE kind = 'SPEND' AND excluded_at IS NULL AND occurred_at >= ?
+     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND occurred_at >= ?
      GROUP BY month, category
      ORDER BY month DESC, total DESC;`,
     [start.toISOString()]
@@ -252,7 +252,7 @@ export async function getRepeatMerchants(
             SUM(amount) AS total,
             MAX(occurred_at) AS lastAt
      FROM Transactions
-     WHERE kind = 'SPEND' AND excluded_at IS NULL AND occurred_at >= ?
+     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND occurred_at >= ?
      GROUP BY lower(merchant)
      HAVING months >= 2
      ORDER BY total DESC;`,
@@ -316,7 +316,7 @@ export async function getGrossSpendBetween(startIso: string, endIso: string): Pr
        COALESCE(SUM(CASE WHEN kind = 'SPEND' THEN amount ELSE 0 END), 0)
        - COALESCE(SUM(CASE WHEN kind = 'REFUND' THEN amount ELSE 0 END), 0) AS total
      FROM Transactions
-     WHERE kind IN ('SPEND', 'REFUND') AND excluded_at IS NULL
+     WHERE kind IN ('SPEND', 'REFUND') AND excluded_at IS NULL AND transfer_pair_id IS NULL
        AND occurred_at >= ? AND occurred_at < ?;`,
     [startIso, endIso]
   );
@@ -328,7 +328,7 @@ export async function getIncomeBetween(startIso: string, endIso: string): Promis
   const db = getAdapter();
   const row = await db.getFirstAsync<{ total: number | null }>(
     `SELECT COALESCE(SUM(amount), 0) AS total FROM Transactions
-     WHERE kind = 'INCOME' AND excluded_at IS NULL AND occurred_at >= ? AND occurred_at < ?;`,
+     WHERE kind = 'INCOME' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND occurred_at >= ? AND occurred_at < ?;`,
     [startIso, endIso]
   );
   return row?.total ?? 0;
@@ -374,7 +374,7 @@ export async function getSpendByCategory(
             SUM(amount) AS total,
             COUNT(*) AS count
      FROM Transactions
-     WHERE kind = 'SPEND' AND excluded_at IS NULL
+     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL
        AND occurred_at >= ? AND occurred_at < ?
      GROUP BY COALESCE(category, 'Uncategorised')
      ORDER BY total DESC;`,
@@ -391,7 +391,7 @@ export async function getDailySpend(
   return db.getAllAsync<{ day: string; total: number }>(
     `SELECT substr(occurred_at, 1, 10) AS day, SUM(amount) AS total
      FROM Transactions
-     WHERE kind = 'SPEND' AND excluded_at IS NULL
+     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL
        AND occurred_at >= ? AND occurred_at < ?
      GROUP BY day
      ORDER BY day ASC;`,
@@ -421,4 +421,109 @@ export async function findProbableDuplicate(
      ORDER BY occurred_at DESC LIMIT 1;`,
     [amount, from, to]
   );
+}
+
+// ---------------------------------------------------------------------------
+// Self-transfers: money that moved between the user's own accounts.
+// ---------------------------------------------------------------------------
+
+/**
+ * Links two transactions as the legs of one movement of money.
+ *
+ * Both rows point at each other, so either one can be found from the other
+ * and unlinking from either side is symmetric.
+ */
+export async function markTransferPair(debitId: number, creditId: number): Promise<void> {
+  const db = getAdapter();
+  await db.runAsync(`UPDATE Transactions SET transfer_pair_id = ? WHERE id = ?;`, [
+    creditId,
+    debitId,
+  ]);
+  await db.runAsync(`UPDATE Transactions SET transfer_pair_id = ? WHERE id = ?;`, [
+    debitId,
+    creditId,
+  ]);
+}
+
+/** Undoes the classification for both legs, putting the money back in the totals. */
+export async function unmarkTransfer(transactionId: number): Promise<void> {
+  const db = getAdapter();
+  const row = await db.getFirstAsync<{ transfer_pair_id: number | null }>(
+    `SELECT transfer_pair_id FROM Transactions WHERE id = ?;`,
+    [transactionId]
+  );
+
+  await db.runAsync(`UPDATE Transactions SET transfer_pair_id = NULL WHERE id = ?;`, [
+    transactionId,
+  ]);
+  if (row?.transfer_pair_id) {
+    await db.runAsync(`UPDATE Transactions SET transfer_pair_id = NULL WHERE id = ?;`, [
+      row.transfer_pair_id,
+    ]);
+  }
+}
+
+export async function getTransfers(): Promise<TransactionRow[]> {
+  const db = getAdapter();
+  return db.getAllAsync<TransactionRow>(
+    `SELECT * FROM Transactions
+     WHERE transfer_pair_id IS NOT NULL
+     ORDER BY occurred_at DESC;`
+  );
+}
+
+/**
+ * What a window of spending actually cost you, after what other people owe on
+ * those same bills.
+ *
+ * Three different numbers, because they answer three different questions:
+ * what left the account, what has come back so far, and what is genuinely
+ * yours once everyone settles up. Reporting only the first — which is what
+ * every total in the app did until now — overstates the cost of every night
+ * out that got split.
+ */
+export async function getBorneBetween(
+  startIso: string,
+  endIso: string
+): Promise<{ paid: number; splitAway: number; recovered: number; stillOwed: number; borne: number }> {
+  const db = getAdapter();
+
+  const row = await db.getFirstAsync<{
+    paid: number | null;
+    splitAway: number | null;
+    recovered: number | null;
+  }>(
+    `SELECT
+       (SELECT COALESCE(SUM(amount), 0) FROM Transactions
+         WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL
+           AND occurred_at >= ?1 AND occurred_at < ?2) AS paid,
+
+       (SELECT COALESCE(SUM(i.amount), 0) FROM IOUs i
+          JOIN Transactions t ON t.id = i.transaction_id
+         WHERE i.direction = 'THEY_OWE_ME'
+           AND t.kind = 'SPEND' AND t.excluded_at IS NULL AND t.transfer_pair_id IS NULL
+           AND t.occurred_at >= ?1 AND t.occurred_at < ?2) AS splitAway,
+
+       (SELECT COALESCE(SUM(s.amount), 0) FROM Settlements s
+          JOIN IOUs i ON i.id = s.iou_id
+          JOIN Transactions t ON t.id = i.transaction_id
+         WHERE i.direction = 'THEY_OWE_ME'
+           AND t.kind = 'SPEND' AND t.excluded_at IS NULL AND t.transfer_pair_id IS NULL
+           AND t.occurred_at >= ?1 AND t.occurred_at < ?2) AS recovered;`,
+    [startIso, endIso]
+  );
+
+  const paid = row?.paid ?? 0;
+  const splitAway = row?.splitAway ?? 0;
+  const recovered = row?.recovered ?? 0;
+
+  return {
+    paid,
+    splitAway,
+    recovered,
+    stillOwed: Math.max(0, splitAway - recovered),
+    // Your genuine share: the whole bill minus everything charged to someone
+    // else, whether or not they have actually paid yet.
+    borne: paid - splitAway,
+  };
 }

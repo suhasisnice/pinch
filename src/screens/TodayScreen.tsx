@@ -13,6 +13,7 @@ import { Button, Card, CardTitle, Dot, EmptyState, Field, Loading, ProgressBar, 
 import AddExpenseSheet from '../components/AddExpenseSheet';
 import SplitModal from '../components/SplitModal';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
+import FreshStartSheet from '../components/FreshStartSheet';
 import Icon from '../components/Icon';
 
 export default function TodayScreen() {
@@ -23,6 +24,7 @@ export default function TodayScreen() {
   const [addVisible, setAddVisible] = useState(false);
   const [splitFor, setSplitFor] = useState<TransactionRow | null>(null);
   const [detailFor, setDetailFor] = useState<TransactionRow | null>(null);
+  const [freshVisible, setFreshVisible] = useState(false);
   const [testAmount, setTestAmount] = useState('');
 
   const load = useCallback(async () => {
@@ -103,7 +105,7 @@ export default function TodayScreen() {
             />
             <Button
               label="Start fresh"
-              onPress={() => navigation.navigate('Settings')}
+              onPress={() => setFreshVisible(true)}
               style={styles.flex}
             />
           </View>
@@ -230,6 +232,15 @@ export default function TodayScreen() {
         onClose={() => setAddVisible(false)}
         onSaved={() => {
           setAddVisible(false);
+          load();
+        }}
+      />
+
+      <FreshStartSheet
+        visible={freshVisible}
+        onClose={() => setFreshVisible(false)}
+        onDone={() => {
+          setFreshVisible(false);
           load();
         }}
       />

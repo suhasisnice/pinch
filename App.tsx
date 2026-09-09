@@ -40,16 +40,28 @@ export default function App() {
         revalidateIfRulesChanged()
           .then((result) => {
             if (cancelled || !result) return;
-            Alert.alert(
-              'Cleaned up your history',
-              `${result.rejected.length} imported message${
-                result.rejected.length === 1 ? '' : 's'
-              } turned out not to be real transactions, and ${formatMoney(
-                result.rejectedSpend
-              )} of spending has been removed from your totals.
+            const lines: string[] = [];
+            if (result.rejected.length > 0) {
+              lines.push(
+                `${result.rejected.length} imported message${
+                  result.rejected.length === 1 ? '' : 's'
+                } turned out not to be real transactions — ${formatMoney(
+                  result.rejectedSpend
+                )} removed from your spending.`
+              );
+            }
+            if (result.transfersFound > 0) {
+              lines.push(
+                `${result.transfersFound} transfer${
+                  result.transfersFound === 1 ? '' : 's'
+                } between your own accounts ${
+                  result.transfersFound === 1 ? 'was' : 'were'
+                } no longer counted as spending — ${formatMoney(result.transferSpend)}.`
+              );
+            }
+            lines.push('Anything here can be restored in Settings.');
 
-You can review or restore any of them in Settings.`
-            );
+            Alert.alert('Cleaned up your history', lines.join('\n\n'));
           })
           .catch(() => undefined);
 
