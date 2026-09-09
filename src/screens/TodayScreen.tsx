@@ -83,6 +83,33 @@ export default function TodayScreen() {
         </Text>
       </View>
 
+      {snapshot.budget.spendablePool < 0 ? (
+        <Card style={styles.troubleBanner}>
+          <View style={styles.troubleHead}>
+            <Icon name="warning" size={16} color={palette.warningAmber} />
+            <Text style={styles.troubleTitle}>Your numbers look wrong</Text>
+          </View>
+          <Text style={styles.troubleBody}>
+            You are {formatMoney(-snapshot.budget.spendablePool)} past an allowance of{' '}
+            {formatMoney(snapshot.budget.allowance)}. That usually means imported messages were
+            counted as spending when they were not real transactions.
+          </Text>
+          <View style={styles.troubleActions}>
+            <Button
+              label="See what was counted"
+              variant="secondary"
+              onPress={() => navigation.navigate('Transactions')}
+              style={styles.flex}
+            />
+            <Button
+              label="Start fresh"
+              onPress={() => navigation.navigate('Settings')}
+              style={styles.flex}
+            />
+          </View>
+        </Card>
+      ) : null}
+
       {snapshot.pendingCaptures > 0 ? (
         <Card style={styles.reviewBanner} onPress={() => navigation.navigate('Review')}>
           <Text style={styles.reviewText}>
@@ -290,4 +317,10 @@ const styles = StyleSheet.create({
   reviewChevron: { color: palette.violet, fontSize: 22 },
 
   projection: { ...typography.body, color: palette.textSecondary, lineHeight: 20 },
+
+  troubleBanner: { borderColor: palette.warningAmber, gap: spacing.sm },
+  troubleHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  troubleTitle: { ...typography.cardTitle, color: palette.warningAmber },
+  troubleBody: { ...typography.body, color: palette.textSecondary, lineHeight: 20 },
+  troubleActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
 });

@@ -12,13 +12,16 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "native:prebuild": "expo prebuild --platform android --clean && npm run android:sdk",
-    "apk:release": "npm run android:sdk && node scripts/gradle.js assembleRelease",
+    "apk:release": "npm run apk",
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch",
     "apk:debug": "npm run android:sdk && node scripts/gradle.js assembleDebug",
     "phone": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/copy-to-phone.ps1",
-    "postapk:release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/copy-to-phone.ps1"
+    "apk": "npm run android:sdk && node scripts/gradle.js assembleRelease",
+    "apk:clean": "npm run native:prebuild && node scripts/gradle.js assembleRelease",
+    "postapk": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/copy-to-phone.ps1",
+    "postapk:clean": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/copy-to-phone.ps1"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.0.3",
