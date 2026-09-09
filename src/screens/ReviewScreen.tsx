@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
 
   raw: {
     backgroundColor: palette.surfaceElevated,
-    borderRadius: radii.input,
+    borderRadius: radii.md,
     padding: spacing.sm,
     marginTop: spacing.sm,
   },
