@@ -46,9 +46,6 @@ const REJECT_PATTERNS: RegExp[] = [
   /\b(?:failed|declined|unsuccessful|reversed|cancelled)\b/i,
   /\brequest(?:ed|ing)? (?:money|payment)\b/i,
   /\bcollect request\b/i,
-  /\bavailable balance\b/i,
-  /\bavl(?:\.| )?bal\b/i,
-  /\bbalance (?:is|:)/i,
   /\bmin(?:imum)? (?:amount )?due\b/i,
   /\bstatement\b/i,
   /\bemi\s+(?:of|due|starts)\b/i,
@@ -153,9 +150,14 @@ const KNOWN_BANK_TOKENS = [
 
 const AMOUNT = String.raw`(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d{1,2})?)`;
 const AMOUNT_TRAILING = String.raw`([\d,]+(?:\.\d{1,2})?)\s*(?:rs\.?|inr|₹)`;
+// SBI's UPI alerts (and some others) quote no currency symbol at all —
+// "debited by 150.0". Only trusted directly against a transaction verb, so a
+// bare number elsewhere in the message — a date, a phone number — is never
+// mistaken for the amount.
+const AMOUNT_VERB_ADJACENT = String.raw`\b(?:debited|credited|paid|sent|received|withdrawn|deducted|deposited)\s+(?:by|of|for)?\s*([\d,]+(?:\.\d{1,2})?)\b`;
 
 const DEBIT_VERBS =
-  /\b(?:debited|spent|paid|withdrawn|deducted|purchase|txn of|sent to|transferred to)\b/i;
+  /\b(?:debited|spent|paid|withdrawn|deducted|purchase|txn of|sent|transferred to|trf to)\b/i;
 const CREDIT_VERBS = /\b(?:credited|received|added|refunded|deposited)\b/i;
 
 // ---------------------------------------------------------------------------
@@ -165,7 +167,9 @@ const CREDIT_VERBS = /\b(?:credited|received|added|refunded|deposited)\b/i;
 // Must start with a letter, so a date ("at 08-09-26") can never be captured
 // as a merchant name.
 const NAME = String.raw`[A-Za-z][A-Za-z0-9 &'.\-_@]{1,48}?`;
-const STOP = String.raw`(?=\s+(?:on|via|using|ref|upi|txn|dated|at\s+\d)\b|[.,;!]|$)`;
+// "from" belongs here alongside the others: "paid to Chai Point from Paytm
+// A/c..." names the wallet the payment left from, not more of the payee.
+const STOP = String.raw`(?=\s+(?:on|via|using|from|ref|upi|txn|dated|at\s+\d)\b|[.,;!]|$)`;
 
 // Order matters: the first match wins, so the most specific phrasings come
 // first and the greedy catch-alls come last.
@@ -176,8 +180,8 @@ const MERCHANT_PATTERNS: RegExp[] = [
   new RegExp(String.raw`\bto\s+VPA\s+(${NAME})${STOP}`, 'i'),
   // "...; OLIVE CAFE credited"
   new RegExp(String.raw`;\s*(${NAME})\s+credited`, 'i'),
-  // "paid to Olive Cafe" / "sent to Rahul"
-  new RegExp(String.raw`\b(?:paid|sent|transferred)\s+to\s+(${NAME})${STOP}`, 'i'),
+  // "paid to Olive Cafe" / "sent to Rahul" / SBI's "trf to ZOMATO"
+  new RegExp(String.raw`\b(?:paid|sent|transferred|trf)\s+to\s+(${NAME})${STOP}`, 'i'),
   // "UPI/P2M/123456789/OLIVE CAFE"
   new RegExp(String.raw`UPI\/(?:P2M|P2A)\/\d+\/(${NAME})${STOP}`, 'i'),
   // "at OLIVE CAFE". Deliberately ahead of the "spent on" branch: HDFC writes
@@ -186,6 +190,15 @@ const MERCHANT_PATTERNS: RegExp[] = [
   new RegExp(String.raw`\bat\s+(${NAME})${STOP}`, 'i'),
   // "spent on Amazon Pay" — only reached when there is no "at ..." clause.
   new RegExp(String.raw`\bspent\s+on\s+(${NAME})${STOP}`, 'i'),
+  // Bare "... A/c XX1234 to OLIVE CAFE" / "... From A/c x1234 To ZOMATO On
+  // ..." / Federal Bank's "debited ... towards ZEPTO" — HDFC, SBI and Federal
+  // each write the payee as its own clause, not glued to the verb the way
+  // "paid to X" is. Last of the debit-shaped patterns since this is the
+  // least specific of them. Excludes "to your/my account ..." — a credit's
+  // "credited to your account XX1234 from Priya Sharma" otherwise gets read
+  // as paying "your account" instead of reaching the "from Priya Sharma"
+  // that actually names who sent it.
+  new RegExp(String.raw`\bto(?:wards)?\s+(?!your\b|my\b|the\s+account\b)(${NAME})${STOP}`, 'i'),
   // "from RAHUL" (credits)
   new RegExp(String.raw`\bfrom\s+(${NAME})${STOP}`, 'i'),
   // "by RAHUL"
@@ -307,7 +320,9 @@ export function parseMessage(
   if (!refund && isRejected(text)) return null;
 
   const amountRaw =
-    text.match(new RegExp(AMOUNT, 'i'))?.[1] ?? text.match(new RegExp(AMOUNT_TRAILING, 'i'))?.[1];
+    text.match(new RegExp(AMOUNT, 'i'))?.[1] ??
+    text.match(new RegExp(AMOUNT_TRAILING, 'i'))?.[1] ??
+    text.match(new RegExp(AMOUNT_VERB_ADJACENT, 'i'))?.[1];
   const amount = amountRaw ? parseAmount(amountRaw) : null;
   if (amount === null) return null;
 
