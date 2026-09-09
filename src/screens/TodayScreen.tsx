@@ -154,7 +154,13 @@ export default function TodayScreen() {
       </View>
 
       <Card>
-        <CardTitle right={<Text style={styles.link} onPress={() => navigation.navigate('Insights')}>Insights ›</Text>}>
+        <CardTitle
+          right={
+            <Text style={styles.link} onPress={() => navigation.navigate('Transactions')}>
+              See all
+            </Text>
+          }
+        >
           Today's spending
         </CardTitle>
         {today.length === 0 ? (

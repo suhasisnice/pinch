@@ -38,6 +38,7 @@ export default function SettingsScreen() {
   const [busy, setBusy] = useState(false);
   const [blocked, setBlocked] = useState<Array<{ pattern: string; reason: string | null }>>([]);
   const [excluded, setExcluded] = useState<TransactionRow[]>([]);
+  const [counts, setCounts] = useState<Awaited<ReturnType<typeof db.countData>> | null>(null);
 
   const refreshPermissions = useCallback(() => {
     setSmsGranted(hasSmsPermission());
@@ -55,6 +56,7 @@ export default function SettingsScreen() {
     ]);
     setBlocked(blockRows);
     setExcluded(excludedRows);
+    setCounts(await db.countData());
     // Show the period actually in force, not the last thing typed into the box.
     setAllowance(String(period?.allowance ?? amount));
     setPeriodDays(String(period?.daysTotal ?? 30));
@@ -138,6 +140,56 @@ export default function SettingsScreen() {
         'Only used to pick who a bill is split with, so nudges have a number to open.'
       );
     }
+  }
+
+  /**
+   * Clears the ledger and starts a period from today.
+   *
+   * Goals, friends and blocked senders survive: the reason to reach for this
+   * is almost always an import that poisoned the numbers, and throwing away
+   * the rest would punish the user for the parser's mistake. "Erase
+   * everything" is offered separately for the case where that is genuinely
+   * what is wanted.
+   */
+  async function startFresh(everything: boolean) {
+    setBusy(true);
+    try {
+      await db.resetData({
+        ledger: true,
+        periods: true,
+        contacts: everything,
+        goals: everything,
+        outings: everything,
+        blocklist: everything,
+      });
+
+      const parsed = Number(allowance.replace(/[^\d.]/g, ''));
+      const days = Number(periodDays.replace(/[^\d]/g, '')) || 30;
+      if (Number.isFinite(parsed) && parsed > 0) {
+        await db.startBudgetPeriod({ allowance: parsed, days });
+      }
+
+      await load();
+      Alert.alert(
+        'Starting fresh',
+        everything
+          ? 'Everything cleared. Your budget starts from today.'
+          : 'Spending history cleared. Goals, friends and blocked senders kept. Your budget starts from today.'
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function confirmReset(everything: boolean) {
+    const detail = everything
+      ? `This removes all ${counts?.transactions ?? 0} transactions, ${counts?.goals ?? 0} goals, ${counts?.contacts ?? 0} people and ${counts?.blocked ?? 0} blocked senders.`
+      : `This removes all ${counts?.transactions ?? 0} transactions and ${counts?.ious ?? 0} debts. Goals, friends and blocked senders are kept.`;
+
+    Alert.alert(everything ? 'Erase everything?' : 'Clear spending history?', `${detail} This cannot be undone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Clear', style: 'destructive', onPress: () => startFresh(everything) },
+    ]);
   }
 
   async function runBackfill() {
@@ -350,6 +402,37 @@ export default function SettingsScreen() {
           Quiet from {notifications.quietStartHour}:00 to {notifications.quietEndHour}:00, and never
           more than {notifications.maxPerDay} a day.
         </Text>
+      </Card>
+
+      <Card>
+        <CardTitle>Start fresh</CardTitle>
+        <Text style={styles.note}>
+          {counts
+            ? `${counts.transactions} transactions, ${counts.captures} waiting for review, ${counts.ious} debts.`
+            : ''}
+        </Text>
+        <Button
+          label="Clear spending history"
+          variant="secondary"
+          onPress={() => confirmReset(false)}
+          disabled={busy}
+          style={{ marginTop: spacing.sm }}
+        />
+        <Button
+          label="Erase everything"
+          variant="danger"
+          onPress={() => confirmReset(true)}
+          disabled={busy}
+          style={{ marginTop: spacing.sm }}
+        />
+        <Text style={styles.note}>
+          Both start a new budget period from today, using the allowance above.
+        </Text>
+      </Card>
+
+      <Card onPress={() => navigation.navigate('Transactions')}>
+        <CardTitle>All transactions ›</CardTitle>
+        <Text style={styles.note}>Everything captured or added, including what you have ignored.</Text>
       </Card>
 
       <Card onPress={() => navigation.navigate('Review')}>

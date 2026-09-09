@@ -370,6 +370,89 @@ export function weekdayPattern(daily: Array<{ day: string; total: number }>): We
     .sort((a, b) => b.average - a.average);
 }
 
+
+// ---------------------------------------------------------------------------
+// Robust statistics.
+//
+// The mean is the wrong summary for spending. One tuition payment or one
+// flight makes "your average day" a number that describes no day you actually
+// had, and every comparison built on it inherits the distortion. These use the
+// median, and pull genuine one-offs out into their own bucket rather than
+// letting them quietly dominate a trend.
+// ---------------------------------------------------------------------------
+
+export function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+/** Median spend across the days that actually had any. */
+export function medianDailySpend(daily: Array<{ day: string; total: number }>): number {
+  return median(daily.map((d) => d.total));
+}
+
+export interface OutlierSplit<T> {
+  /** The day-to-day spending a habit is made of. */
+  routine: T[];
+  /** Individually large items, kept separately rather than averaged in. */
+  oneOffs: T[];
+  /** The cutoff used, so the UI can explain itself. */
+  threshold: number;
+}
+
+/**
+ * Separates one-off spending from routine spending.
+ *
+ * The cutoff is the median plus `k` times the median absolute deviation, not
+ * a fixed rupee figure: someone spending 200 a day and someone spending 2,000
+ * a day both have a sense of "unusually big", and it is not the same number.
+ * MAD rather than standard deviation because the outliers being looked for
+ * would themselves inflate a standard deviation and hide behind it.
+ *
+ * A floor is applied so that on very regular spending — where the deviation
+ * collapses toward zero — an ordinary purchase is not branded unusual.
+ */
+export function splitOutliers<T>(
+  items: T[],
+  amountOf: (item: T) => number,
+  k = 3,
+  floorMultiple = 2
+): OutlierSplit<T> {
+  if (items.length < 4) return { routine: items, oneOffs: [], threshold: Infinity };
+
+  const amounts = items.map(amountOf);
+  const mid = median(amounts);
+  const mad = median(amounts.map((a) => Math.abs(a - mid)));
+
+  const threshold = Math.max(mid + k * mad, mid * floorMultiple);
+
+  const routine: T[] = [];
+  const oneOffs: T[] = [];
+  for (const item of items) {
+    (amountOf(item) > threshold ? oneOffs : routine).push(item);
+  }
+
+  return { routine, oneOffs, threshold };
+}
+
+export interface TypicalDay {
+  /** Median of days with spending — the number that describes a normal day. */
+  typical: number;
+  /** Mean, kept for comparison; a large gap is itself worth surfacing. */
+  mean: number;
+  /** True when one-off spending is pulling the mean well above the median. */
+  skewed: boolean;
+}
+
+export function typicalDay(daily: Array<{ day: string; total: number }>): TypicalDay {
+  const typical = medianDailySpend(daily);
+  const mean = averageDailySpend(daily);
+  // A fifth above the median is where the mean stops describing a normal day.
+  return { typical, mean, skewed: typical > 0 && mean > typical * 1.2 };
+}
+
 export interface SpendingPersonality {
   label: string;
   blurb: string;

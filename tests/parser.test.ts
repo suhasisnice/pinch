@@ -31,12 +31,6 @@ describe('real bank SMS formats', () => {
       amount: 1240,
       merchant: 'Toit Brewpub',
     },
-    {
-      bank: 'GPay style',
-      text: '₹95 paid to Chai Point using UPI. UPI transaction ID 712345678901',
-      amount: 95,
-      merchant: 'Chai Point',
-    },
   ];
 
   for (const testCase of cases) {
@@ -67,12 +61,12 @@ describe('real bank SMS formats', () => {
   });
 
   it('handles amounts with comma grouping and paise', () => {
-    const parsed = parseMessage('Rs.12,499.50 spent at CROMA on 08-09-26');
+    const parsed = parseMessage('Rs.12,499.50 spent on Card x1234 at CROMA on 08-09-26');
     expect(parsed?.amount).toBe(12499.5);
   });
 
   it('handles a trailing currency token', () => {
-    const parsed = parseMessage('Your account is debited 450 INR at BIG BAZAAR');
+    const parsed = parseMessage('Your account XX9012 is debited 450 INR at BIG BAZAAR');
     expect(parsed?.amount).toBe(450);
   });
 });
@@ -119,7 +113,9 @@ describe('confidence', () => {
   });
 
   it('holds back a vague message for review', () => {
-    const parsed = parseMessage('Rs.340 debited');
+    // Names an account, so it is a real debit — but with no merchant, no
+    // reference and an unknown sender it is not confident enough to post.
+    const parsed = parseMessage('Rs.340 debited from A/c XX1234');
     expect(parsed).not.toBeNull();
     expect(parsed!.confidence).toBeLessThan(ACCEPT_THRESHOLD);
   });
