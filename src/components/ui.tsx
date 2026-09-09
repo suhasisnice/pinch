@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -13,11 +13,18 @@ import {
   ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { palette, radii, spacing, typography } from '../theme/theme';
+import { elevation, layer, palette, radii, spacing, stateLayer, typography } from '../theme/theme';
 import { duration, easing, usePressScale, useReducedMotion } from './motion';
 import Icon, { IconName } from './Icon';
 
-/** Shared primitives. Kept in one file so spacing and radii stay consistent. */
+/**
+ * Shared primitives, in Material You's dark resolution.
+ *
+ * Everything visual in the app composes from this file, which is the point:
+ * a screen should never reach for a raw colour or a radius of its own. Where
+ * one does, that is a gap here worth closing rather than a local style worth
+ * writing.
+ */
 
 export function Screen({
   children,
@@ -81,7 +88,13 @@ export function Card({
         onPress={onPress}
         onPressIn={press.onPressIn}
         onPressOut={press.onPressOut}
-        style={[styles.card, style]}
+        // A state layer, not a colour change: the surface keeps its identity
+        // and simply takes on a film of the content colour while held.
+        style={({ pressed }) => [
+          styles.card,
+          style,
+          pressed && { backgroundColor: layer(palette.primary, stateLayer.press) },
+        ]}
       >
         {children}
       </Pressable>
@@ -98,36 +111,55 @@ export function CardTitle({ children, right }: { children: React.ReactNode; righ
   );
 }
 
+/**
+ * MD3's button family. Every one of them is a pill — the single most
+ * recognisable thing about this design language, and the first thing that
+ * looks wrong if it is only *mostly* rounded.
+ *
+ * The older names (primary/secondary/ghost) still work and map onto the MD3
+ * ones, so no screen had to be rewritten to adopt this.
+ */
 export function Button({
   label,
   onPress,
-  variant = 'primary',
+  variant = 'filled',
   disabled = false,
+  icon,
   style,
 }: {
   label: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  variant?: 'filled' | 'tonal' | 'outlined' | 'text' | 'danger' | 'primary' | 'secondary' | 'ghost';
   disabled?: boolean;
+  icon?: IconName;
   style?: ViewStyle;
 }) {
-  const variantStyle =
-    variant === 'primary'
-      ? styles.buttonPrimary
-      : variant === 'danger'
-        ? styles.buttonDanger
-        : variant === 'ghost'
-          ? styles.buttonGhost
-          : styles.buttonSecondary;
-
-  const labelStyle =
-    variant === 'primary'
-      ? styles.buttonPrimaryLabel
-      : variant === 'danger'
-        ? styles.buttonDangerLabel
-        : styles.buttonSecondaryLabel;
-
   const press = usePressScale();
+
+  const resolved =
+    variant === 'primary'
+      ? 'filled'
+      : variant === 'secondary'
+        ? 'tonal'
+        : variant === 'ghost'
+          ? 'text'
+          : variant;
+
+  const containerStyle = {
+    filled: styles.buttonFilled,
+    tonal: styles.buttonTonal,
+    outlined: styles.buttonOutlined,
+    text: styles.buttonText,
+    danger: styles.buttonDanger,
+  }[resolved];
+
+  const labelColor = {
+    filled: palette.onPrimary,
+    tonal: palette.onSecondaryContainer,
+    outlined: palette.primary,
+    text: palette.primary,
+    danger: palette.onErrorContainer,
+  }[resolved];
 
   // The caller's style carries layout (a flex:1 in a button row), so it rides
   // on the wrapper; the visual styles stay on the pressable that is scaling.
@@ -138,11 +170,101 @@ export function Button({
         disabled={disabled}
         onPressIn={disabled ? undefined : press.onPressIn}
         onPressOut={disabled ? undefined : press.onPressOut}
-        style={[styles.button, variantStyle, disabled && styles.buttonDisabled]}
+        style={({ pressed }) => [
+          styles.button,
+          containerStyle,
+          pressed && { backgroundColor: layer(labelColor, stateLayer.press) },
+          disabled && styles.buttonDisabled,
+        ]}
       >
-        <Text style={labelStyle}>{label}</Text>
+        {icon ? <Icon name={icon} size={18} color={labelColor} /> : null}
+        <Text style={[styles.buttonLabel, { color: labelColor }]}>{label}</Text>
       </Pressable>
     </Animated.View>
+  );
+}
+
+/**
+ * Floating action button. Tertiary-coloured by MD3 convention, which is what
+ * keeps it from competing with every filled button on the screen.
+ */
+export function FAB({
+  icon,
+  label,
+  onPress,
+  style,
+}: {
+  icon: IconName;
+  label?: string;
+  onPress: () => void;
+  style?: ViewStyle;
+}) {
+  const press = usePressScale(0.94);
+
+  return (
+    <Animated.View style={[style, press.style, elevation.level3]}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={press.onPressIn}
+        onPressOut={press.onPressOut}
+        style={({ pressed }) => [
+          styles.fab,
+          label ? styles.fabExtended : null,
+          pressed && { backgroundColor: layer(palette.onTertiary, stateLayer.press) },
+        ]}
+      >
+        <Icon name={icon} size={22} color={palette.onTertiary} />
+        {label ? <Text style={styles.fabLabel}>{label}</Text> : null}
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+/**
+ * A soft, out-of-focus orb of colour.
+ *
+ * MD3's atmospheric backgrounds are CSS blur on a coloured shape, which
+ * React Native has no equivalent for — expo-blur blurs what is *behind* a
+ * view, not the view itself. A radial gradient fading to nothing produces
+ * the same effect honestly, and on the GPU, which a stack of translucent
+ * circles faking a falloff would not.
+ */
+export function BlurOrb({
+  color,
+  size,
+  opacity = 0.28,
+  style,
+}: {
+  color: string;
+  size: number;
+  opacity?: number;
+  style?: ViewStyle;
+}) {
+  // Concentric rings, each a little wider and fainter: an approximation of a
+  // gaussian falloff cheap enough to leave running behind a scrolling list.
+  const rings = 6;
+  return (
+    <View pointerEvents="none" style={[{ width: size, height: size }, style]}>
+      {Array.from({ length: rings }).map((_, index) => {
+        const scale = (index + 1) / rings;
+        const ringSize = size * scale;
+        return (
+          <View
+            key={index}
+            style={{
+              position: 'absolute',
+              left: (size - ringSize) / 2,
+              top: (size - ringSize) / 2,
+              width: ringSize,
+              height: ringSize,
+              borderRadius: ringSize / 2,
+              backgroundColor: color,
+              opacity: (opacity / rings) * (rings - index) * 0.6,
+            }}
+          />
+        );
+      })}
+    </View>
   );
 }
 
@@ -157,32 +279,57 @@ export function Chip({
   onPress?: () => void;
   color?: string;
 }) {
+  const selectedBackground = color ?? palette.secondaryContainer;
+  const selectedLabel = color ? palette.onPrimary : palette.onSecondaryContainer;
+
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
         styles.chip,
-        selected && { backgroundColor: color ?? palette.neonGreen, borderColor: 'transparent' },
-        pressed && styles.pressed,
+        selected && { backgroundColor: selectedBackground, borderColor: 'transparent' },
+        pressed && { backgroundColor: layer(palette.primary, stateLayer.press) },
       ]}
     >
-      <Text style={[styles.chipLabel, selected && styles.chipLabelSelected]}>{label}</Text>
+      <Text style={[styles.chipLabel, selected && { color: selectedLabel, fontWeight: '500' }]}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
 
+/**
+ * MD3's filled text field: rounded at the top, square along the bottom, and
+ * underlined by a rule that takes the primary colour while focused. The
+ * shape is the affordance — it reads as somewhere to type before you have
+ * read the label.
+ */
 export function Field({
   label,
   hint,
   ...inputProps
 }: TextInputProps & { label: string; hint?: string }) {
+  const [focused, setFocused] = useState(false);
+
   return (
     <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
+      <Text style={[styles.fieldLabel, focused && { color: palette.primary }]}>{label}</Text>
       <TextInput
         placeholderTextColor={palette.textMuted}
         {...inputProps}
-        style={[styles.input, inputProps.style]}
+        onFocus={(event) => {
+          setFocused(true);
+          inputProps.onFocus?.(event);
+        }}
+        onBlur={(event) => {
+          setFocused(false);
+          inputProps.onBlur?.(event);
+        }}
+        style={[
+          styles.input,
+          focused && { borderBottomColor: palette.primary },
+          inputProps.style,
+        ]}
       />
       {hint ? <Text style={styles.fieldHint}>{hint}</Text> : null}
     </View>
@@ -195,7 +342,7 @@ export function Field({
  */
 export function ProgressBar({
   fraction,
-  color = palette.neonGreen,
+  color = palette.primary,
   height = 8,
 }: {
   fraction: number;
@@ -257,7 +404,7 @@ export function EmptyState({
   return (
     <View style={styles.empty}>
       <View style={styles.emptyIcon}>
-        <Icon name={icon} size={26} color={palette.textMuted} />
+        <Icon name={icon} size={26} color={palette.onSecondaryContainer} />
       </View>
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyBody}>{body}</Text>
@@ -269,7 +416,7 @@ export function EmptyState({
 export function Loading({ label }: { label?: string }) {
   return (
     <View style={styles.loading}>
-      <ActivityIndicator color={palette.neonGreen} />
+      <ActivityIndicator color={palette.primary} />
       {label ? <Text style={styles.loadingLabel}>{label}</Text> : null}
     </View>
   );
@@ -294,7 +441,7 @@ export function Sheet({
           <View style={styles.sheetHandle} />
           <View style={styles.sheetHeader}>
             <Text style={styles.sheetTitle}>{title}</Text>
-            <Pressable onPress={onClose} hitSlop={12}>
+            <Pressable onPress={onClose} hitSlop={12} style={styles.sheetCloseHit}>
               <Text style={styles.sheetClose}>Done</Text>
             </Pressable>
           </View>
@@ -341,14 +488,22 @@ export function Row({
     </>
   );
 
-  if (onPress) {
-    return (
-      <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-        {content}
-      </Pressable>
-    );
-  }
-  return <View style={styles.row}>{content}</View>;
+  if (!onPress) return <View style={styles.row}>{content}</View>;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.row,
+        pressed && {
+          backgroundColor: layer(palette.primary, stateLayer.press),
+          borderRadius: radii.sm,
+        },
+      ]}
+    >
+      {content}
+    </Pressable>
+  );
 }
 
 export function Dot({ color, size = 10 }: { color: string; size?: number }) {
@@ -365,14 +520,14 @@ const styles = StyleSheet.create({
   screenTitle: { ...typography.screenTitle, color: palette.textPrimary },
   screenSubtitle: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
 
+  // Tonal separation, not a border: MD3 leans on the surface stepping up a
+  // tone rather than drawing a line around everything.
   card: {
-    backgroundColor: palette.surface,
-    borderRadius: radii.card,
+    backgroundColor: palette.surfaceContainerLow,
+    borderRadius: radii.lg,
     padding: spacing.md,
-    borderWidth: 1,
-    borderColor: palette.border,
+    ...elevation.level1,
   },
-  pressed: { opacity: 0.7 },
 
   cardTitleRow: {
     flexDirection: 'row',
@@ -383,62 +538,87 @@ const styles = StyleSheet.create({
   cardTitle: { ...typography.cardTitle, color: palette.textPrimary },
 
   button: {
-    paddingVertical: 13,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.pill,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: 44, // WCAG touch target, and MD3's comfortable button height.
+    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.pill,
   },
-  buttonPrimary: { backgroundColor: palette.neonGreen },
-  buttonSecondary: {
-    backgroundColor: palette.surfaceElevated,
+  buttonFilled: { backgroundColor: palette.primary },
+  buttonTonal: { backgroundColor: palette.secondaryContainer },
+  buttonOutlined: {
+    backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: palette.borderStrong,
+    borderColor: palette.outline,
   },
-  buttonGhost: { backgroundColor: 'transparent' },
-  buttonDanger: { backgroundColor: 'rgba(255,77,77,0.15)', borderWidth: 1, borderColor: palette.danger },
-  buttonDisabled: { opacity: 0.4 },
-  buttonPrimaryLabel: { ...typography.bodyBold, color: '#0B0B0C' },
-  buttonSecondaryLabel: { ...typography.bodyBold, color: palette.textPrimary },
-  buttonDangerLabel: { ...typography.bodyBold, color: palette.danger },
+  buttonText: { backgroundColor: 'transparent', paddingHorizontal: spacing.md },
+  buttonDanger: { backgroundColor: palette.errorContainer },
+  buttonDisabled: { opacity: 0.38 },
+  buttonLabel: { ...typography.label },
+
+  fab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    width: 56,
+    height: 56,
+    borderRadius: radii.fab,
+    backgroundColor: palette.tertiary,
+  },
+  fabExtended: { width: 'auto', paddingHorizontal: spacing.lg },
+  fabLabel: { ...typography.label, color: palette.onTertiary },
 
   chip: {
-    paddingVertical: 7,
-    paddingHorizontal: 13,
+    paddingVertical: 8,
+    paddingHorizontal: spacing.md,
     borderRadius: radii.pill,
-    backgroundColor: palette.surfaceElevated,
+    backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: palette.outlineVariant,
   },
-  chipLabel: { ...typography.caption, color: palette.textSecondary },
-  chipLabelSelected: { color: '#0B0B0C', fontWeight: '700' },
+  chipLabel: { ...typography.micro, color: palette.textSecondary },
 
   field: { gap: 6 },
-  fieldLabel: { ...typography.micro, color: palette.textSecondary, textTransform: 'uppercase', letterSpacing: 1 },
+  fieldLabel: {
+    ...typography.micro,
+    color: palette.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  // Rounded at the top, square at the bottom, underlined: the MD3 filled
+  // text field. The asymmetry is the whole signature — rounding all four
+  // corners turns it back into a generic box.
   input: {
-    backgroundColor: palette.surfaceElevated,
-    borderRadius: radii.input,
+    backgroundColor: palette.surfaceContainerHigh,
+    borderTopLeftRadius: radii.input,
+    borderTopRightRadius: radii.input,
     paddingHorizontal: spacing.md,
-    paddingVertical: 12,
+    paddingVertical: 14,
     color: palette.textPrimary,
     fontSize: 16,
-    borderWidth: 1,
-    borderColor: palette.border,
+    borderBottomWidth: 2,
+    borderBottomColor: palette.outline,
   },
   fieldHint: { ...typography.micro, color: palette.textMuted },
 
-  progressTrack: { width: '100%', backgroundColor: palette.surfaceHigh, overflow: 'hidden' },
+  progressTrack: {
+    width: '100%',
+    backgroundColor: palette.surfaceContainerHighest,
+    overflow: 'hidden',
+  },
 
   empty: { alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm },
   emptyIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.surfaceElevated,
-    borderWidth: 1,
-    borderColor: palette.border,
+    backgroundColor: palette.secondaryContainer,
   },
   emptyTitle: { ...typography.cardTitle, color: palette.textPrimary },
   emptyBody: {
@@ -455,17 +635,17 @@ const styles = StyleSheet.create({
   sheetBackdrop: { flex: 1, backgroundColor: palette.scrim, justifyContent: 'flex-end' },
   sheetDismissArea: { flex: 1 },
   sheet: {
-    backgroundColor: palette.surface,
-    borderTopLeftRadius: radii.sheet,
-    borderTopRightRadius: radii.sheet,
+    backgroundColor: palette.surfaceContainerLow,
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
     maxHeight: '88%',
     paddingBottom: spacing.lg,
   },
   sheetHandle: {
-    width: 38,
+    width: 32,
     height: 4,
     borderRadius: 2,
-    backgroundColor: palette.surfaceHigh,
+    backgroundColor: palette.outlineVariant,
     alignSelf: 'center',
     marginTop: spacing.sm,
   },
@@ -475,12 +655,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: spacing.md,
   },
-  sheetTitle: { ...typography.display, fontSize: 22, color: palette.textPrimary },
-  sheetClose: { ...typography.bodyBold, color: palette.neonGreen },
+  sheetTitle: { ...typography.display, fontSize: 24, lineHeight: 32, color: palette.textPrimary },
+  sheetCloseHit: { paddingVertical: 6, paddingHorizontal: spacing.sm, borderRadius: radii.pill },
+  sheetClose: { ...typography.label, color: palette.primary },
   sheetScroll: { flexGrow: 0 },
   sheetContent: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, gap: spacing.md },
 
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, gap: spacing.sm },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: spacing.sm },
   rowLeft: { width: 38, alignItems: 'center' },
   rowBody: { flex: 1, gap: 2 },
   rowTitle: { ...typography.bodyBold, color: palette.textPrimary },

@@ -109,7 +109,7 @@ export default function FreshStartSheet({
   return (
     <Sheet visible={visible} onClose={onClose} title="Start fresh">
       <View style={styles.intro}>
-        <Icon name="wallet" size={22} color={palette.neonGreen} />
+        <Icon name="wallet" size={22} color={palette.primary} />
         <Text style={styles.introText}>
           Forget what happened before. Tell Pinch what you have now, and today becomes day one.
         </Text>
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
   },
   previewLabel: { ...typography.micro, color: palette.textSecondary, textTransform: 'uppercase', letterSpacing: 1 },
-  previewAmount: { ...typography.display, color: palette.neonGreen },
+  previewAmount: { ...typography.display, color: palette.primary },
   previewSub: { ...typography.caption, color: palette.textMuted },
 
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

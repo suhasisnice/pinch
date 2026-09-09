@@ -352,7 +352,7 @@ export default function SplitModal({
                       <Icon
                         name={participant.included ? 'check' : 'add'}
                         size={16}
-                        color={participant.included ? palette.neonGreen : palette.textMuted}
+                        color={participant.included ? palette.primary : palette.textMuted}
                       />
                     </Pressable>
                   ) : null}
@@ -449,9 +449,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignItems: 'center',
   },
-  modeButtonOn: { backgroundColor: palette.neonGreen },
+  modeButtonOn: { backgroundColor: palette.secondaryContainer },
   modeLabel: { ...typography.caption, color: palette.textSecondary, fontWeight: '700' },
-  modeLabelOn: { color: '#0B0B0C' },
+  modeLabelOn: { color: palette.onSecondaryContainer },
   modeHint: { ...typography.micro, color: palette.textMuted, textAlign: 'center' },
 
   addRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
@@ -468,7 +468,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
-  quickAddAll: { ...typography.micro, color: palette.neonGreen },
+  quickAddAll: { ...typography.micro, color: palette.primary },
   quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 
   list: { gap: spacing.sm },
@@ -483,13 +483,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.border,
   },
-  personOn: { borderColor: palette.neonGreen },
+  personOn: { borderColor: palette.primary },
   personYou: { backgroundColor: palette.surfaceHigh, borderColor: 'transparent' },
   personYouName: { color: palette.textPrimary },
   personLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   personName: { ...typography.bodyBold, color: palette.textSecondary },
   personRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  personShare: { ...typography.bodyBold, color: palette.neonGreen, minWidth: 64, textAlign: 'right' },
+  personShare: { ...typography.bodyBold, color: palette.primary, minWidth: 64, textAlign: 'right' },
 
   exactField: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   exactPrefix: { ...typography.bodyBold, color: palette.textMuted },

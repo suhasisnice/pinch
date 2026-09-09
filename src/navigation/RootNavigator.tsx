@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import { NavigationContainer, DarkTheme, Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -12,7 +13,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 import ReviewScreen from '../screens/ReviewScreen';
 import TransactionsScreen from '../screens/TransactionsScreen';
 import Icon, { IconName } from '../components/Icon';
-import { palette, typography } from '../theme/theme';
+import { palette, radii, typography } from '../theme/theme';
 
 export type RootStackParamList = {
   Tabs: undefined;
@@ -37,10 +38,10 @@ const pinchTheme: Theme = {
   colors: {
     ...DarkTheme.colors,
     background: palette.background,
-    card: palette.surface,
+    card: palette.surfaceContainer,
     text: palette.textPrimary,
     border: palette.border,
-    primary: palette.neonGreen,
+    primary: palette.primary,
   },
 };
 
@@ -60,22 +61,29 @@ function Tabs() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: palette.neonGreen,
+        tabBarActiveTintColor: palette.textPrimary,
         tabBarInactiveTintColor: palette.textMuted,
         tabBarStyle: {
-          backgroundColor: palette.surface,
-          borderTopColor: palette.border,
-          height: 62,
-          paddingBottom: 8,
-          paddingTop: 6,
+          backgroundColor: palette.surfaceContainer,
+          borderTopWidth: 0,
+          height: 72,
+          paddingBottom: 10,
+          paddingTop: 8,
         },
-        tabBarLabelStyle: { ...typography.micro, fontSize: 10 },
+        tabBarLabelStyle: { ...typography.micro, fontSize: 11 },
+        // MD3's navigation bar marks the active destination with a filled
+        // pill behind the icon rather than by tinting the icon alone. It
+        // reads at a glance in a way a colour change on a 21px glyph does
+        // not, and it is the detail that makes a tab bar look like this
+        // design language rather than any other.
         tabBarIcon: ({ focused }) => (
-          <Icon
-            name={TAB_ICONS[route.name as keyof TabParamList]}
-            size={21}
-            color={focused ? palette.neonGreen : palette.textMuted}
-          />
+          <View style={[styles.tabIcon, focused && styles.tabIconActive]}>
+            <Icon
+              name={TAB_ICONS[route.name as keyof TabParamList]}
+              size={20}
+              color={focused ? palette.onSecondaryContainer : palette.textMuted}
+            />
+          </View>
         ),
       })}
     >
@@ -111,3 +119,14 @@ export default function RootNavigator() {
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  tabIcon: {
+    width: 56,
+    height: 30,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabIconActive: { backgroundColor: palette.secondaryContainer },
+});

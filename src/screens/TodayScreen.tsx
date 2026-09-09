@@ -384,7 +384,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
 
   txAmount: { ...typography.bodyBold, color: palette.textPrimary },
-  link: { ...typography.caption, color: palette.neonGreen },
+  link: { ...typography.caption, color: palette.primary },
 
   reviewBanner: {
     flexDirection: 'row',

@@ -416,7 +416,7 @@ export default function InsightsScreen() {
                       styles.monthBar,
                       {
                         height: Math.max(6, (month.total / maxMonth) * 88),
-                        backgroundColor: isCurrent ? palette.neonGreen : palette.surfaceHigh,
+                        backgroundColor: isCurrent ? palette.primary : palette.surfaceHigh,
                       },
                     ]}
                   />

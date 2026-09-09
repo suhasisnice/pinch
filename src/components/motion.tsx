@@ -19,14 +19,23 @@ import { formatMoney } from '../utils/format';
 export const duration = {
   /** Press states and other direct responses to a finger. */
   instant: 120,
-  /** Cards arriving, sheets settling. */
-  quick: 260,
+  /** Micro-interactions: a button taking a state layer. */
+  short: 200,
+  /** Cards arriving, sheets settling. The MD3 standard. */
+  quick: 300,
+  /** Large surfaces: a sheet coming up from the bottom. */
+  long: 450,
   /** A number counting to its new value. */
   count: 650,
 } as const;
 
-/** Decelerating curve: fast to start, settles gently. The house easing. */
-export const easing = Easing.bezier(0.22, 1, 0.36, 1);
+/**
+ * Material You's signature curve — "emphasized decelerate". Moves off
+ * quickly and settles without bouncing, which is what makes MD3 motion read
+ * as confident rather than either robotic or springy. Everything in the app
+ * that moves uses this one curve; that consistency is most of the effect.
+ */
+export const easing = Easing.bezier(0.2, 0, 0, 1);
 
 /**
  * Tracks the system "reduce motion" setting, and keeps tracking it — people
