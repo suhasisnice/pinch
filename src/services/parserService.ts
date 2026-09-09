@@ -29,6 +29,7 @@ export const ACCEPT_THRESHOLD = 0.8;
 // would silently invent spending that never happened.
 // ---------------------------------------------------------------------------
 const REJECT_PATTERNS: RegExp[] = [
+  // -- Not a payment at all ------------------------------------------------
   /\botp\b/i,
   /one[\s-]?time\s+password/i,
   /\bdo not share\b/i,
@@ -43,13 +44,79 @@ const REJECT_PATTERNS: RegExp[] = [
   /\bavl(?:\.| )?bal\b/i,
   /\bbalance (?:is|:)/i,
   /\bmin(?:imum)? (?:amount )?due\b/i,
+  /\bstatement\b/i,
+  /\bemi\s+(?:of|due|starts)\b/i,
+
+  // -- Promotional: vouchers, coupons, cashback bait ------------------------
+  // These quote a rupee amount in a sentence shaped almost exactly like a
+  // real debit alert, so they parse cleanly and become invented spending.
   /\boffer\b/i,
-  /\bcashback of\b/i,
+  /\bvoucher\b/i,
+  /\bcoupon\b/i,
+  /\bpromo\s*code\b/i,
+  /\bgift\s*(?:card|voucher)\b/i,
+  /\bcashback\b/i,
+  /\breward\s*points?\b/i,
+  /\bscratch\s*card\b/i,
+  /\bflat\s+\d+%/i,
+  /\bupto\s+\d+%/i,
+  /\bup\s+to\s+(?:rs\.?|inr|₹)/i,
+  /\bsave\s+(?:rs\.?|inr|₹)/i,
+  /\bdiscount\b/i,
+  /\bsale\s+(?:is|ends|starts|live)\b/i,
+  /\blimited\s+(?:time|period|offer)\b/i,
+  /\bhurry\b/i,
+  /\bdeal\b/i,
+  /\bfree\b/i,
+
+  // -- Gambling and "win money" spam ---------------------------------------
+  // Rummy, fantasy cricket and betting apps are relentless SMS advertisers in
+  // India and every message is built around a rupee figure.
   /\bwin\b/i,
+  /\bwon\b/i,
+  /\bjackpot\b/i,
+  /\blottery\b/i,
+  /\blucky\s+draw\b/i,
+  /\brummy\b/i,
+  /\bteen\s*patti\b/i,
+  /\bpoker\b/i,
+  /\bcasino\b/i,
+  /\bbetting\b/i,
+  /\bfantasy\b/i,
+  /\bdream\s*11\b/i,
+  /\bplay\s+(?:now|and\s+win)\b/i,
+  /\bbonus\b/i,
+  /\bdeposit\s+(?:now|and)\b/i,
+
+  // -- App-install / referral marketing ------------------------------------
   /\bapply now\b/i,
   /\bclick\b/i,
+  /\bdownload\b/i,
+  /\binstall\b/i,
+  /\bregister\s+now\b/i,
+  /\bjoin\s+now\b/i,
+  /\bsign\s*up\b/i,
+  /\brefer(?:ral)?\b/i,
+  /\binvite\b/i,
+  /\bearn\s+(?:up\s*to|upto|rs\.?|inr|₹)/i,
   /\bloan\b/i,
+  /\bcredit\s+limit\b/i,
+  /\bpre[\s-]?approved\b/i,
   /\beligible for\b/i,
+
+  // -- Structural tells of bulk marketing ----------------------------------
+  // A bank's transaction alert never carries a link, an unsubscribe line or a
+  // terms-and-conditions notice. Any of these is close to proof.
+  /https?:\/\//i,
+  /\bwww\.[a-z0-9-]+\.[a-z]{2,}/i,
+  /\b(?:bit\.ly|tinyurl|cutt\.ly|rb\.gy|t\.co)\b/i,
+  /\bt\s*&\s*c\b/i,
+  /\bterms\s+(?:and|&)\s+conditions\b/i,
+  /\bunsubscribe\b/i,
+  /\bto\s+opt[\s-]?out\b/i,
+  /\breply\s+stop\b/i,
+  /\bcall\s+(?:us|now)\b/i,
+  /\btoll[\s-]?free\b/i,
 ];
 
 /** Sender IDs are shaped like VM-HDFCBK, AD-ICICIB, JD-SBIINB. */

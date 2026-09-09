@@ -1,10 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as db from '../db/dbService';
 import { ContactRow, TransactionRow } from '../db/types';
-import { calculateSplit } from '../math/splitEngine';
+import {
+  PAYER_ID,
+  SPLIT_MODES,
+  SPLIT_MODE_HINTS,
+  SPLIT_MODE_LABELS,
+  SplitMode,
+  SplitParticipant,
+  computeSplit,
+} from '../math/splitEngine';
 import { formatMoney } from '../utils/format';
 import { Button, Chip, Field, Sheet } from './ui';
+import Icon from './Icon';
 import ContactPicker from './ContactPicker';
 import { isCaptureAvailable } from '../../modules/pinch-capture';
 import { palette, radii, spacing, typography } from '../theme/theme';
@@ -14,15 +23,22 @@ interface Participant {
   name: string;
   included: boolean;
   ratio: number;
+  /** EXACT mode only — kept as a string so a half-typed "12." isn't clobbered. */
+  exactText: string;
 }
 
 /**
- * Splits a bill you paid across the people who were there.
+ * Splits a bill you paid across the people who were there, in one of three
+ * modes:
  *
- * You are always a participant — the common failure of split trackers is
- * dividing by the number of friends and quietly leaving the payer out, which
- * makes everyone owe more than they should. Only the others get IOUs; your own
- * share is simply what remains of the transaction.
+ * EQUAL  - down the middle, you included.
+ * SHARES - weighted (someone who ordered two drinks pays for two).
+ * EXACT  - type what each person actually owes, for an itemised bill.
+ *
+ * You are always a participant in EQUAL/SHARES — the common failure of split
+ * trackers is dividing by the number of friends and quietly leaving the payer
+ * out, which makes everyone owe more than they should. In EXACT your share is
+ * simply what's left after the typed amounts.
  */
 export default function SplitModal({
   visible,
@@ -39,6 +55,7 @@ export default function SplitModal({
 }) {
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [mode, setMode] = useState<SplitMode>('SHARES');
   const [newName, setNewName] = useState('');
   const [saving, setSaving] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -46,6 +63,7 @@ export default function SplitModal({
   useEffect(() => {
     if (!visible) return;
     setNewName('');
+    setMode('SHARES');
     db.getContacts().then((rows) => {
       setContacts(rows);
       setParticipants(
@@ -54,6 +72,7 @@ export default function SplitModal({
           name: contact.name,
           included: false,
           ratio: 1,
+          exactText: '',
         }))
       );
     });
@@ -62,17 +81,31 @@ export default function SplitModal({
   const total = transaction?.amount ?? 0;
   const included = participants.filter((p) => p.included);
 
-  // "You" is an implicit participant with ratio 1, so a 1,200 bill across you
-  // plus two friends is 400 each, not 600 each.
-  const shares = useMemo(() => {
-    if (!transaction || included.length === 0) return [];
-    return calculateSplit(total, [
-      { contactId: -1, included: true, ratio: 1 },
-      ...included.map((p) => ({ contactId: p.contactId, included: true, ratio: p.ratio })),
-    ]);
-  }, [transaction, included, total]);
+  const asSplitParticipants: SplitParticipant[] = included.map((p) => ({
+    contactId: p.contactId,
+    included: true,
+    ratio: p.ratio,
+    exactAmount: Number(p.exactText.replace(/[^\d.]/g, '')) || 0,
+  }));
 
-  const yourShare = shares.find((s) => s.contactId === -1)?.amount ?? total;
+  // EQUAL/SHARES: you take a weighted slice alongside everyone else, so a
+  // 1,200 bill across you and two friends is 400 each. EXACT never includes
+  // you here — your share is simply whatever the typed amounts leave behind.
+  const result = useMemo(() => {
+    if (!transaction || included.length === 0) return null;
+    const forCompute =
+      mode === 'EXACT'
+        ? asSplitParticipants
+        : [{ contactId: PAYER_ID, included: true, ratio: 1 }, ...asSplitParticipants];
+    return computeSplit(total, forCompute, mode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transaction, total, mode, JSON.stringify(asSplitParticipants)]);
+
+  const yourShare = result
+    ? mode === 'EXACT'
+      ? result.yourShare
+      : (result.shares.find((s) => s.contactId === PAYER_ID)?.amount ?? total)
+    : total;
 
   function toggle(contactId: number) {
     setParticipants((prev) =>
@@ -83,8 +116,30 @@ export default function SplitModal({
   function bumpRatio(contactId: number) {
     setParticipants((prev) =>
       prev.map((p) =>
-        p.contactId === contactId ? { ...p, ratio: p.ratio >= 3 ? 1 : p.ratio + 1 } : p
+        p.contactId === contactId ? { ...p, ratio: p.ratio >= 4 ? 1 : p.ratio + 1 } : p
       )
+    );
+  }
+
+  function setExactText(contactId: number, text: string) {
+    setParticipants((prev) =>
+      prev.map((p) => (p.contactId === contactId ? { ...p, exactText: text } : p))
+    );
+  }
+
+  /** Fills every included person's box with an equal starting point. */
+  function seedExactFromEqual() {
+    if (!transaction || included.length === 0) return;
+    const equal = computeSplit(
+      total,
+      [{ contactId: PAYER_ID, included: true }, ...asSplitParticipants],
+      'EQUAL'
+    );
+    setParticipants((prev) =>
+      prev.map((p) => {
+        const share = equal.shares.find((s) => s.contactId === p.contactId);
+        return p.included && share ? { ...p, exactText: share.amount ? String(share.amount) : p.exactText } : p;
+      })
     );
   }
 
@@ -103,6 +158,7 @@ export default function SplitModal({
             name: contact.name,
             included: contact.id === id,
             ratio: 1,
+            exactText: '',
           }
         );
       })
@@ -111,11 +167,11 @@ export default function SplitModal({
   }
 
   async function save() {
-    if (!transaction || included.length === 0 || saving) return;
+    if (!transaction || included.length === 0 || saving || !result) return;
     setSaving(true);
     try {
-      for (const share of shares) {
-        if (share.contactId === -1 || share.amount <= 0) continue;
+      for (const share of result.shares) {
+        if (share.contactId === PAYER_ID || share.amount <= 0) continue;
         await db.createIOU({
           contactId: share.contactId,
           amount: share.amount,
@@ -131,6 +187,8 @@ export default function SplitModal({
     }
   }
 
+  const overAssigned = mode === 'EXACT' && (result?.overAssigned ?? false);
+
   return (
     <Sheet visible={visible} onClose={onClose} title="Split this">
       {transaction ? (
@@ -139,6 +197,28 @@ export default function SplitModal({
           <Text style={styles.summaryAmount}>{formatMoney(total)}</Text>
         </View>
       ) : null}
+
+      <View style={styles.modeRow}>
+        {SPLIT_MODES.map((option) => (
+          <Pressable
+            key={option}
+            onPress={() => {
+              setMode(option);
+              if (option === 'EXACT') seedExactFromEqual();
+            }}
+            style={({ pressed }) => [
+              styles.modeButton,
+              mode === option && styles.modeButtonOn,
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <Text style={[styles.modeLabel, mode === option && styles.modeLabelOn]}>
+              {SPLIT_MODE_LABELS[option]}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      <Text style={styles.modeHint}>{SPLIT_MODE_HINTS[mode]}</Text>
 
       <View style={styles.addRow}>
         <View style={styles.addField}>
@@ -181,26 +261,62 @@ export default function SplitModal({
       ) : (
         <View style={styles.list}>
           {participants.map((participant) => {
-            const share = shares.find((s) => s.contactId === participant.contactId);
+            const share = result?.shares.find((s) => s.contactId === participant.contactId);
             return (
               <Pressable
                 key={participant.contactId}
-                onPress={() => toggle(participant.contactId)}
+                onPress={() => mode !== 'EXACT' && toggle(participant.contactId)}
                 style={({ pressed }) => [
                   styles.person,
                   participant.included && styles.personOn,
-                  pressed && { opacity: 0.7 },
+                  pressed && mode !== 'EXACT' && { opacity: 0.7 },
                 ]}
               >
-                <Text
-                  style={[styles.personName, participant.included && { color: palette.textPrimary }]}
-                >
-                  {participant.name}
-                </Text>
-                {participant.included ? (
+                <View style={styles.personLeft}>
+                  {mode === 'EXACT' ? (
+                    <Pressable onPress={() => toggle(participant.contactId)} hitSlop={8}>
+                      <Icon
+                        name={participant.included ? 'check' : 'add'}
+                        size={16}
+                        color={participant.included ? palette.neonGreen : palette.textMuted}
+                      />
+                    </Pressable>
+                  ) : null}
+                  <Text
+                    style={[
+                      styles.personName,
+                      participant.included && { color: palette.textPrimary },
+                    ]}
+                  >
+                    {participant.name}
+                  </Text>
+                </View>
+
+                {participant.included && mode === 'SHARES' ? (
                   <View style={styles.personRight}>
-                    <Chip label={`×${participant.ratio}`} onPress={() => bumpRatio(participant.contactId)} />
+                    <Chip
+                      label={`×${participant.ratio}`}
+                      onPress={() => bumpRatio(participant.contactId)}
+                    />
                     <Text style={styles.personShare}>{formatMoney(share?.amount ?? 0)}</Text>
+                  </View>
+                ) : null}
+
+                {participant.included && mode === 'EQUAL' ? (
+                  <Text style={styles.personShare}>{formatMoney(share?.amount ?? 0)}</Text>
+                ) : null}
+
+                {participant.included && mode === 'EXACT' ? (
+                  <View style={styles.exactField}>
+                    <Text style={styles.exactPrefix}>₹</Text>
+                    <TextInput
+                      value={participant.exactText}
+                      onChangeText={(text) => setExactText(participant.contactId, text)}
+                      keyboardType="numeric"
+                      placeholder="0"
+                      placeholderTextColor={palette.textMuted}
+                      style={styles.exactInput}
+                    />
                   </View>
                 ) : null}
               </Pressable>
@@ -209,10 +325,22 @@ export default function SplitModal({
         </View>
       )}
 
+      {overAssigned ? (
+        <View style={styles.warningBanner}>
+          <Icon name="warning" size={16} color={palette.warningAmber} />
+          <Text style={styles.warningText}>
+            That's {formatMoney((result?.assigned ?? 0) - total)} more than the bill — check the
+            amounts.
+          </Text>
+        </View>
+      ) : null}
+
       {included.length > 0 ? (
         <View style={styles.youBlock}>
           <Text style={styles.youLabel}>Your share</Text>
-          <Text style={styles.youAmount}>{formatMoney(yourShare)}</Text>
+          <Text style={[styles.youAmount, overAssigned && { color: palette.danger }]}>
+            {formatMoney(yourShare)}
+          </Text>
           <Text style={styles.youNote}>
             {formatMoney(total - yourShare)} comes back to you across {included.length}{' '}
             {included.length === 1 ? 'person' : 'people'}
@@ -223,7 +351,7 @@ export default function SplitModal({
       <Button
         label={saving ? 'Saving…' : 'Split it'}
         onPress={save}
-        disabled={included.length === 0 || saving}
+        disabled={included.length === 0 || saving || overAssigned}
       />
     </Sheet>
   );
@@ -233,6 +361,24 @@ const styles = StyleSheet.create({
   summary: { alignItems: 'center', gap: 2 },
   summaryMerchant: { ...typography.body, color: palette.textSecondary },
   summaryAmount: { ...typography.display, color: palette.textPrimary },
+
+  modeRow: {
+    flexDirection: 'row',
+    backgroundColor: palette.surfaceElevated,
+    borderRadius: radii.pill,
+    padding: 4,
+    gap: 4,
+  },
+  modeButton: {
+    flex: 1,
+    paddingVertical: 9,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+  },
+  modeButtonOn: { backgroundColor: palette.neonGreen },
+  modeLabel: { ...typography.caption, color: palette.textSecondary, fontWeight: '700' },
+  modeLabelOn: { color: '#0B0B0C' },
+  modeHint: { ...typography.micro, color: palette.textMuted, textAlign: 'center' },
 
   addRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
   addField: { flex: 1 },
@@ -253,9 +399,32 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
   },
   personOn: { borderColor: palette.neonGreen },
+  personLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   personName: { ...typography.bodyBold, color: palette.textSecondary },
   personRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   personShare: { ...typography.bodyBold, color: palette.neonGreen, minWidth: 64, textAlign: 'right' },
+
+  exactField: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  exactPrefix: { ...typography.bodyBold, color: palette.textMuted },
+  exactInput: {
+    ...typography.bodyBold,
+    color: palette.textPrimary,
+    minWidth: 64,
+    textAlign: 'right',
+    paddingVertical: 0,
+  },
+
+  warningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: 'rgba(255,191,0,0.12)',
+    borderWidth: 1,
+    borderColor: palette.warningAmber,
+    borderRadius: radii.input,
+    padding: spacing.sm,
+  },
+  warningText: { ...typography.caption, color: palette.warningAmber, flex: 1 },
 
   youBlock: { alignItems: 'center', gap: 2, paddingVertical: spacing.sm },
   youLabel: { ...typography.heroLabel, color: palette.textSecondary },

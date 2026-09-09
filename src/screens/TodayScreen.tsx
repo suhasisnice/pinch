@@ -12,6 +12,8 @@ import { accentForState, categoryColor, palette, radii, spacing, typography } fr
 import { Button, Card, CardTitle, Dot, EmptyState, Field, Loading, ProgressBar, Row, Screen, ScreenTitle } from '../components/ui';
 import AddExpenseSheet from '../components/AddExpenseSheet';
 import SplitModal from '../components/SplitModal';
+import TransactionDetailSheet from '../components/TransactionDetailSheet';
+import Icon from '../components/Icon';
 
 export default function TodayScreen() {
   const navigation = useNavigation<any>();
@@ -20,6 +22,7 @@ export default function TodayScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [addVisible, setAddVisible] = useState(false);
   const [splitFor, setSplitFor] = useState<TransactionRow | null>(null);
+  const [detailFor, setDetailFor] = useState<TransactionRow | null>(null);
   const [testAmount, setTestAmount] = useState('');
 
   const load = useCallback(async () => {
@@ -75,8 +78,8 @@ export default function TodayScreen() {
             subtitle={`${snapshot.daysRemaining} days left · ${formatMoney(snapshot.budget.spendablePool)} to go`}
           />
         </View>
-        <Text style={styles.gear} onPress={() => navigation.navigate('Settings')}>
-          ⚙️
+        <Text style={styles.gear} onPress={() => navigation.navigate('Settings')} suppressHighlighting>
+          <Icon name="settings" size={22} color={palette.textSecondary} />
         </Text>
       </View>
 
@@ -106,7 +109,10 @@ export default function TodayScreen() {
             {formatMoney(-snapshot.today.remainingToday)} over. tomorrow resets.
           </Text>
         ) : snapshot.streakDays > 0 ? (
-          <Text style={styles.heroNote}>🔥 {snapshot.streakDays}-day streak under budget</Text>
+          <View style={styles.streakRow}>
+            <Icon name="streak" size={14} color={palette.warningAmber} />
+            <Text style={styles.heroNote}>{snapshot.streakDays}-day streak under budget</Text>
+          </View>
         ) : null}
       </Card>
 
@@ -153,7 +159,7 @@ export default function TodayScreen() {
         </CardTitle>
         {today.length === 0 ? (
           <EmptyState
-            emoji="🌱"
+            icon="empty"
             title="Nothing yet today"
             body="Captured payments land here automatically, or add one by hand."
           />
@@ -164,7 +170,7 @@ export default function TodayScreen() {
               left={<Dot color={categoryColor(tx.category)} />}
               title={tx.merchant}
               subtitle={`${tx.category ?? 'Uncategorised'} · ${formatRelative(tx.occurred_at)}`}
-              onPress={() => tx.kind === 'SPEND' && setSplitFor(tx)}
+              onPress={() => setDetailFor(tx)}
               right={
                 <Text style={[styles.txAmount, tx.direction === 'CREDIT' && { color: palette.mint }]}>
                   {tx.direction === 'CREDIT' ? '+' : '−'}
@@ -192,6 +198,16 @@ export default function TodayScreen() {
         onSaved={() => {
           setAddVisible(false);
           load();
+        }}
+      />
+
+      <TransactionDetailSheet
+        transaction={detailFor}
+        onClose={() => setDetailFor(null)}
+        onChanged={load}
+        onSplit={(tx) => {
+          setDetailFor(null);
+          setSplitFor(tx);
         }}
       />
 
@@ -243,7 +259,8 @@ const styles = StyleSheet.create({
   heroAmount: { ...typography.hero, marginTop: spacing.xs },
   heroSub: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
   heroBar: { width: '100%', marginTop: spacing.md },
-  heroNote: { ...typography.caption, color: palette.textSecondary, marginTop: spacing.sm },
+  heroNote: { ...typography.caption, color: palette.textSecondary },
+  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: spacing.sm },
 
   verdict: { marginTop: spacing.sm, gap: 4 },
   verdictHead: { ...typography.cardTitle },

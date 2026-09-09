@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { OutingSummary } from '../db/repos/outings';
@@ -8,8 +8,9 @@ import { formatMoney, formatRelative } from '../utils/format';
 import { categoryColor, palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Card, CardTitle, Chip, Dot, EmptyState, Field, Loading, ProgressBar, Row, Screen, ScreenTitle, Sheet } from '../components/ui';
 import AddExpenseSheet from '../components/AddExpenseSheet';
-
-const EMOJI_CHOICES = ['🎉', '🏖', '🎬', '🍕', '🎤', '⛰', '🎳', '🏏', '🎂', '🚗'];
+import SplitModal from '../components/SplitModal';
+import Icon, { OUTING_ICONS } from '../components/Icon';
+import LabelIcon, { LabelIconBadge } from '../components/LabelIcon';
 
 export default function OutingsScreen() {
   const [outings, setOutings] = useState<OutingSummary[] | null>(null);
@@ -53,7 +54,7 @@ export default function OutingsScreen() {
       {outings.length === 0 ? (
         <Card>
           <EmptyState
-            emoji="🎉"
+            icon="outings"
             title="No outings yet"
             body="Start one before you head out and everything you spend gets tagged to it automatically — then settle up with everyone in one go."
           />
@@ -105,7 +106,7 @@ function OutingCard({ outing, onPress }: { outing: OutingSummary; onPress: () =>
   return (
     <Card onPress={onPress}>
       <View style={styles.outingHead}>
-        <Text style={styles.outingEmoji}>{outing.emoji}</Text>
+        <LabelIconBadge label={outing.emoji} color={palette.violet} />
         <View style={styles.outingHeadText}>
           <Text style={styles.outingName}>{outing.name}</Text>
           <Text style={styles.outingMeta}>
@@ -148,7 +149,7 @@ function CreateOutingSheet({
 }) {
   const [name, setName] = useState('');
   const [budget, setBudget] = useState('');
-  const [emoji, setEmoji] = useState('🎉');
+  const [icon, setIcon] = useState<string>('party');
   const [saving, setSaving] = useState(false);
 
   const parsedBudget = Number(budget.replace(/[^\d.]/g, ''));
@@ -160,12 +161,12 @@ function CreateOutingSheet({
     try {
       await db.createOuting({
         name: name.trim(),
-        emoji,
+        emoji: icon,
         budgetAmount: Number.isFinite(parsedBudget) && parsedBudget > 0 ? parsedBudget : null,
       });
       setName('');
       setBudget('');
-      setEmoji('🎉');
+      setIcon('party');
       onSaved();
     } finally {
       setSaving(false);
@@ -174,9 +175,23 @@ function CreateOutingSheet({
 
   return (
     <Sheet visible={visible} onClose={onClose} title="Start an outing">
-      <View style={styles.emojiRow}>
-        {EMOJI_CHOICES.map((choice) => (
-          <Chip key={choice} label={choice} selected={emoji === choice} onPress={() => setEmoji(choice)} color={palette.violet} />
+      <View style={styles.iconRow}>
+        {OUTING_ICONS.map((choice) => (
+          <Pressable
+            key={choice}
+            onPress={() => setIcon(choice)}
+            style={({ pressed }) => [
+              styles.iconChoice,
+              icon === choice && styles.iconChoiceOn,
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <Icon
+              name={choice}
+              size={20}
+              color={icon === choice ? palette.violet : palette.textMuted}
+            />
+          </Pressable>
         ))}
       </View>
       <Field label="What is it" value={name} onChangeText={setName} placeholder="Movie night" />
@@ -211,6 +226,7 @@ function OutingDetailSheet({
   const [candidates, setCandidates] = useState<TransactionRow[]>([]);
   const [ious, setIous] = useState<IOUDetail[]>([]);
   const [addVisible, setAddVisible] = useState(false);
+  const [splitFor, setSplitFor] = useState<TransactionRow | null>(null);
 
   const refresh = useCallback(async () => {
     if (!outing) return;
@@ -235,7 +251,7 @@ function OutingDetailSheet({
     .reduce((sum, iou) => sum + iou.openAmount, 0);
 
   return (
-    <Sheet visible={outing !== null} onClose={onClose} title={`${outing.emoji} ${outing.name}`}>
+    <Sheet visible={outing !== null} onClose={onClose} title={outing.name}>
       <View style={styles.detailTotals}>
         <View style={styles.detailStat}>
           <Text style={styles.detailStatLabel}>Total</Text>
@@ -282,15 +298,27 @@ function OutingDetailSheet({
       {transactions.length > 0 ? (
         <View>
           <Text style={styles.groupLabel}>Items</Text>
-          {transactions.map((tx) => (
-            <Row
-              key={tx.id}
-              left={<Dot color={categoryColor(tx.category)} />}
-              title={tx.merchant}
-              subtitle={formatRelative(tx.occurred_at)}
-              right={<Text style={styles.itemAmount}>{formatMoney(tx.amount)}</Text>}
-            />
-          ))}
+          {transactions.map((tx) => {
+            const alreadySplit = ious.some((iou) => iou.transactionId === tx.id);
+            return (
+              <Row
+                key={tx.id}
+                left={<Dot color={categoryColor(tx.category)} />}
+                title={tx.merchant}
+                subtitle={formatRelative(tx.occurred_at)}
+                right={
+                  <View style={styles.itemRight}>
+                    <Text style={styles.itemAmount}>{formatMoney(tx.amount)}</Text>
+                    <Chip
+                      label={alreadySplit ? 'Split again' : 'Split'}
+                      color={palette.violet}
+                      onPress={() => setSplitFor(tx)}
+                    />
+                  </View>
+                }
+              />
+            );
+          })}
         </View>
       ) : null}
 
@@ -347,6 +375,18 @@ function OutingDetailSheet({
           onChanged();
         }}
       />
+
+      <SplitModal
+        visible={splitFor !== null}
+        transaction={splitFor}
+        outingId={outing.id}
+        onClose={() => setSplitFor(null)}
+        onSplit={async () => {
+          setSplitFor(null);
+          await refresh();
+          onChanged();
+        }}
+      />
     </Sheet>
   );
 }
@@ -361,7 +401,7 @@ const styles = StyleSheet.create({
   },
 
   outingHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  outingEmoji: { fontSize: 28 },
+
   outingHeadText: { flex: 1 },
   outingName: { ...typography.cardTitle, color: palette.textPrimary },
   outingMeta: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
@@ -369,7 +409,18 @@ const styles = StyleSheet.create({
   outingShare: { ...typography.micro, color: palette.textSecondary, marginTop: 2 },
   outingBudget: { ...typography.caption, color: palette.textSecondary, marginTop: spacing.sm },
 
-  emojiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  iconRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  iconChoice: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.input,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.surfaceElevated,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  iconChoiceOn: { borderColor: palette.violet, backgroundColor: 'rgba(167,139,250,0.14)' },
   note: { ...typography.caption, color: palette.textMuted, lineHeight: 17 },
 
   detailTotals: { flexDirection: 'row', gap: spacing.sm },
@@ -384,5 +435,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: spacing.xs,
   },
+  itemRight: { alignItems: 'flex-end', gap: 4 },
   itemAmount: { ...typography.bodyBold, color: palette.textPrimary },
 });

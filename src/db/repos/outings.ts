@@ -34,7 +34,7 @@ export async function createOuting(input: {
      VALUES (?, ?, ?, ?, ?, ?);`,
     [
       input.name.trim(),
-      input.emoji ?? '🎉',
+      input.emoji ?? 'party',
       input.startsAt ?? now,
       input.endsAt ?? null,
       input.budgetAmount ?? null,

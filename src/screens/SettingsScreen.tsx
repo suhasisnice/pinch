@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { Alert, AppState, StyleSheet, Switch, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as db from '../db/dbService';
+import { TransactionRow } from '../db/types';
 import {
   hasContactsPermission,
   hasSmsPermission,
@@ -24,6 +25,7 @@ import { requestNotificationPermission } from '../notifications/notificationServ
 import { formatMoney } from '../utils/format';
 import { palette, spacing, typography } from '../theme/theme';
 import { Button, Card, CardTitle, Field, Loading, Row, Screen, ScreenTitle } from '../components/ui';
+import Icon from '../components/Icon';
 
 export default function SettingsScreen() {
   const navigation = useNavigation<any>();
@@ -34,6 +36,8 @@ export default function SettingsScreen() {
   const [contactsGranted, setContactsGranted] = useState(false);
   const [listenerEnabled, setListenerEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [blocked, setBlocked] = useState<Array<{ pattern: string; reason: string | null }>>([]);
+  const [excluded, setExcluded] = useState<TransactionRow[]>([]);
 
   const refreshPermissions = useCallback(() => {
     setSmsGranted(hasSmsPermission());
@@ -42,11 +46,15 @@ export default function SettingsScreen() {
   }, []);
 
   const load = useCallback(async () => {
-    const [amount, notificationSettings, period] = await Promise.all([
+    const [amount, notificationSettings, period, blockRows, excludedRows] = await Promise.all([
       getMonthlyAllowance(),
       getNotificationSettings(),
       db.getCurrentBudgetPeriod(),
+      db.getBlocklist(),
+      db.getExcludedTransactions(),
     ]);
+    setBlocked(blockRows);
+    setExcluded(excludedRows);
     // Show the period actually in force, not the last thing typed into the box.
     setAllowance(String(period?.allowance ?? amount));
     setPeriodDays(String(period?.daysTotal ?? 30));
@@ -232,6 +240,70 @@ export default function SettingsScreen() {
         )}
       </Card>
 
+      {blocked.length > 0 || excluded.length > 0 ? (
+        <Card>
+          <CardTitle>Ignored</CardTitle>
+          <Text style={styles.note}>
+            Blocking is never permanent — undo anything here and it starts counting again.
+          </Text>
+
+          {blocked.length > 0 ? (
+            <>
+              <Text style={styles.groupLabel}>Blocked senders</Text>
+              {blocked.map((entry) => (
+                <Row
+                  key={entry.pattern}
+                  left={<Icon name="lock" size={15} color={palette.textMuted} />}
+                  title={entry.pattern}
+                  subtitle={entry.reason ?? 'Blocked'}
+                  right={
+                    <Text
+                      style={styles.undo}
+                      onPress={async () => {
+                        await db.removeFromBlocklist(entry.pattern);
+                        load();
+                      }}
+                    >
+                      Unblock
+                    </Text>
+                  }
+                />
+              ))}
+            </>
+          ) : null}
+
+          {excluded.length > 0 ? (
+            <>
+              <Text style={styles.groupLabel}>Not counted as spending</Text>
+              {excluded.slice(0, 12).map((tx) => (
+                <Row
+                  key={tx.id}
+                  left={<Icon name="close" size={15} color={palette.textMuted} />}
+                  title={tx.merchant}
+                  subtitle={`${formatMoney(tx.amount)} · ${tx.source.toLowerCase()}`}
+                  right={
+                    <Text
+                      style={styles.undo}
+                      onPress={async () => {
+                        await db.setTransactionExcluded(tx.id, false);
+                        load();
+                      }}
+                    >
+                      Restore
+                    </Text>
+                  }
+                />
+              ))}
+              {excluded.length > 12 ? (
+                <Text style={styles.note}>
+                  and {excluded.length - 12} more.
+                </Text>
+              ) : null}
+            </>
+          ) : null}
+        </Card>
+      ) : null}
+
       <Card>
         <CardTitle>Nudges</CardTitle>
         <Toggle
@@ -322,6 +394,15 @@ function Toggle({
 const styles = StyleSheet.create({
   note: { ...typography.caption, color: palette.textMuted, lineHeight: 18, marginTop: spacing.sm },
   ok: { ...typography.bodyBold, color: palette.neonGreen },
+  undo: { ...typography.caption, color: palette.neonGreen, fontWeight: '700' },
+  groupLabel: {
+    ...typography.micro,
+    color: palette.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginTop: spacing.md,
+    marginBottom: 2,
+  },
 
   toggleRow: {
     flexDirection: 'row',

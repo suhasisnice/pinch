@@ -45,6 +45,13 @@ export async function ingestMessage(
   message: CapturedMessage,
   options: { silent?: boolean } = {}
 ): Promise<'POSTED' | 'QUEUED' | 'SKIPPED'> {
+  // Checked before the parser even runs: a sender the user has already
+  // blocked (a rummy app, a "CTC" marketing shortcode) never gets to become
+  // a review-inbox item again, let alone a transaction. Parsing runs on the
+  // body too, since the same promotional blast is often resent from a
+  // different-looking sender.
+  if (await db.isBlocked(message.sender, message.body)) return 'SKIPPED';
+
   const parsed = parseMessage(message.body, message.source === 'SMS' ? message.sender : null);
   if (!parsed) return 'SKIPPED';
 
@@ -53,6 +60,8 @@ export async function ingestMessage(
 
   const merchant =
     parsed.counterparty ?? (message.source === 'NOTIFICATION' ? labelFor(message) : 'Unknown');
+
+  if (await db.isBlocked(merchant)) return 'SKIPPED';
 
   if (parsed.confidence < ACCEPT_THRESHOLD) {
     const id = await db.recordCapture({

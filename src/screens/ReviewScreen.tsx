@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { CaptureInboxRow } from '../db/types';
@@ -46,7 +46,7 @@ export default function ReviewScreen() {
       {captures.length === 0 ? (
         <Card>
           <EmptyState
-            emoji="✅"
+            icon="check"
             title="Nothing to review"
             body="Anything Pinch can't read confidently lands here so it never guesses at your numbers."
           />
@@ -76,10 +76,7 @@ export default function ReviewScreen() {
               <Button
                 label="Not a transaction"
                 variant="ghost"
-                onPress={async () => {
-                  await db.rejectCapture(capture.id);
-                  load();
-                }}
+                onPress={() => rejectWithOptionToBlock(capture, load)}
                 style={styles.flex}
               />
               <Button
@@ -96,6 +93,40 @@ export default function ReviewScreen() {
       )}
     </Screen>
   );
+}
+
+/**
+ * Rejecting one message is rarely the whole story.
+ *
+ * Promotional senders send the same thing every week, so the useful action is
+ * usually "and never ask me about this sender again" — blocking is offered
+ * right where the annoyance is, rather than buried in Settings.
+ */
+function rejectWithOptionToBlock(capture: CaptureInboxRow, reload: () => void) {
+  const sender = capture.sender?.trim();
+
+  const dismiss = async () => {
+    await db.rejectCapture(capture.id);
+    reload();
+  };
+
+  if (!sender) {
+    void dismiss();
+    return;
+  }
+
+  Alert.alert('Not a transaction', `Should Pinch keep reading messages from ${sender}?`, [
+    { text: 'Cancel', style: 'cancel' },
+    { text: 'Just this one', onPress: dismiss },
+    {
+      text: 'Block sender',
+      style: 'destructive',
+      onPress: async () => {
+        await db.addToBlocklist(sender, 'Blocked from review');
+        await dismiss();
+      },
+    },
+  ]);
 }
 
 const styles = StyleSheet.create({

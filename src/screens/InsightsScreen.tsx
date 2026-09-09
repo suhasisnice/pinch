@@ -5,19 +5,40 @@ import * as db from '../db/dbService';
 import { getBudgetSnapshot, BudgetSnapshot } from '../services/budgetService';
 import { getMonthlyAllowance } from '../settings/settingsStore';
 import {
+  CategoryShift,
   CategorySlice,
+  MonthComparison,
+  MonthTotal,
+  RecurringCharge,
+  WeekdayPattern,
   averageDailySpend,
   categoryBreakdown,
+  categoryShifts,
+  compareMonths,
   compareWeeks,
   computeInsights,
+  detectRecurring,
   spendingPersonality,
+  weekdayPattern,
 } from '../math/insights';
 import { daysUntilBroke } from '../math/budget';
 import { formatMoney, formatMoneyCompact } from '../utils/format';
 import { categoryColor, palette, radii, spacing, typography } from '../theme/theme';
 import { Card, CardTitle, Dot, EmptyState, Loading, ProgressBar, Row, Screen, ScreenTitle } from '../components/ui';
+import Icon from '../components/Icon';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+const MONTH_NAMES = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/** "2026-09" -> "Sep". */
+function monthLabel(month: string): string {
+  const index = Number(month.slice(5, 7)) - 1;
+  return MONTH_NAMES[index] ?? month;
+}
 
 export default function InsightsScreen() {
   const [snapshot, setSnapshot] = useState<BudgetSnapshot | null>(null);
@@ -25,6 +46,11 @@ export default function InsightsScreen() {
   const [daily, setDaily] = useState<Array<{ day: string; total: number }>>([]);
   const [weeks, setWeeks] = useState({ thisWeek: 0, lastWeek: 0 });
   const [habits, setHabits] = useState<ReturnType<typeof computeInsights> | null>(null);
+  const [months, setMonths] = useState<MonthTotal[]>([]);
+  const [shifts, setShifts] = useState<CategoryShift[]>([]);
+  const [recurring, setRecurring] = useState<RecurringCharge[]>([]);
+  const [weekdays, setWeekdays] = useState<WeekdayPattern[]>([]);
+  const [allDaily, setAllDaily] = useState<Array<{ day: string; total: number }>>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
@@ -35,13 +61,32 @@ export default function InsightsScreen() {
     const weekStart = new Date(now.getTime() - 7 * MS_PER_DAY).toISOString();
     const prevWeekStart = new Date(now.getTime() - 14 * MS_PER_DAY).toISOString();
 
-    const [categories, dailyRows, thisWeek, lastWeek, transactions, ious] = await Promise.all([
+    // A year of history, not just the current period: "you spend more in
+    // exam months" is not a statement this screen could make before.
+    const historyStart = new Date(now.getFullYear() - 1, now.getMonth(), 1).toISOString();
+
+    const [
+      categories,
+      dailyRows,
+      thisWeek,
+      lastWeek,
+      transactions,
+      ious,
+      monthlyRows,
+      categoryMonths,
+      repeatRows,
+      everyDay,
+    ] = await Promise.all([
       db.getSpendByCategory(next.periodStart, next.periodEnd),
       db.getDailySpend(next.periodStart, next.periodEnd),
       db.getGrossSpendBetween(weekStart, now.toISOString()),
       db.getGrossSpendBetween(prevWeekStart, weekStart),
       db.getTransactionsBetween(next.periodStart, next.periodEnd),
       db.getOpenIOUs(),
+      db.getMonthlySpend(6, now),
+      db.getCategoryByMonth(6, now),
+      db.getRepeatMerchants(6, now),
+      db.getDailySpend(historyStart, now.toISOString()),
     ]);
 
     setSnapshot(next);
@@ -49,6 +94,11 @@ export default function InsightsScreen() {
     setDaily(dailyRows);
     setWeeks({ thisWeek, lastWeek });
     setHabits(computeInsights(transactions, ious));
+    setMonths(monthlyRows);
+    setShifts(categoryShifts(categoryMonths, now.toISOString().slice(0, 7)));
+    setRecurring(detectRecurring(repeatRows));
+    setWeekdays(weekdayPattern(everyDay));
+    setAllDaily(everyDay);
   }, []);
 
   useFocusEffect(
@@ -76,14 +126,20 @@ export default function InsightsScreen() {
   const avgBurn = averageDailySpend(daily);
   const brokeIn = daysUntilBroke(snapshot.budget.spendablePool, avgBurn);
   const maxDay = Math.max(...daily.map((d) => d.total), 1);
+  const monthly: MonthComparison = compareMonths(months);
+  const maxMonth = Math.max(...months.map((m) => m.total), 1);
+  const heaviestDay = weekdays[0] ?? null;
+  const recurringTotal = recurring.reduce((sum, charge) => sum + charge.typicalAmount, 0);
 
-  if (daily.length === 0) {
+  // Only truly empty when there is no history either — a fresh period with a
+  // year of past months behind it still has plenty to say.
+  if (daily.length === 0 && months.length === 0) {
     return (
       <Screen>
         <ScreenTitle title="Insights" />
         <Card>
           <EmptyState
-            emoji="📊"
+            icon="insights"
             title="Nothing to show yet"
             body="Once a few days of spending land here, this fills up with where your money actually goes."
           />
@@ -141,6 +197,7 @@ export default function InsightsScreen() {
 
       {/* Daily bars. Deliberately plain CSS-style views rather than a chart
           library — 30 bars does not justify the bundle cost. */}
+      {daily.length > 0 ? (
       <Card>
         <CardTitle right={<Text style={styles.avgLabel}>avg {formatMoneyCompact(avgBurn)}</Text>}>
           Daily spend
@@ -168,6 +225,7 @@ export default function InsightsScreen() {
           Amber bars went over your {formatMoney(snapshot.budget.dailyLimit)} daily limit.
         </Text>
       </Card>
+      ) : null}
 
       <Card>
         <CardTitle>By category</CardTitle>
@@ -209,6 +267,171 @@ export default function InsightsScreen() {
         ) : null}
       </Card>
 
+      {months.length > 1 ? (
+        <Card>
+          <CardTitle
+            right={
+              monthly.changeVsTypical !== null ? (
+                <View style={styles.trendPill}>
+                  <Icon
+                    name={
+                      monthly.direction === 'UP'
+                        ? 'trendUp'
+                        : monthly.direction === 'DOWN'
+                          ? 'trendDown'
+                          : 'flat'
+                    }
+                    size={13}
+                    color={
+                      monthly.direction === 'UP'
+                        ? palette.warningAmber
+                        : monthly.direction === 'DOWN'
+                          ? palette.mint
+                          : palette.textSecondary
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.trendPillText,
+                      {
+                        color:
+                          monthly.direction === 'UP'
+                            ? palette.warningAmber
+                            : monthly.direction === 'DOWN'
+                              ? palette.mint
+                              : palette.textSecondary,
+                      },
+                    ]}
+                  >
+                    {Math.abs(Math.round(monthly.changeVsTypical * 100))}%
+                  </Text>
+                </View>
+              ) : undefined
+            }
+          >
+            Month by month
+          </CardTitle>
+
+          <View style={styles.monthChart}>
+            {[...months].reverse().map((month) => {
+              const isCurrent = month.month === months[0]?.month;
+              return (
+                <View key={month.month} style={styles.monthSlot}>
+                  <Text style={styles.monthAmount}>{formatMoneyCompact(month.total)}</Text>
+                  <View
+                    style={[
+                      styles.monthBar,
+                      {
+                        height: Math.max(6, (month.total / maxMonth) * 88),
+                        backgroundColor: isCurrent ? palette.neonGreen : palette.surfaceHigh,
+                      },
+                    ]}
+                  />
+                  <Text style={styles.monthLabel}>{monthLabel(month.month)}</Text>
+                </View>
+              );
+            })}
+          </View>
+
+          <Text style={styles.historyNote}>
+            {monthly.changeVsTypical === null
+              ? 'Building a baseline — one more month and this compares itself.'
+              : monthly.direction === 'FLAT'
+                ? `Running about the same as your usual ${formatMoney(monthly.typical ?? 0)} a month.`
+                : `You are spending ${Math.abs(Math.round(monthly.changeVsTypical * 100))}% ${
+                    monthly.direction === 'UP' ? 'faster' : 'slower'
+                  } per day than your usual month${
+                    monthly.projectedTotal !== null
+                      ? `, heading for about ${formatMoney(monthly.projectedTotal)}`
+                      : ''
+                  }.`}
+          </Text>
+        </Card>
+      ) : null}
+
+      {shifts.length > 0 ? (
+        <Card>
+          <CardTitle>What changed</CardTitle>
+          <Text style={styles.cardIntro}>
+            This month against your typical one, biggest movers first.
+          </Text>
+          {shifts.slice(0, 5).map((shift) => {
+            const up = shift.currentTotal > shift.typicalTotal;
+            return (
+              <Row
+                key={shift.category}
+                left={<Dot color={categoryColor(shift.category)} />}
+                title={shift.category}
+                subtitle={`usually ${formatMoney(shift.typicalTotal)}`}
+                right={
+                  <View style={styles.shiftRight}>
+                    <Text style={styles.habitValue}>{formatMoney(shift.currentTotal)}</Text>
+                    <View style={styles.trendPill}>
+                      <Icon
+                        name={up ? 'trendUp' : 'trendDown'}
+                        size={12}
+                        color={up ? palette.warningAmber : palette.mint}
+                      />
+                      <Text
+                        style={[
+                          styles.trendPillText,
+                          { color: up ? palette.warningAmber : palette.mint },
+                        ]}
+                      >
+                        {formatMoneyCompact(Math.abs(shift.currentTotal - shift.typicalTotal))}
+                      </Text>
+                    </View>
+                  </View>
+                }
+              />
+            );
+          })}
+        </Card>
+      ) : null}
+
+      {recurring.length > 0 ? (
+        <Card>
+          <CardTitle right={<Text style={styles.avgLabel}>{formatMoney(recurringTotal)}/mo</Text>}>
+            Charges that keep coming back
+          </CardTitle>
+          <Text style={styles.cardIntro}>
+            Seen in three or more months — usually a subscription, sometimes one you forgot.
+          </Text>
+          {recurring.slice(0, 6).map((charge) => (
+            <Row
+              key={charge.merchant}
+              left={<Icon name="Subscriptions" size={16} color={palette.mint} />}
+              title={charge.merchant}
+              subtitle={`${charge.months} months · about ${formatMoney(charge.annualised)} a year`}
+              right={<Text style={styles.habitValue}>{formatMoney(charge.typicalAmount)}</Text>}
+            />
+          ))}
+        </Card>
+      ) : null}
+
+      {heaviestDay && allDaily.length >= 14 ? (
+        <Card>
+          <CardTitle>Your week</CardTitle>
+          {weekdays.map((day) => (
+            <View key={day.weekday} style={styles.sliceRow}>
+              <View style={styles.sliceHead}>
+                <Text style={styles.sliceName}>{day.label}</Text>
+                <Text style={styles.sliceAmount}>{formatMoney(day.average)}</Text>
+              </View>
+              <ProgressBar
+                fraction={day.average / (heaviestDay.average || 1)}
+                color={day.weekday === heaviestDay.weekday ? palette.violet : palette.surfaceHigh}
+                height={6}
+              />
+            </View>
+          ))}
+          <Text style={styles.historyNote}>
+            {heaviestDay.label} is your most expensive day, averaging{' '}
+            {formatMoney(heaviestDay.average)}.
+          </Text>
+        </Card>
+      ) : null}
+
       <Card style={brokeIn !== null && brokeIn < snapshot.daysRemaining ? { borderColor: palette.warningAmber } : undefined}>
         <CardTitle>Projection</CardTitle>
         <Text style={styles.projection}>
@@ -248,6 +471,35 @@ const styles = StyleSheet.create({
   sliceAmount: { ...typography.bodyBold, color: palette.textPrimary, width: 76, textAlign: 'right' },
 
   habitValue: { ...typography.bodyBold, color: palette.textPrimary },
+
+  cardIntro: {
+    ...typography.caption,
+    color: palette.textMuted,
+    marginBottom: spacing.sm,
+    lineHeight: 17,
+  },
+  historyNote: {
+    ...typography.caption,
+    color: palette.textSecondary,
+    marginTop: spacing.sm,
+    lineHeight: 18,
+  },
+
+  monthChart: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: spacing.sm,
+    height: 132,
+    marginTop: spacing.xs,
+  },
+  monthSlot: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 4 },
+  monthBar: { width: '100%', borderRadius: 4 },
+  monthAmount: { ...typography.micro, color: palette.textSecondary, fontSize: 9 },
+  monthLabel: { ...typography.micro, color: palette.textMuted },
+
+  trendPill: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  trendPillText: { ...typography.micro, fontWeight: '700' },
+  shiftRight: { alignItems: 'flex-end', gap: 2 },
   projection: { ...typography.body, color: palette.textSecondary, lineHeight: 20 },
   muted: { ...typography.caption, color: palette.textMuted },
 });

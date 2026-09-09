@@ -10,6 +10,7 @@ import { formatMoney, formatRelative, daysBetween } from '../utils/format';
 import { balanceColor, palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Card, CardTitle, EmptyState, Field, Loading, Row, Screen, ScreenTitle, Sheet } from '../components/ui';
 import ContactPicker from '../components/ContactPicker';
+import Icon, { IconName } from '../components/Icon';
 import { isCaptureAvailable } from '../../modules/pinch-capture';
 
 export default function SquadScreen() {
@@ -73,7 +74,7 @@ export default function SquadScreen() {
       {balances.length === 0 ? (
         <Card>
           <EmptyState
-            emoji="🤝"
+            icon="squad"
             title="No open debts"
             body="Split a bill from Today, or add one by hand. Balances net out per person so you settle once, not six times."
           />
@@ -114,14 +115,16 @@ export default function SquadScreen() {
  * useful version of this information is "this money is probably not coming
  * back", not "0.42".
  */
-function reliabilityLabel(balance: ContactBalance): string | null {
-  if (balance.isGhost) return '👻 ghost — barely counted';
-  if (balance.settledCount === 0) return 'no track record yet';
+function reliabilityLabel(balance: ContactBalance): { icon: IconName; text: string } | null {
+  if (balance.isGhost) return { icon: 'ghost', text: 'ghost — barely counted' };
+  if (balance.settledCount === 0) return { icon: 'clock', text: 'no track record yet' };
   const days = balance.avgDaysToSettle ?? 0;
-  if (days <= 3) return `⚡ pays back in ~${Math.max(1, Math.round(days))}d`;
-  if (days <= 7) return `pays back in ~${Math.round(days)}d`;
-  if (days <= 21) return `🐌 slow — ~${Math.round(days)}d to settle`;
-  return `🐢 very slow — ~${Math.round(days)}d to settle`;
+  if (days <= 3) {
+    return { icon: 'trendUp', text: `pays back in ~${Math.max(1, Math.round(days))}d` };
+  }
+  if (days <= 7) return { icon: 'clock', text: `pays back in ~${Math.round(days)}d` };
+  if (days <= 21) return { icon: 'trendDown', text: `slow — ~${Math.round(days)}d to settle` };
+  return { icon: 'warning', text: `very slow — ~${Math.round(days)}d to settle` };
 }
 
 function ContactRow({ balance, onPress }: { balance: ContactBalance; onPress: () => void }) {
@@ -130,8 +133,9 @@ function ContactRow({ balance, onPress }: { balance: ContactBalance; onPress: ()
 
   return (
     <Row
+      left={label ? <Icon name={label.icon} size={16} color={palette.textMuted} /> : undefined}
       title={balance.name}
-      subtitle={[label, balance.openCount > 0 ? `${balance.openCount} open` : null]
+      subtitle={[label?.text, balance.openCount > 0 ? `${balance.openCount} open` : null]
         .filter(Boolean)
         .join(' · ')}
       onPress={onPress}
@@ -250,7 +254,7 @@ function ContactSheet({
       ) : null}
 
       <Button
-        label={balance.isGhost ? 'Unmark as ghost' : 'Mark as ghost 👻'}
+        label={balance.isGhost ? 'Unmark as ghost' : 'Mark as ghost'}
         variant="ghost"
         onPress={markGhost}
       />

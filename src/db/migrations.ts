@@ -263,7 +263,37 @@ const V3_CORE_MODEL: Migration = {
   ],
 };
 
-export const MIGRATIONS: Migration[] = [V1_INITIAL, V2_CONTACT_PHONE, V3_CORE_MODEL];
+// ---------------------------------------------------------------------------
+// v4 — blocking junk, and marking a transaction as excluded rather than
+// deleting it.
+//
+// Promotional SMS are the dominant failure mode in practice: voucher blasts,
+// rummy and betting spam, and "CTC" marketing all quote an amount and pass a
+// naive parse. Regexes catch most of them, but the user needs a way to shut
+// up the ones that get through for good, per sender.
+// ---------------------------------------------------------------------------
+const V4_BLOCKLIST: Migration = {
+  version: 4,
+  name: 'blocklist_and_exclusions',
+  statements: [
+    `CREATE TABLE IF NOT EXISTS CaptureBlocklist (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      /* Matched case-insensitively against the SMS sender ID, the notification
+         package name, or the parsed merchant. */
+      pattern TEXT NOT NULL UNIQUE,
+      reason TEXT,
+      created_at TEXT NOT NULL
+    );`,
+
+    // Excluded rather than deleted: a transaction the user says is not real
+    // should leave the totals immediately, but keeping the row means the same
+    // message cannot be re-imported by the next backfill through its dedup key.
+    `ALTER TABLE Transactions ADD COLUMN excluded_at TEXT;`,
+    `CREATE INDEX IF NOT EXISTS idx_txn_excluded ON Transactions(excluded_at);`,
+  ],
+};
+
+export const MIGRATIONS: Migration[] = [V1_INITIAL, V2_CONTACT_PHONE, V3_CORE_MODEL, V4_BLOCKLIST];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
 
