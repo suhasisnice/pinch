@@ -359,6 +359,93 @@ const V7_BALANCE: Migration = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// v8 — categorising a merchant the user has never corrected.
+//
+// MerchantRules (v3) only ever matches a merchant string it has seen before,
+// which means it starts every fresh install completely empty: nothing has
+// taught it "Zomato is Food" yet, so a brand-new user's whole first month
+// sits Uncategorised. This table backs a second pass — a lightweight,
+// on-device classifier scored on the *words* in a merchant name rather than
+// the exact string, so a restaurant the app has never heard of still reads
+// as Food because "cafe" is in its name.
+//
+// Seeded once, here, with a modest starting vocabulary of common Indian
+// merchant and category words. The weights are deliberately small: real
+// corrections earn weight too (see learnMerchantRule's caller), and a few of
+// those should be enough to outweigh a seed guess that turns out wrong for
+// how a particular person actually uses a word.
+// ---------------------------------------------------------------------------
+const SEED_TOKEN_WEIGHT = 3;
+const SEED_CATEGORY_TOKENS: Record<string, string[]> = {
+  Food: [
+    'zomato', 'swiggy', 'dominos', 'mcdonald', 'mcdonalds', 'kfc', 'pizza',
+    'cafe', 'restaurant', 'dhaba', 'mess', 'biryani', 'chai', 'chaayos',
+    'coffee', 'starbucks', 'dunkin', 'faasos', 'box8', 'eatfit', 'freshmenu',
+    'behrouz', 'ovenstory', 'bakery', 'sweets', 'food', 'foods', 'kitchen',
+    'eatery', 'canteen', 'tiffin', 'thali', 'foodpanda', 'momo', 'rebel',
+  ],
+  Transport: [
+    'uber', 'ola', 'rapido', 'metro', 'irctc', 'redbus', 'indigo', 'ixigo',
+    'petrol', 'diesel', 'fuel', 'fastag', 'toll', 'parking', 'cab', 'auto',
+    'rickshaw', 'railway', 'railways', 'train', 'flight', 'airlines',
+    'spicejet', 'vistara', 'ather', 'yulu', 'bounce', 'vogo',
+  ],
+  Shopping: [
+    'amazon', 'flipkart', 'myntra', 'ajio', 'nykaa', 'meesho', 'zepto',
+    'blinkit', 'instamart', 'bigbasket', 'dmart', 'reliance', 'decathlon',
+    'lenskart', 'croma', 'ikea', 'mart', 'bazaar', 'retail', 'boat',
+    'snapdeal', 'tatacliq', 'pepperfry', 'urbanic', 'styli',
+  ],
+  Subscriptions: [
+    'netflix', 'spotify', 'hotstar', 'disney', 'prime', 'primevideo',
+    'youtube', 'jiosaavn', 'gaana', 'wynk', 'gym', 'cultfit', 'cult',
+    'jiofiber', 'airtel', 'vodafone', 'broadband', 'wifi', 'dth', 'tatasky',
+    'sunnxt', 'zee5', 'sonyliv', 'icloud', 'canva', 'notion', 'chatgpt',
+    'openai', 'adobe',
+  ],
+  Academics: [
+    'exam', 'fees', 'fee', 'tuition', 'coaching', 'college', 'university',
+    'library', 'book', 'books', 'stationery', 'xerox', 'printout', 'course',
+    'udemy', 'coursera', 'byjus', 'unacademy', 'vedantu', 'testbook',
+    'scholarship', 'hostel',
+  ],
+  Health: [
+    'pharmacy', 'medical', 'medicine', 'medicines', 'hospital', 'clinic',
+    'apollo', 'doctor', 'diagnostic', 'diagnostics', 'lab', 'netmeds',
+    'pharmeasy', 'dental', 'physiotherapy', 'wellness', 'fortis', 'manipal',
+  ],
+  Outing: [
+    'movie', 'movies', 'cinema', 'pvr', 'inox', 'bookmyshow', 'bowling',
+    'pub', 'bar', 'brewery', 'club', 'concert', 'trip', 'makemytrip',
+    'goibibo', 'oyo', 'airbnb', 'resort', 'waterpark', 'trekking', 'camping',
+  ],
+};
+
+function buildSeedInsert(): string {
+  const rows: string[] = [];
+  for (const [category, tokens] of Object.entries(SEED_CATEGORY_TOKENS)) {
+    for (const token of tokens) {
+      rows.push(`('${token}', '${category}', ${SEED_TOKEN_WEIGHT})`);
+    }
+  }
+  return `INSERT INTO CategoryTokenWeights (token, category, weight) VALUES ${rows.join(', ')};`;
+}
+
+const V8_CATEGORY_TOKENS: Migration = {
+  version: 8,
+  name: 'category_token_weights',
+  statements: [
+    `CREATE TABLE IF NOT EXISTS CategoryTokenWeights (
+      token TEXT NOT NULL,
+      category TEXT NOT NULL,
+      weight INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (token, category)
+    );`,
+    buildSeedInsert(),
+  ],
+};
+
 export const MIGRATIONS: Migration[] = [
   V1_INITIAL,
   V2_CONTACT_PHONE,
@@ -367,6 +454,7 @@ export const MIGRATIONS: Migration[] = [
   V5_TRANSFERS,
   V6_NON_SPEND,
   V7_BALANCE,
+  V8_CATEGORY_TOKENS,
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
