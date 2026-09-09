@@ -1,3 +1,246 @@
+export type ParsedDirection = 'DEBIT' | 'CREDIT';
+
+export interface ParsedMessage {
+  amount: number;
+  direction: ParsedDirection;
+  /** Merchant for a debit, sender for a credit. */
+  counterparty: string | null;
+  /** Bank/UPI reference number when present — the best dedup key available. */
+  reference: string | null;
+  /** Last digits of the account or card, when the message names them. */
+  accountHint: string | null;
+  /** 0..1. Below ACCEPT_THRESHOLD the parse goes to the review inbox. */
+  confidence: number;
+}
+
+/**
+ * A parse at or above this is trustworthy enough to post automatically;
+ * anything less waits for the user in the capture inbox. Set deliberately
+ * high — a wrong auto-logged transaction is far more damaging to trust than
+ * an extra tap.
+ */
+export const ACCEPT_THRESHOLD = 0.8;
+
+// ---------------------------------------------------------------------------
+// Rejection: messages that mention money but are not a transaction.
+//
+// Checked first and hard-stopped, because several of these (notably "will be
+// debited" reminders and failed-payment notices) otherwise parse perfectly and
+// would silently invent spending that never happened.
+// ---------------------------------------------------------------------------
+const REJECT_PATTERNS: RegExp[] = [
+  /\botp\b/i,
+  /one[\s-]?time\s+password/i,
+  /\bdo not share\b/i,
+  /\bwill be (?:debited|deducted|charged)\b/i,
+  /\bis due\b/i,
+  /\bdue on\b/i,
+  /\bhas (?:failed|been declined)\b/i,
+  /\b(?:failed|declined|unsuccessful|reversed|cancelled)\b/i,
+  /\brequest(?:ed|ing)? (?:money|payment)\b/i,
+  /\bcollect request\b/i,
+  /\bavailable balance\b/i,
+  /\bavl(?:\.| )?bal\b/i,
+  /\bbalance (?:is|:)/i,
+  /\bmin(?:imum)? (?:amount )?due\b/i,
+  /\boffer\b/i,
+  /\bcashback of\b/i,
+  /\bwin\b/i,
+  /\bapply now\b/i,
+  /\bclick\b/i,
+  /\bloan\b/i,
+  /\beligible for\b/i,
+];
+
+/** Sender IDs are shaped like VM-HDFCBK, AD-ICICIB, JD-SBIINB. */
+const BANK_SENDER = /^[A-Z]{2}-?([A-Z]{4,8})(?:-?[A-Z])?$/i;
+const KNOWN_BANK_TOKENS = [
+  'HDFC', 'ICICI', 'SBI', 'AXIS', 'KOTAK', 'YESBNK', 'IDFC', 'INDUS', 'PNB', 'BOB',
+  'CANARA', 'UNION', 'FEDERAL', 'RBL', 'AUBANK', 'BANDHN', 'CITI', 'HSBC', 'SCB',
+  'PAYTM', 'PHONPE', 'GPAY', 'AMZNPY', 'MOBIKW', 'FREECH', 'SLICE', 'JUPITR', 'FAMPAY',
+];
+
+const AMOUNT = String.raw`(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d{1,2})?)`;
+const AMOUNT_TRAILING = String.raw`([\d,]+(?:\.\d{1,2})?)\s*(?:rs\.?|inr|₹)`;
+
+const DEBIT_VERBS =
+  /\b(?:debited|spent|paid|withdrawn|deducted|purchase|txn of|sent to|transferred to)\b/i;
+const CREDIT_VERBS = /\b(?:credited|received|added|refunded|deposited)\b/i;
+
+// ---------------------------------------------------------------------------
+// Merchant extraction. Tried in order; the first hit wins, and earlier
+// patterns are the more specific ones.
+// ---------------------------------------------------------------------------
+// Must start with a letter, so a date ("at 08-09-26") can never be captured
+// as a merchant name.
+const NAME = String.raw`[A-Za-z][A-Za-z0-9 &'.\-_@]{1,48}?`;
+const STOP = String.raw`(?=\s+(?:on|via|using|ref|upi|txn|dated|at\s+\d)\b|[.,;!]|$)`;
+
+// Order matters: the first match wins, so the most specific phrasings come
+// first and the greedy catch-alls come last.
+const MERCHANT_PATTERNS: RegExp[] = [
+  // "...spent at OLIVE CAFE on 08-09-26"
+  new RegExp(String.raw`\bspent\s+at\s+(${NAME})${STOP}`, 'i'),
+  // "...debited ... to VPA merchant@ybl"
+  new RegExp(String.raw`\bto\s+VPA\s+(${NAME})${STOP}`, 'i'),
+  // "...; OLIVE CAFE credited"
+  new RegExp(String.raw`;\s*(${NAME})\s+credited`, 'i'),
+  // "paid to Olive Cafe" / "sent to Rahul"
+  new RegExp(String.raw`\b(?:paid|sent|transferred)\s+to\s+(${NAME})${STOP}`, 'i'),
+  // "UPI/P2M/123456789/OLIVE CAFE"
+  new RegExp(String.raw`UPI\/(?:P2M|P2A)\/\d+\/(${NAME})${STOP}`, 'i'),
+  // "at OLIVE CAFE". Deliberately ahead of the "spent on" branch: HDFC writes
+  // "spent on <card> at <merchant>", where "spent on" would otherwise capture
+  // the card description instead of the merchant.
+  new RegExp(String.raw`\bat\s+(${NAME})${STOP}`, 'i'),
+  // "spent on Amazon Pay" — only reached when there is no "at ..." clause.
+  new RegExp(String.raw`\bspent\s+on\s+(${NAME})${STOP}`, 'i'),
+  // "from RAHUL" (credits)
+  new RegExp(String.raw`\bfrom\s+(${NAME})${STOP}`, 'i'),
+  // "by RAHUL"
+  new RegExp(String.raw`\bby\s+(${NAME})${STOP}`, 'i'),
+];
+
+const REFERENCE_PATTERNS: RegExp[] = [
+  /\b(?:UPI|Ref(?:erence)?(?:\s*No\.?)?|RRN|Txn(?:\s*ID)?)[:\s#-]*([A-Z0-9]{6,25})\b/i,
+  /\bUPI\/(?:P2M|P2A)\/(\d{6,20})\b/i,
+  /\b(\d{12})\b/, // bare UPI RRN
+];
+
+const ACCOUNT_PATTERNS: RegExp[] = [
+  /\b(?:a\/c|acct|account|card)\s*(?:no\.?\s*)?[Xx*]+\s*(\d{3,6})\b/i,
+  /\b[Xx*]{2,}(\d{3,6})\b/,
+];
+
+// Noise that survives merchant capture and should be trimmed off the end.
+const MERCHANT_NOISE = /\b(?:on|via|using|ref|refno|upi|txn|dated|a\/c|acct|account)\b.*$/i;
+
+function parseAmount(raw: string): number | null {
+  const value = parseFloat(raw.replace(/,/g, ''));
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function cleanName(raw: string): string {
+  return (
+    raw
+      .replace(MERCHANT_NOISE, '')
+      // A VPA ("zomato@ybl", "9876543210@paytm") names the payee before the
+      // handle; the bank suffix is routing detail, not a merchant.
+      .replace(/@[A-Za-z0-9.\-]+$/, '')
+      .replace(/[^A-Za-z0-9 &'.\-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
+}
+
+/**
+ * Titleises a single-case merchant name — banks shout ("OLIVE CAFE") and VPAs
+ * whisper ("zomato@ybl"). A name that already mixes cases was written that way
+ * on purpose ("McDonald's", "BookMyShow") and is left alone.
+ */
+function prettify(name: string): string {
+  const isSingleCase = name === name.toUpperCase() || name === name.toLowerCase();
+  if (!isSingleCase) return name;
+
+  return name
+    .toLowerCase()
+    .split(' ')
+    .map((word) => (word.length > 1 ? word[0].toUpperCase() + word.slice(1) : word.toUpperCase()))
+    .join(' ');
+}
+
+function extractFirst(text: string, patterns: RegExp[]): string | null {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
+
+export function isLikelyBankSender(sender: string | null | undefined): boolean {
+  if (!sender) return false;
+  const upper = sender.toUpperCase();
+  const match = upper.match(BANK_SENDER);
+  const token = match?.[1] ?? upper;
+  return KNOWN_BANK_TOKENS.some((known) => token.includes(known) || upper.includes(known));
+}
+
+export function isRejected(text: string): boolean {
+  return REJECT_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+/**
+ * Parses a bank SMS or payment-app notification into a transaction.
+ *
+ * Returns null when the message is not a transaction at all. A low-confidence
+ * result is still returned — the caller decides whether to post it or route it
+ * to the review inbox — so that an unfamiliar bank format shows up as
+ * something the user can confirm rather than vanishing silently.
+ */
+export function parseMessage(text: string, sender?: string | null): ParsedMessage | null {
+  if (!text || text.trim().length < 6) return null;
+  if (isRejected(text)) return null;
+
+  const amountRaw =
+    text.match(new RegExp(AMOUNT, 'i'))?.[1] ?? text.match(new RegExp(AMOUNT_TRAILING, 'i'))?.[1];
+  const amount = amountRaw ? parseAmount(amountRaw) : null;
+  if (amount === null) return null;
+
+  const isDebit = DEBIT_VERBS.test(text);
+  const isCredit = CREDIT_VERBS.test(text);
+  if (!isDebit && !isCredit) return null;
+
+  // "debited ... ; MERCHANT credited" names both verbs. The account is the
+  // subject of the sentence, so a debit reading wins.
+  const direction: ParsedDirection = isDebit ? 'DEBIT' : 'CREDIT';
+
+  const rawName = extractFirst(text, MERCHANT_PATTERNS);
+  const counterparty = rawName ? prettify(cleanName(rawName)) : null;
+  const reference = extractFirst(text, REFERENCE_PATTERNS);
+  const accountHint = extractFirst(text, ACCOUNT_PATTERNS);
+
+  // Confidence is additive over independent corroborating signals.
+  let confidence = 0.35;
+  if (isDebit !== isCredit) confidence += 0.2; // unambiguous direction
+  if (counterparty && counterparty.length >= 3) confidence += 0.2;
+  if (reference) confidence += 0.15;
+  if (accountHint) confidence += 0.1;
+  if (isLikelyBankSender(sender)) confidence += 0.15;
+  if (/₹|rs\.?|inr/i.test(text)) confidence += 0.05;
+
+  return {
+    amount,
+    direction,
+    counterparty: counterparty || null,
+    reference,
+    accountHint,
+    confidence: Math.min(1, Number(confidence.toFixed(2))),
+  };
+}
+
+/**
+ * Stable identity for a payment, so the same event arriving over SMS and the
+ * notification listener collapses to one transaction.
+ *
+ * A bank reference number is globally unique and used verbatim when present.
+ * Without one, the key falls back to amount plus a coarse time bucket —
+ * deliberately not including the merchant, because SMS and notifications word
+ * the same merchant differently ("OLIVE CAFE" vs "Olive Cafe UPI").
+ */
+export function buildDedupKey(
+  parsed: Pick<ParsedMessage, 'amount' | 'reference' | 'direction'>,
+  occurredAt: Date = new Date(),
+  bucketSeconds = 120
+): string {
+  if (parsed.reference) return `ref:${parsed.reference.toUpperCase()}`;
+  const bucket = Math.floor(occurredAt.getTime() / (bucketSeconds * 1000));
+  return `amt:${parsed.direction}:${parsed.amount.toFixed(2)}:${bucket}`;
+}
+
+// ---------------------------------------------------------------------------
+// Backwards-compatible helpers used by the existing parser tests.
+// ---------------------------------------------------------------------------
+
 export interface ParsedDebit {
   amount: number;
   merchant: string;
@@ -8,71 +251,14 @@ export interface ParsedCredit {
   sender: string;
 }
 
-// Text that can trail a captured name/merchant before we cut it off.
-const TRAILING_STOP = String.raw`(?=\s+via\s+upi|\s+using\s+upi|\s+on\s+\d|[.,]|$)`;
-const NAME_CHARS = String.raw`[a-zA-Z0-9 &'.\-]+?`;
-const AMOUNT = String.raw`([\d,]+(?:\.\d{1,2})?)`;
-
-// Tried in order; first pattern that matches wins.
-const DEBIT_PATTERNS: RegExp[] = [
-  // "Rs. 700 spent at Olive Cafe via UPI" / "INR 1,250.50 spent on Amazon Pay"
-  new RegExp(
-    String.raw`(?:rs\.?|inr)\s*${AMOUNT}\s+(?:has\s+been\s+|was\s+)?spent\s+(?:at|on)\s+(${NAME_CHARS})${TRAILING_STOP}`,
-    'i'
-  ),
-  // "Rs 500 debited from A/c XX1234 on 05-Sep-26 spent at Big Bazaar."
-  new RegExp(
-    String.raw`(?:rs\.?|inr)\s*${AMOUNT}\s+debited\b[^.]*?\bat\s+(${NAME_CHARS})${TRAILING_STOP}`,
-    'i'
-  ),
-];
-
-const CREDIT_PATTERNS: RegExp[] = [
-  // "Received Rs. 175 from Rahul via UPI"
-  new RegExp(
-    String.raw`received\s+(?:rs\.?|inr)\s*${AMOUNT}\s+from\s+(${NAME_CHARS})${TRAILING_STOP}`,
-    'i'
-  ),
-  // "Rs 175 credited to your a/c from Rahul via UPI"
-  new RegExp(
-    String.raw`(?:rs\.?|inr)\s*${AMOUNT}\s+(?:has\s+been\s+)?credited\b[^.]*?\bfrom\s+(${NAME_CHARS})${TRAILING_STOP}`,
-    'i'
-  ),
-];
-
-function parseAmount(raw: string): number | null {
-  const value = parseFloat(raw.replace(/,/g, ''));
-  return Number.isFinite(value) ? value : null;
-}
-
-function cleanText(raw: string): string {
-  return raw.replace(/\s+/g, ' ').trim();
-}
-
 export function parseDebitSms(sms: string): ParsedDebit | null {
-  if (!sms) return null;
-  for (const pattern of DEBIT_PATTERNS) {
-    const match = sms.match(pattern);
-    if (!match) continue;
-    const amount = parseAmount(match[1]);
-    const merchant = cleanText(match[2]);
-    if (amount !== null && merchant) {
-      return { amount, merchant };
-    }
-  }
-  return null;
+  const parsed = parseMessage(sms);
+  if (!parsed || parsed.direction !== 'DEBIT' || !parsed.counterparty) return null;
+  return { amount: parsed.amount, merchant: parsed.counterparty };
 }
 
 export function parseCreditSms(sms: string): ParsedCredit | null {
-  if (!sms) return null;
-  for (const pattern of CREDIT_PATTERNS) {
-    const match = sms.match(pattern);
-    if (!match) continue;
-    const amount = parseAmount(match[1]);
-    const sender = cleanText(match[2]);
-    if (amount !== null && sender) {
-      return { amount, sender };
-    }
-  }
-  return null;
+  const parsed = parseMessage(sms);
+  if (!parsed || parsed.direction !== 'CREDIT' || !parsed.counterparty) return null;
+  return { amount: parsed.amount, sender: parsed.counterparty };
 }

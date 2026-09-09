@@ -1,173 +1,388 @@
-import * as dbService from '../src/db/dbService';
+import * as db from '../src/db/dbService';
 import { createSqlJsAdapter } from './utils/sqljsAdapter';
 
-describe('dbService (real SQLite via sql.js)', () => {
+beforeEach(async () => {
+  db.__resetDatabaseForTests();
+  await db.initDatabase(await createSqlJsAdapter());
+});
+
+const spend = (amount: number, merchant = 'Olive Cafe', extra: Record<string, unknown> = {}) =>
+  db.addTransaction({ amount, direction: 'DEBIT', kind: 'SPEND', merchant, ...extra });
+
+describe('transactions', () => {
+  it('stores a spend and reads it back', async () => {
+    const id = await spend(700);
+    const row = await db.getTransactionById(id);
+
+    expect(row).toMatchObject({ amount: 700, direction: 'DEBIT', kind: 'SPEND' });
+  });
+
+  it('stores amounts as positive regardless of sign passed in', async () => {
+    const id = await db.addTransaction({
+      amount: -250,
+      direction: 'DEBIT',
+      kind: 'SPEND',
+      merchant: 'Zepto',
+    });
+    expect((await db.getTransactionById(id))?.amount).toBe(250);
+  });
+
+  it('returns the existing row instead of duplicating a known dedup key', async () => {
+    const first = await spend(340, 'Swiggy', { dedupKey: 'upi-ref-99' });
+    const second = await spend(340, 'Swiggy', { dedupKey: 'upi-ref-99' });
+
+    expect(second).toBe(first);
+    expect(await db.getAllTransactions()).toHaveLength(1);
+  });
+
+  it('finds a probable duplicate arriving from a second source', async () => {
+    const at = new Date().toISOString();
+    await spend(340, 'SWIGGY', { occurredAt: at });
+
+    const match = await db.findProbableDuplicate(340, at);
+    expect(match?.merchant).toBe('SWIGGY');
+  });
+
+  it('does not treat an unrelated later payment as a duplicate', async () => {
+    const at = new Date().toISOString();
+    await spend(340, 'Swiggy', { occurredAt: at });
+
+    const hoursLater = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();
+    expect(await db.findProbableDuplicate(340, hoursLater)).toBeNull();
+  });
+});
+
+describe('money queries respect kind, not direction', () => {
+  const period = ['2026-09-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z'] as const;
+  const at = '2026-09-10T12:00:00.000Z';
+
+  it('counts spending but not repayments', async () => {
+    await spend(1000, 'Toit', { occurredAt: at });
+    // You pay a friend back. A DEBIT, but the expense was already booked.
+    await db.addTransaction({
+      amount: 400,
+      direction: 'DEBIT',
+      kind: 'SETTLE_OUT',
+      merchant: 'Ish',
+      occurredAt: at,
+    });
+
+    expect(await db.getGrossSpendBetween(...period)).toBe(1000);
+  });
+
+  it('subtracts refunds from gross spend', async () => {
+    await spend(1000, 'Myntra', { occurredAt: at });
+    await db.addTransaction({
+      amount: 300,
+      direction: 'CREDIT',
+      kind: 'REFUND',
+      merchant: 'Myntra',
+      occurredAt: at,
+    });
+
+    expect(await db.getGrossSpendBetween(...period)).toBe(700);
+  });
+
+  it('counts allowance as income but not a friend repaying you', async () => {
+    await db.addTransaction({
+      amount: 9000,
+      direction: 'CREDIT',
+      kind: 'INCOME',
+      merchant: 'Dad',
+      occurredAt: at,
+    });
+    await db.addTransaction({
+      amount: 450,
+      direction: 'CREDIT',
+      kind: 'SETTLE_IN',
+      merchant: 'Rahul',
+      occurredAt: at,
+    });
+
+    expect(await db.getIncomeBetween(...period)).toBe(9000);
+  });
+
+  it('excludes spending outside the window', async () => {
+    await spend(500, 'Old', { occurredAt: '2026-08-15T12:00:00.000Z' });
+    await spend(200, 'New', { occurredAt: at });
+
+    expect(await db.getGrossSpendBetween(...period)).toBe(200);
+  });
+
+  it('groups spending by category', async () => {
+    await spend(300, 'Swiggy', { occurredAt: at, category: 'Food' });
+    await spend(200, 'Zomato', { occurredAt: at, category: 'Food' });
+    await spend(150, 'Uber', { occurredAt: at, category: 'Transport' });
+
+    const breakdown = await db.getSpendByCategory(...period);
+    expect(breakdown[0]).toMatchObject({ category: 'Food', total: 500, count: 2 });
+    expect(breakdown[1]).toMatchObject({ category: 'Transport', total: 150 });
+  });
+});
+
+describe('IOUs', () => {
+  let contactId: number;
+
   beforeEach(async () => {
-    dbService.__resetDatabaseForTests();
-    const adapter = await createSqlJsAdapter();
-    await dbService.initDatabase(adapter);
+    contactId = await db.addContact('Rahul', false, '+919000000000');
   });
 
-  test('addTransaction inserts a row and returns its id', async () => {
-    const id = await dbService.addTransaction(42.5, 'Campus Cafe', 'DEBIT');
-    expect(id).toBeGreaterThan(0);
+  it('derives the open amount from the settlements ledger', async () => {
+    const txId = await spend(700);
+    const iouId = await db.createIOU({ contactId, amount: 175, direction: 'THEY_OWE_ME', transactionId: txId });
 
-    const row = await dbService.getTransactionById(id);
-    expect(row).toMatchObject({ id, amount: 42.5, merchant: 'Campus Cafe', type: 'DEBIT' });
-    expect(typeof row?.timestamp).toBe('string');
+    expect((await db.getIOUById(iouId))?.openAmount).toBe(175);
+
+    await db.settleIOU(iouId, 75);
+    const partly = await db.getIOUById(iouId);
+    expect(partly?.settledAmount).toBe(75);
+    expect(partly?.openAmount).toBe(100);
+
+    await db.settleIOU(iouId);
+    expect((await db.getIOUById(iouId))?.openAmount).toBe(0);
   });
 
-  test('addTransaction assigns increasing ids across inserts', async () => {
-    const id1 = await dbService.addTransaction(10, 'Store A', 'DEBIT');
-    const id2 = await dbService.addTransaction(20, 'Store B', 'CREDIT');
-    expect(id2).toBeGreaterThan(id1);
+  it('never records more repaid than was owed', async () => {
+    const iouId = await db.createIOU({ contactId, amount: 100, direction: 'THEY_OWE_ME' });
+    const paid = await db.settleIOU(iouId, 500);
+
+    expect(paid).toBe(100);
+    expect((await db.getIOUById(iouId))?.openAmount).toBe(0);
   });
 
-  test('createIOU + getOpenIOUs: a new IOU is open by default', async () => {
-    const contactId = await dbService.addContact('Alex');
-    const txId = await dbService.addTransaction(60, 'Pizza Place', 'DEBIT');
+  // The bug in the old resolveIOUByAmount: with two identical debts it closed
+  // whichever row it happened to see first.
+  it('settles the IOU you named, not merely one of the same size', async () => {
+    const other = await db.addContact('Arjun');
+    const rahulIOU = await db.createIOU({ contactId, amount: 175, direction: 'THEY_OWE_ME' });
+    const arjunIOU = await db.createIOU({ contactId: other, amount: 175, direction: 'THEY_OWE_ME' });
 
-    await dbService.createIOU(txId, contactId, 20);
+    await db.settleIOU(arjunIOU);
 
-    const open = await dbService.getOpenIOUs();
-    expect(open).toHaveLength(1);
-    expect(open[0]).toMatchObject({
-      transaction_id: txId,
-      contact_id: contactId,
-      split_amount: 20,
-      is_settled: 0,
+    expect((await db.getIOUById(rahulIOU))?.openAmount).toBe(175);
+    expect((await db.getIOUById(arjunIOU))?.openAmount).toBe(0);
+  });
+
+  it('applies one payment across several debts, oldest first', async () => {
+    const a = await db.createIOU({ contactId, amount: 100, direction: 'THEY_OWE_ME' });
+    const b = await db.createIOU({ contactId, amount: 200, direction: 'THEY_OWE_ME' });
+
+    const result = await db.settleContactBalance(contactId, 250);
+
+    expect(result.applied).toBe(250);
+    expect((await db.getIOUById(a))?.openAmount).toBe(0);
+    expect((await db.getIOUById(b))?.openAmount).toBe(50);
+  });
+
+  it('lists only debts with money still outstanding', async () => {
+    const a = await db.createIOU({ contactId, amount: 100, direction: 'THEY_OWE_ME' });
+    await db.createIOU({ contactId, amount: 200, direction: 'THEY_OWE_ME' });
+    await db.settleIOU(a);
+
+    expect(await db.getOpenIOUs()).toHaveLength(1);
+  });
+
+  it('nets debts in both directions into one balance', async () => {
+    await db.createIOU({ contactId, amount: 450, direction: 'THEY_OWE_ME' });
+    await db.createIOU({ contactId, amount: 200, direction: 'I_OWE_THEM' });
+
+    const balance = (await db.getContactBalances()).find((b) => b.contactId === contactId);
+    expect(balance?.netAmount).toBe(250);
+    expect(balance?.openCount).toBe(2);
+  });
+
+  it('reports a negative balance when you owe more than you are owed', async () => {
+    await db.createIOU({ contactId, amount: 100, direction: 'THEY_OWE_ME' });
+    await db.createIOU({ contactId, amount: 400, direction: 'I_OWE_THEM' });
+
+    const balance = (await db.getContactBalances()).find((b) => b.contactId === contactId);
+    expect(balance?.netAmount).toBe(-300);
+  });
+
+  it('totals receivables and payables separately', async () => {
+    await db.createIOU({ contactId, amount: 450, direction: 'THEY_OWE_ME' });
+    await db.createIOU({ contactId, amount: 200, direction: 'I_OWE_THEM' });
+
+    expect(await db.getTotalReceivable()).toBe(450);
+    expect(await db.getTotalPayable()).toBe(200);
+  });
+
+  it('tracks how quickly someone settles', async () => {
+    const iouId = await db.createIOU({ contactId, amount: 100, direction: 'THEY_OWE_ME' });
+    await db.settleIOU(iouId);
+
+    const balance = (await db.getContactBalances()).find((b) => b.contactId === contactId);
+    expect(balance?.settledCount).toBe(1);
+    expect(balance?.avgDaysToSettle).not.toBeNull();
+  });
+
+  it('reuses a contact rather than duplicating them by name', async () => {
+    const again = await db.findOrCreateContactByName('rahul');
+    expect(again).toBe(contactId);
+    expect(await db.getContacts()).toHaveLength(1);
+  });
+});
+
+describe('goals', () => {
+  it('sums contributions into progress', async () => {
+    const goalId = await db.createGoal({ name: 'Laptop', targetAmount: 45000 });
+    await db.contributeToGoal(goalId, 5000);
+    await db.contributeToGoal(goalId, 2500, 'ROUNDUP');
+
+    const goal = await db.getGoalById(goalId);
+    expect(goal?.savedAmount).toBe(7500);
+    expect(goal?.remainingAmount).toBe(37500);
+    expect(goal?.fraction).toBeCloseTo(7500 / 45000, 5);
+  });
+
+  it('allows a withdrawal for a broke week', async () => {
+    const goalId = await db.createGoal({ name: 'Goa', targetAmount: 5000 });
+    await db.contributeToGoal(goalId, 2000);
+    await db.contributeToGoal(goalId, -500);
+
+    expect((await db.getGoalById(goalId))?.savedAmount).toBe(1500);
+  });
+
+  it('marks a fully funded goal complete', async () => {
+    const goalId = await db.createGoal({ name: 'Headphones', targetAmount: 2000 });
+    await db.contributeToGoal(goalId, 2000);
+
+    expect((await db.getGoalById(goalId))?.isComplete).toBe(true);
+  });
+
+  it('hides archived goals', async () => {
+    const goalId = await db.createGoal({ name: 'Old', targetAmount: 1000 });
+    await db.archiveGoal(goalId);
+
+    expect(await db.getActiveGoals()).toHaveLength(0);
+  });
+
+  // Contributions are virtual: no Transaction row, so the budget is not
+  // charged twice for the same rupee.
+  it('does not write a transaction when contributing', async () => {
+    const goalId = await db.createGoal({ name: 'Laptop', targetAmount: 45000 });
+    await db.contributeToGoal(goalId, 5000);
+
+    expect(await db.getAllTransactions()).toHaveLength(0);
+  });
+});
+
+describe('outings', () => {
+  it('rolls up spend and backs out what others still owe', async () => {
+    const outingId = await db.createOuting({ name: 'Goa', startsAt: '2026-09-01T00:00:00.000Z' });
+    const contactId = await db.addContact('Ish');
+
+    const txId = await spend(1200, 'Beach Shack', {
+      occurredAt: '2026-09-02T12:00:00.000Z',
+      outingId,
     });
+    await db.createIOU({ contactId, amount: 400, direction: 'THEY_OWE_ME', transactionId: txId, outingId });
+
+    const outing = await db.getOutingById(outingId);
+    expect(outing?.totalSpent).toBe(1200);
+    expect(outing?.yourShare).toBe(800);
+    expect(outing?.headcount).toBe(2);
   });
 
-  test('getOpenIOUs excludes settled IOUs', async () => {
-    const contactId = await dbService.addContact('Sam');
-    const txId = await dbService.addTransaction(90, 'Groceries', 'DEBIT');
-    await dbService.createIOU(txId, contactId, 30);
+  it('flags going over the outing budget', async () => {
+    const outingId = await db.createOuting({ name: 'Movie', budgetAmount: 500 });
+    await spend(700, 'PVR', { outingId });
 
-    const settled = await dbService.resolveIOUByAmount(30);
-    expect(settled).toBe(true);
-
-    const open = await dbService.getOpenIOUs();
-    expect(open).toHaveLength(0);
+    expect((await db.getOutingById(outingId))?.isOverBudget).toBe(true);
   });
 
-  test('resolveIOUByAmount matches within floating point tolerance', async () => {
-    const contactId = await dbService.addContact('Priya');
-    const txId = await dbService.addTransaction(33.33, 'Dinner', 'DEBIT');
-    await dbService.createIOU(txId, contactId, 11.11);
-
-    // Simulates a repayment credit that's a hair off due to float math.
-    const settled = await dbService.resolveIOUByAmount(11.115);
-    expect(settled).toBe(true);
-
-    const open = await dbService.getOpenIOUs();
-    expect(open).toHaveLength(0);
-  });
-
-  test('resolveIOUByAmount returns false when nothing matches', async () => {
-    const contactId = await dbService.addContact('Jordan');
-    const txId = await dbService.addTransaction(50, 'Concert', 'DEBIT');
-    await dbService.createIOU(txId, contactId, 25);
-
-    const settled = await dbService.resolveIOUByAmount(9999);
-    expect(settled).toBe(false);
-
-    const open = await dbService.getOpenIOUs();
-    expect(open).toHaveLength(1);
-  });
-
-  test('resolveIOUByAmount picks the closest match among multiple open IOUs', async () => {
-    const contactId = await dbService.addContact('Chris');
-    const txId = await dbService.addTransaction(100, 'Trip', 'DEBIT');
-    await dbService.createIOU(txId, contactId, 15);
-    await dbService.createIOU(txId, contactId, 25);
-    await dbService.createIOU(txId, contactId, 35);
-
-    const settled = await dbService.resolveIOUByAmount(24.995);
-    expect(settled).toBe(true);
-
-    const open = await dbService.getOpenIOUs();
-    expect(open.map((i) => i.split_amount).sort()).toEqual([15, 35]);
-  });
-
-  test('addContact / getContacts CRUD', async () => {
-    await dbService.addContact('Ghost Friend', true);
-    await dbService.addContact('Real Friend', false);
-
-    const contacts = await dbService.getContacts();
-    expect(contacts).toHaveLength(2);
-    expect(contacts.find((c) => c.name === 'Ghost Friend')?.is_ghost).toBe(1);
-    expect(contacts.find((c) => c.name === 'Real Friend')?.is_ghost).toBe(0);
-  });
-
-  test('getAllTransactions returns every inserted transaction', async () => {
-    await dbService.addTransaction(5, 'A', 'DEBIT');
-    await dbService.addTransaction(10, 'B', 'CREDIT');
-    await dbService.addTransaction(15, 'C', 'DEBIT');
-
-    const all = await dbService.getAllTransactions();
-    expect(all).toHaveLength(3);
-  });
-
-  test('functions throw a clear error if called before initDatabase', async () => {
-    dbService.__resetDatabaseForTests();
-    await expect(dbService.addTransaction(1, 'X', 'DEBIT')).rejects.toThrow(/not initialized/i);
-  });
-
-  test('addContact persists an optional phone number, defaulting to null', async () => {
-    const withPhone = await dbService.addContact('Rahul', false, '+91 98765 43210');
-    const withoutPhone = await dbService.addContact('Priya');
-
-    const contacts = await dbService.getContacts();
-    expect(contacts.find((c) => c.id === withPhone)?.phone).toBe('+91 98765 43210');
-    expect(contacts.find((c) => c.id === withoutPhone)?.phone).toBeNull();
-  });
-
-  test('getOpenIOUsWithDetails joins contact and merchant info, excluding settled IOUs', async () => {
-    const contactId = await dbService.addContact('Rahul', false, '+911234567890');
-    const txId = await dbService.addTransaction(80, 'Movie Night', 'DEBIT');
-    await dbService.createIOU(txId, contactId, 40);
-
-    const settledContactId = await dbService.addContact('Sam');
-    const settledTxId = await dbService.addTransaction(20, 'Snacks', 'DEBIT');
-    await dbService.createIOU(settledTxId, settledContactId, 20);
-    await dbService.resolveIOUByAmount(20);
-
-    const details = await dbService.getOpenIOUsWithDetails();
-    expect(details).toHaveLength(1);
-    expect(details[0]).toMatchObject({
-      contactId,
-      contactName: 'Rahul',
-      contactPhone: '+911234567890',
-      transactionId: txId,
-      merchant: 'Movie Night',
-      splitAmount: 40,
+  it('suggests untagged spending inside the window', async () => {
+    const outingId = await db.createOuting({
+      name: 'Trip',
+      startsAt: '2026-09-01T00:00:00.000Z',
+      endsAt: '2026-09-05T00:00:00.000Z',
     });
+    await spend(300, 'Inside', { occurredAt: '2026-09-02T10:00:00.000Z' });
+    await spend(300, 'Outside', { occurredAt: '2026-09-20T10:00:00.000Z' });
+
+    const candidates = await db.getCandidateTransactions(outingId);
+    expect(candidates.map((c) => c.merchant)).toEqual(['Inside']);
+  });
+});
+
+describe('capture inbox', () => {
+  it('holds a parse without touching the budget', async () => {
+    await db.recordCapture({
+      rawText: 'Rs. 700 spent at Olive Cafe',
+      source: 'SMS',
+      parsedAmount: 700,
+      parsedMerchant: 'Olive Cafe',
+      parsedDirection: 'DEBIT',
+      confidence: 0.9,
+    });
+
+    expect(await db.getPendingCaptureCount()).toBe(1);
+    expect(await db.getAllTransactions()).toHaveLength(0);
   });
 
-  test('getDebitTotalSince only counts DEBIT transactions at or after the timestamp', async () => {
-    await dbService.addTransaction(100, 'Before', 'DEBIT');
-    const cutoff = new Date(Date.now() + 10).toISOString();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    await dbService.addTransaction(50, 'After', 'DEBIT');
-    await dbService.addTransaction(999, 'After Credit', 'CREDIT');
+  it('refuses a message it has already filed', async () => {
+    const first = await db.recordCapture({ rawText: 'x', source: 'SMS', dedupKey: 'ref-1' });
+    const second = await db.recordCapture({ rawText: 'x', source: 'NOTIFICATION', dedupKey: 'ref-1' });
 
-    const total = await dbService.getDebitTotalSince(cutoff);
-    expect(total).toBe(50);
+    expect(first).not.toBeNull();
+    expect(second).toBeNull();
+    expect(await db.getPendingCaptureCount()).toBe(1);
   });
 
-  test('getOpenIOUTotalSince only counts open IOUs whose transaction is at or after the timestamp', async () => {
-    const contactId = await dbService.addContact('Jordan');
-    const earlyTxId = await dbService.addTransaction(60, 'Early', 'DEBIT');
-    await dbService.createIOU(earlyTxId, contactId, 30);
+  it('categorises a known merchant', async () => {
+    expect(await db.categoriseMerchant('SWIGGY BANGALORE')).toBe('Food');
+    expect(await db.categoriseMerchant('Uber India')).toBe('Transport');
+  });
 
-    const cutoff = new Date(Date.now() + 10).toISOString();
-    await new Promise((resolve) => setTimeout(resolve, 20));
+  it('learns a correction and prefers it afterwards', async () => {
+    await db.learnMerchantRule('Cafe Coffee Day', 'Outing');
+    expect(await db.categoriseMerchant('Cafe Coffee Day')).toBe('Outing');
+  });
 
-    const lateTxId = await dbService.addTransaction(60, 'Late', 'DEBIT');
-    await dbService.createIOU(lateTxId, contactId, 25);
+  it('returns null for a merchant it has never seen', async () => {
+    expect(await db.categoriseMerchant('Xyzzy Traders')).toBeNull();
+  });
+});
 
-    const total = await dbService.getOpenIOUTotalSince(cutoff);
-    expect(total).toBe(25);
+describe('budget periods', () => {
+  it('creates a default period on first run', async () => {
+    const period = await db.ensureBudgetPeriod(9000, new Date('2026-09-09T10:00:00.000Z'));
+
+    expect(period.allowance).toBe(9000);
+    expect(period.daysTotal).toBe(30);
+    expect(period.daysRemaining).toBe(30);
+  });
+
+  it('counts down as the period elapses', async () => {
+    await db.ensureBudgetPeriod(9000, new Date('2026-09-01T10:00:00.000Z'));
+    const later = await db.getCurrentBudgetPeriod(new Date('2026-09-11T10:00:00.000Z'));
+
+    expect(later?.daysElapsed).toBe(10);
+    expect(later?.daysRemaining).toBe(20);
+  });
+
+  it('never reports zero days remaining', async () => {
+    await db.ensureBudgetPeriod(9000, new Date('2026-09-01T00:00:00.000Z'));
+    const past = await db.getCurrentBudgetPeriod(new Date('2026-11-01T00:00:00.000Z'));
+
+    expect(past?.daysRemaining).toBe(1);
+  });
+});
+
+describe('notification log', () => {
+  it('counts sends for rate limiting', async () => {
+    await db.logNotification({ type: 'TXN_PULSE', tier: 'FRESH', title: 'Pinch', body: 'a' });
+    await db.logNotification({ type: 'TXN_PULSE', tier: 'STEADY', title: 'Pinch', body: 'b' });
+
+    const since = new Date(Date.now() - 60000).toISOString();
+    expect(await db.countSince('TXN_PULSE', since)).toBe(2);
+    expect(await db.countSince('OVERSPEND', since)).toBe(0);
+  });
+
+  it('remembers recent bodies so copy is not repeated', async () => {
+    await db.logNotification({ type: 'TXN_PULSE', tier: 'FRESH', title: 'Pinch', body: 'first' });
+    await db.logNotification({ type: 'TXN_PULSE', tier: 'FRESH', title: 'Pinch', body: 'second' });
+
+    expect(await db.getRecentBodies('TXN_PULSE', 5)).toEqual(['second', 'first']);
   });
 });

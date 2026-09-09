@@ -1,0 +1,26 @@
+[
+    {
+        "merged": "com.suhasisnice.pinchcapture.pinch-capture-merged_res-25:/animator/fragment_close_exit.xml",
+        "source": "com.suhasisnice.pinchcapture.pinch-capture-fragment-1.3.6-6:/animator/fragment_close_exit.xml"
+    },
+    {
+        "merged": "com.suhasisnice.pinchcapture.pinch-capture-merged_res-25:/animator/fragment_fade_enter.xml",
+        "source": "com.suhasisnice.pinchcapture.pinch-capture-fragment-1.3.6-6:/animator/fragment_fade_enter.xml"
+    },
+    {
+        "merged": "com.suhasisnice.pinchcapture.pinch-capture-merged_res-25:/animator/fragment_open_exit.xml",
+        "source": "com.suhasisnice.pinchcapture.pinch-capture-fragment-1.3.6-6:/animator/fragment_open_exit.xml"
+    },
+    {
+        "merged": "com.suhasisnice.pinchcapture.pinch-capture-merged_res-25:/animator/fragment_fade_exit.xml",
+        "source": "com.suhasisnice.pinchcapture.pinch-capture-fragment-1.3.6-6:/animator/fragment_fade_exit.xml"
+    },
+    {
+        "merged": "com.suhasisnice.pinchcapture.pinch-capture-merged_res-25:/animator/fragment_close_enter.xml",
+        "source": "com.suhasisnice.pinchcapture.pinch-capture-fragment-1.3.6-6:/animator/fragment_close_enter.xml"
+    },
+    {
+        "merged": "com.suhasisnice.pinchcapture.pinch-capture-merged_res-25:/animator/fragment_open_enter.xml",
+        "source": "com.suhasisnice.pinchcapture.pinch-capture-fragment-1.3.6-6:/animator/fragment_open_enter.xml"
+    }
+]

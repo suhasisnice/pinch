@@ -1,0 +1,44 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      SMS capture. RECEIVE_SMS delivers new messages as they arrive; READ_SMS
+      is only needed for the one-time backfill of recent messages when the user
+      first turns capture on.
+
+      Note: Google Play restricts both permissions to apps that are the
+      device's default SMS handler. This build is intended for sideloading, so
+      that restriction does not apply — but it does rule out Play distribution
+      without either dropping SMS capture or filing a permissions declaration.
+      Notification capture below has no such restriction and covers UPI apps
+      that never send an SMS at all.
+    -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+
+    <application>
+        <receiver
+            android:name=".SmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter android:priority="999">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+          Reads bank and UPI notifications. The user grants this by hand in
+          system settings; there is no runtime permission dialog for it, which
+          is why the module exposes openNotificationListenerSettings().
+        -->
+        <service
+            android:name=".PinchNotificationListener"
+            android:exported="true"
+            android:label="Pinch"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+    </application>
+
+</manifest>
