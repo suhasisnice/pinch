@@ -2,10 +2,42 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Switch, Text, View } from 'react-native';
 import * as db from '../db/dbService';
 import { setMonthlyAllowance } from '../settings/settingsStore';
+import { getSpendingHistorySummary, SpendingHistorySummary } from '../services/budgetService';
 import { formatMoney } from '../utils/format';
 import { palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Field, Sheet } from './ui';
 import Icon from './Icon';
+
+const HISTORY_WINDOW_DAYS = 90;
+
+/** "Food (62%) and Transport (25%)" from the largest one or two categories. */
+function describeCategories(categories: SpendingHistorySummary['topCategories']): string {
+  return categories
+    .slice(0, 2)
+    .map((c) => `${c.category} (${Math.round(c.fraction * 100)}%)`)
+    .join(' and ');
+}
+
+/**
+ * One factual line about where the last few months actually went.
+ *
+ * Never mentions the total, on purpose — a rupee figure here reads as a
+ * suggestion for the new number, which is exactly the trap this sheet
+ * exists to avoid. Shape (subscriptions, biggest categories) is useful
+ * context; the size of the old habit is not.
+ */
+function historyLine(summary: SpendingHistorySummary): string {
+  const parts: string[] = [];
+  if (summary.recurringCount > 0) {
+    const count = summary.recurringCount;
+    parts.push(
+      `${formatMoney(summary.recurringMonthly)}/mo already going to ${count} subscription${count === 1 ? '' : 's'}`
+    );
+  }
+  const categories = describeCategories(summary.topCategories);
+  if (categories) parts.push(`most of it was ${categories}`);
+  return parts.join(' · ');
+}
 
 /**
  * Starts the budget over from what is actually in the account today.
@@ -32,6 +64,7 @@ export default function FreshStartSheet({
   const [days, setDays] = useState('30');
   const [forgetHistory, setForgetHistory] = useState(false);
   const [counts, setCounts] = useState<{ transactions: number } | null>(null);
+  const [history, setHistory] = useState<SpendingHistorySummary | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -39,7 +72,11 @@ export default function FreshStartSheet({
     setBalance('');
     setDays('30');
     setForgetHistory(false);
+    setHistory(null);
     db.countData().then(setCounts).catch(() => setCounts(null));
+    getSpendingHistorySummary(new Date(), HISTORY_WINDOW_DAYS)
+      .then(setHistory)
+      .catch(() => setHistory(null));
   }, [visible]);
 
   const parsedBalance = Number(balance.replace(/[^\d.]/g, ''));
@@ -77,6 +114,16 @@ export default function FreshStartSheet({
           Forget what happened before. Tell Pinch what you have now, and today becomes day one.
         </Text>
       </View>
+
+      {history ? (
+        <View style={styles.historyNote}>
+          <Icon name="insights" size={14} color={palette.textMuted} />
+          <Text style={styles.historyText}>
+            Last {HISTORY_WINDOW_DAYS} days, for context: {historyLine(history)}. Doesn't set your
+            number — that part's still yours.
+          </Text>
+        </View>
+      ) : null}
 
       <Field
         label="How much do you have right now?"
@@ -133,6 +180,9 @@ export default function FreshStartSheet({
 const styles = StyleSheet.create({
   intro: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   introText: { ...typography.body, color: palette.textSecondary, flex: 1, lineHeight: 20 },
+
+  historyNote: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  historyText: { ...typography.caption, color: palette.textMuted, flex: 1, lineHeight: 17 },
 
   preview: {
     alignItems: 'center',
