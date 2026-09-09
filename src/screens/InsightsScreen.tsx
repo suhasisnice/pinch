@@ -30,6 +30,11 @@ import Icon from '../components/Icon';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+function formatDayMonth(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`;
+}
+
 const MONTH_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
@@ -161,7 +166,20 @@ export default function InsightsScreen() {
 
   return (
     <Screen refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.textSecondary} />}>
-      <ScreenTitle title="Insights" subtitle="Where it actually goes" />
+      <ScreenTitle
+        title="Insights"
+        subtitle={`Budget period runs ${formatDayMonth(snapshot.periodStart)} – ${formatDayMonth(
+          snapshot.periodEnd
+        )}`}
+      />
+
+      <Card style={styles.windowNote}>
+        <Icon name="info" size={15} color={palette.textSecondary} />
+        <Text style={styles.windowNoteText}>
+          Cards below measure different windows, and each one says which. Only "This period"
+          matches the number on Today — the rest look further back on purpose.
+        </Text>
+      </Card>
 
       {personality ? (
         <Card style={styles.personality}>
@@ -172,7 +190,9 @@ export default function InsightsScreen() {
       ) : null}
 
       <Card>
-        <CardTitle>This week vs last</CardTitle>
+        <CardTitle right={<Text style={styles.windowLabel}>last 7 days</Text>}>
+          This week vs last
+        </CardTitle>
         <View style={styles.weekRow}>
           <View style={styles.weekStat}>
             <Text style={styles.weekLabel}>This week</Text>
@@ -252,7 +272,9 @@ export default function InsightsScreen() {
       ) : null}
 
       <Card>
-        <CardTitle>By category</CardTitle>
+        <CardTitle right={<Text style={styles.windowLabel}>this period</Text>}>
+          By category
+        </CardTitle>
         {slices.length === 0 ? (
           <Text style={styles.muted}>No categorised spending yet.</Text>
         ) : (
@@ -271,7 +293,9 @@ export default function InsightsScreen() {
       </Card>
 
       <Card>
-        <CardTitle>Habits</CardTitle>
+        <CardTitle right={<Text style={styles.windowLabel}>this period</Text>}>
+          Habits
+        </CardTitle>
         <Row
           title="Small spends"
           subtitle={`${habits.microTransactionCount} under ₹100`}
@@ -293,7 +317,9 @@ export default function InsightsScreen() {
 
       {borne && borne.paid > 0 ? (
         <Card>
-          <CardTitle>What you actually bore</CardTitle>
+          <CardTitle right={<Text style={styles.windowLabel}>this period</Text>}>
+            What you actually bore
+          </CardTitle>
           <Text style={styles.cardIntro}>
             What left your account is not what the period cost you — the rest was other
             people's share of bills you happened to pay.
@@ -400,6 +426,7 @@ export default function InsightsScreen() {
             })}
           </View>
 
+          <Text style={styles.windowLabel}>calendar months, 1st to 1st</Text>
           <Text style={styles.historyNote}>
             {monthly.changeVsTypical === null
               ? 'Building a baseline — one more month and this compares itself.'
@@ -418,7 +445,9 @@ export default function InsightsScreen() {
 
       {shifts.length > 0 ? (
         <Card>
-          <CardTitle>What changed</CardTitle>
+          <CardTitle right={<Text style={styles.windowLabel}>calendar month</Text>}>
+            What changed
+          </CardTitle>
           <Text style={styles.cardIntro}>
             This month against your typical one, biggest movers first.
           </Text>
@@ -538,6 +567,10 @@ const styles = StyleSheet.create({
   sliceAmount: { ...typography.bodyBold, color: palette.textPrimary, width: 76, textAlign: 'right' },
 
   habitValue: { ...typography.bodyBold, color: palette.textPrimary },
+
+  windowNote: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
+  windowNoteText: { ...typography.caption, color: palette.textSecondary, flex: 1, lineHeight: 17 },
+  windowLabel: { ...typography.micro, color: palette.textMuted },
 
   cardIntro: {
     ...typography.caption,

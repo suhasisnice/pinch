@@ -14,6 +14,7 @@ import AddExpenseSheet from '../components/AddExpenseSheet';
 import SplitModal from '../components/SplitModal';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
 import FreshStartSheet from '../components/FreshStartSheet';
+import BudgetBreakdownSheet from '../components/BudgetBreakdownSheet';
 import Icon from '../components/Icon';
 
 export default function TodayScreen() {
@@ -25,6 +26,7 @@ export default function TodayScreen() {
   const [splitFor, setSplitFor] = useState<TransactionRow | null>(null);
   const [detailFor, setDetailFor] = useState<TransactionRow | null>(null);
   const [freshVisible, setFreshVisible] = useState(false);
+  const [breakdownVisible, setBreakdownVisible] = useState(false);
   const [testAmount, setTestAmount] = useState('');
 
   const load = useCallback(async () => {
@@ -77,7 +79,9 @@ export default function TodayScreen() {
         <View style={styles.flex}>
           <ScreenTitle
             title="Today"
-            subtitle={`${snapshot.daysRemaining} days left · ${formatMoney(snapshot.budget.spendablePool)} to go`}
+            subtitle={`${formatDayMonth(snapshot.periodStart)} – ${formatDayMonth(
+              snapshot.periodEnd
+            )} · ${snapshot.daysRemaining} days left`}
           />
         </View>
         <Text style={styles.gear} onPress={() => navigation.navigate('Settings')} suppressHighlighting>
@@ -122,7 +126,7 @@ export default function TodayScreen() {
       ) : null}
 
       {/* The number. Everything else on this screen explains it. */}
-      <Card style={styles.hero}>
+      <Card style={styles.hero} onPress={() => setBreakdownVisible(true)}>
         <Text style={[styles.heroLabel, { color: accent }]}>Safe to spend today</Text>
         <Text style={[styles.heroAmount, { color: accent }]} numberOfLines={1} adjustsFontSizeToFit>
           {formatMoney(Math.max(0, snapshot.today.remainingToday))}
@@ -133,6 +137,7 @@ export default function TodayScreen() {
         <View style={styles.heroBar}>
           <ProgressBar fraction={snapshot.today.usedFraction} color={accent} height={10} />
         </View>
+        <Text style={styles.heroExplain}>tap to see how this is worked out</Text>
         {snapshot.today.state === 'OVER' ? (
           <Text style={[styles.heroNote, { color: palette.danger }]}>
             {formatMoney(-snapshot.today.remainingToday)} over. tomorrow resets.
@@ -236,6 +241,12 @@ export default function TodayScreen() {
         }}
       />
 
+      <BudgetBreakdownSheet
+        visible={breakdownVisible}
+        snapshot={snapshot}
+        onClose={() => setBreakdownVisible(false)}
+      />
+
       <FreshStartSheet
         visible={freshVisible}
         onClose={() => setFreshVisible(false)}
@@ -266,6 +277,13 @@ export default function TodayScreen() {
       />
     </Screen>
   );
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function formatDayMonth(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
 function verdictColor(severity: string): string {
@@ -304,6 +322,7 @@ const styles = StyleSheet.create({
   heroSub: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
   heroBar: { width: '100%', marginTop: spacing.md },
   heroNote: { ...typography.caption, color: palette.textSecondary },
+  heroExplain: { ...typography.micro, color: palette.textMuted, marginTop: spacing.sm },
   streakRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: spacing.sm },
 
   verdict: { marginTop: spacing.sm, gap: 4 },
