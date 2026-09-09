@@ -8,6 +8,7 @@ import { categoryColor, palette, spacing, typography } from '../theme/theme';
 import { Card, Chip, Dot, EmptyState, Field, Loading, Row, Screen, ScreenTitle } from '../components/ui';
 import Icon from '../components/Icon';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
+import MarkAsLoanSheet from '../components/MarkAsLoanSheet';
 import SplitModal from '../components/SplitModal';
 
 type Filter = 'ALL' | 'OUT' | 'IN' | 'IGNORED';
@@ -33,6 +34,7 @@ export default function TransactionsScreen() {
   const [query, setQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [detailFor, setDetailFor] = useState<TransactionRow | null>(null);
+  const [loanFor, setLoanFor] = useState<TransactionRow | null>(null);
   const [splitFor, setSplitFor] = useState<TransactionRow | null>(null);
 
   const load = useCallback(async () => {
@@ -171,6 +173,19 @@ export default function TransactionsScreen() {
         onSplit={(tx) => {
           setDetailFor(null);
           setSplitFor(tx);
+        }}
+        onMarkLoan={(tx) => {
+          setDetailFor(null);
+          setLoanFor(tx);
+        }}
+      />
+
+      <MarkAsLoanSheet
+        transaction={loanFor}
+        onClose={() => setLoanFor(null)}
+        onSaved={() => {
+          setLoanFor(null);
+          load();
         }}
       />
 

@@ -170,3 +170,100 @@ export function detectTransfers(
 
   return pairs;
 }
+
+// ---------------------------------------------------------------------------
+// Round trips: money sent to a person and returned by that same person.
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalises a counterparty for comparison.
+ *
+ * Bank messages name the same person differently on the way out and the way
+ * back — "RAHUL KUMAR" against "Rahul", a VPA against a display name — so a
+ * literal string match finds almost nothing.
+ */
+function normaliseName(name: string): string[] {
+  return name
+    .toLowerCase()
+    .replace(/@[a-z0-9.\-]+$/, '') // strip the VPA handle
+    .replace(/[^a-z\s]/g, ' ')
+    .split(/\s+/)
+    .filter((token) => token.length > 1);
+}
+
+/** True when two counterparties are plausibly the same person. */
+export function sameCounterparty(a: string, b: string): boolean {
+  const left = normaliseName(a);
+  const right = normaliseName(b);
+  if (left.length === 0 || right.length === 0) return false;
+
+  // Any shared name token is enough: "Rahul Kumar" and "Rahul" are the same
+  // person, and two different friends sharing a first name *and* an exact
+  // amount within minutes is a coincidence worth accepting.
+  return left.some((token) => right.includes(token));
+}
+
+/** How long after sending money a return still counts as the same event. */
+export const ROUND_TRIP_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * Finds money sent to someone and returned by that same someone.
+ *
+ * This is the case the self-transfer detector deliberately refuses: it treats
+ * a credit from a person as evidence *against* a transfer, so that a friend
+ * paying their share of dinner is never mistaken for moving your own money.
+ *
+ * But the discriminator is right there in the counterparty. A bill split has
+ * a merchant on the way out and a person on the way back — you paid the
+ * restaurant, Rahul paid you. A bounced payment has the same person on both
+ * legs. When the name matches on both sides, the amount is identical, and it
+ * came back within the hour, nothing was bought and nothing was owed.
+ */
+export function detectRoundTrips(
+  transactions: TransferSide[],
+  windowMs = ROUND_TRIP_WINDOW_MS
+): TransferPair[] {
+  const debits = transactions.filter((t) => t.direction === 'DEBIT');
+  const credits = transactions.filter((t) => t.direction === 'CREDIT');
+
+  const candidates: TransferPair[] = [];
+
+  for (const debit of debits) {
+    for (const credit of credits) {
+      if (Math.abs(debit.amount - credit.amount) > 0.01) continue;
+
+      const gap = Date.parse(credit.occurredAt) - Date.parse(debit.occurredAt);
+      if (gap < 0 || gap > windowMs) continue;
+      if (!sameCounterparty(debit.merchant, credit.merchant)) continue;
+
+      // A leg already settled against a debt is a repayment being recorded
+      // properly; cancelling it would erase the debt it just cleared.
+      if (debit.linkedToPerson || credit.linkedToPerson) continue;
+      if (credit.kind === 'SETTLE_IN' || debit.kind === 'SETTLE_OUT') continue;
+
+      const minutes = gap / 60000;
+      candidates.push({
+        debit,
+        credit,
+        confidence: minutes <= 10 ? 0.95 : 0.85,
+        reasons: [
+          `same person both ways (${debit.merchant})`,
+          minutes < 1 ? 'returned immediately' : `returned after ${Math.round(minutes)} min`,
+        ],
+      });
+    }
+  }
+
+  candidates.sort((a, b) => b.confidence - a.confidence);
+
+  const claimed = new Set<number>();
+  const pairs: TransferPair[] = [];
+  for (const candidate of candidates) {
+    if (claimed.has(candidate.debit.id) || claimed.has(candidate.credit.id)) continue;
+    claimed.add(candidate.debit.id);
+    claimed.add(candidate.credit.id);
+    pairs.push(candidate);
+  }
+
+  return pairs;
+}

@@ -1,5 +1,10 @@
 import * as db from '../db/dbService';
-import { TransferPair, TransferSide, detectTransfers } from '../math/transfers';
+import {
+  TransferPair,
+  TransferSide,
+  detectRoundTrips,
+  detectTransfers,
+} from '../math/transfers';
 import { parseMessage } from './parserService';
 
 /**
@@ -50,7 +55,17 @@ export async function findTransfers(): Promise<TransferScanResult> {
     .filter((row) => row.excluded_at === null && row.transfer_pair_id === null)
     .map((row) => toSide(row, linked));
 
-  const pairs = detectTransfers(candidates);
+  // Two different questions, so two passes. Self-transfers move your own
+  // money between accounts; round trips are money that went to a person and
+  // came straight back. A leg claimed by the first pass is not offered to the
+  // second.
+  const transfers = detectTransfers(candidates);
+  const claimed = new Set(transfers.flatMap((p) => [p.debit.id, p.credit.id]));
+  const roundTrips = detectRoundTrips(
+    candidates.filter((row) => !claimed.has(row.id))
+  );
+
+  const pairs = [...transfers, ...roundTrips];
 
   return {
     pairs,
