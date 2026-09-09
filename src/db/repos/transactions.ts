@@ -548,3 +548,24 @@ export async function hasCardTransactions(): Promise<boolean> {
   );
   return (row?.n ?? 0) > 0;
 }
+
+/**
+ * Top-N distinct merchants by how often they appear, for quick-add suggestions.
+ *
+ * Grouped case-insensitively so "Swiggy" and "swiggy" are one chip, and the
+ * excluded/transfer rows are left out — a merchant you only ever saw in a
+ * self-transfer is not somewhere you spend.
+ */
+export async function getRecentMerchants(limit = 5): Promise<string[]> {
+  const db = getAdapter();
+  const rows = await db.getAllAsync<{ merchant: string }>(
+    `SELECT merchant FROM Transactions
+     WHERE merchant IS NOT NULL AND merchant != '' AND merchant != 'Unknown'
+       AND excluded_at IS NULL AND transfer_pair_id IS NULL
+     GROUP BY lower(merchant)
+     ORDER BY COUNT(*) DESC
+     LIMIT ?;`,
+    [limit]
+  );
+  return rows.map((r) => r.merchant);
+}
