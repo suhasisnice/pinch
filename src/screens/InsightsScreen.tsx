@@ -13,6 +13,7 @@ import {
   WeekdayPattern,
   averageDailySpend,
   categoryBreakdown,
+  typicalDay,
   categoryShifts,
   compareMonths,
   compareWeeks,
@@ -124,6 +125,7 @@ export default function InsightsScreen() {
   const comparison = compareWeeks(weeks.thisWeek, weeks.lastWeek);
   const personality = spendingPersonality(slices);
   const avgBurn = averageDailySpend(daily);
+  const typical = typicalDay(daily);
   const brokeIn = daysUntilBroke(snapshot.budget.spendablePool, avgBurn);
   const maxDay = Math.max(...daily.map((d) => d.total), 1);
   const monthly: MonthComparison = compareMonths(months);
@@ -199,7 +201,13 @@ export default function InsightsScreen() {
           library — 30 bars does not justify the bundle cost. */}
       {daily.length > 0 ? (
       <Card>
-        <CardTitle right={<Text style={styles.avgLabel}>avg {formatMoneyCompact(avgBurn)}</Text>}>
+        <CardTitle
+          right={
+            <Text style={styles.avgLabel}>
+              typical {formatMoneyCompact(typical.typical)}
+            </Text>
+          }
+        >
           Daily spend
         </CardTitle>
         <View style={styles.chart}>
@@ -224,6 +232,13 @@ export default function InsightsScreen() {
         <Text style={styles.chartNote}>
           Amber bars went over your {formatMoney(snapshot.budget.dailyLimit)} daily limit.
         </Text>
+        {typical.skewed ? (
+          <Text style={styles.chartNote}>
+            A few big days pull the average up to {formatMoney(typical.mean)}. Most days you
+            spend around {formatMoney(typical.typical)}, which is the number worth planning
+            against.
+          </Text>
+        ) : null}
       </Card>
       ) : null}
 

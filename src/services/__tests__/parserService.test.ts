@@ -2,7 +2,7 @@ import { parseCreditSms, parseDebitSms } from '../parserService';
 
 describe('parseDebitSms', () => {
   it('parses the canonical "spent at ... via UPI" format', () => {
-    expect(parseDebitSms('Rs. 700 spent at Olive Cafe via UPI')).toEqual({
+    expect(parseDebitSms('Rs. 700 spent at Olive Cafe via UPI from A/c XX1234')).toEqual({
       amount: 700,
       merchant: 'Olive Cafe',
     });
@@ -10,7 +10,7 @@ describe('parseDebitSms', () => {
 
   it('handles comma-separated thousands and decimals', () => {
     expect(
-      parseDebitSms('INR 1,250.50 spent on Amazon Pay via UPI')
+      parseDebitSms('INR 1,250.50 spent on Amazon Pay via UPI from A/c XX1234')
     ).toEqual({ amount: 1250.5, merchant: 'Amazon Pay' });
   });
 
@@ -23,7 +23,7 @@ describe('parseDebitSms', () => {
   });
 
   it('is case-insensitive', () => {
-    expect(parseDebitSms('rs.99 spent at chai point via upi')).toEqual({
+    expect(parseDebitSms('rs.99 spent at chai point via upi from a/c xx1234')).toEqual({
       amount: 99,
       merchant: 'Chai Point',
     });
@@ -31,13 +31,13 @@ describe('parseDebitSms', () => {
 
   it('handles merchant names with punctuation', () => {
     expect(
-      parseDebitSms("Rs 250 spent at McDonald's via UPI")
+      parseDebitSms("Rs 250 spent at McDonald's via UPI from A/c XX1234")
     ).toEqual({ amount: 250, merchant: "McDonald's" });
   });
 
   it('handles large comma-formatted amounts without decimals', () => {
     expect(
-      parseDebitSms('Rs 10,000 spent at Reliance Digital via UPI')
+      parseDebitSms('Rs 10,000 spent at Reliance Digital via UPI from A/c XX1234')
     ).toEqual({ amount: 10000, merchant: 'Reliance Digital' });
   });
 
@@ -54,7 +54,7 @@ describe('parseDebitSms', () => {
 
 describe('parseCreditSms', () => {
   it('parses the canonical "Received Rs. X from Y via UPI" format', () => {
-    expect(parseCreditSms('Received Rs. 175 from Rahul via UPI')).toEqual({
+    expect(parseCreditSms('Received Rs. 175 from Rahul via UPI in A/c XX1234')).toEqual({
       amount: 175,
       sender: 'Rahul',
     });
@@ -63,19 +63,19 @@ describe('parseCreditSms', () => {
   it('handles the "credited ... from" bank format', () => {
     expect(
       parseCreditSms(
-        'Rs 2,000 credited to your account from Priya Sharma via UPI'
+        'Rs 2,000 credited to your account XX1234 from Priya Sharma via UPI'
       )
     ).toEqual({ amount: 2000, sender: 'Priya Sharma' });
   });
 
   it('handles multi-word sender names ending in a period', () => {
     expect(
-      parseCreditSms('Received Rs. 500 from Arjun Mehta.')
+      parseCreditSms('Received Rs. 500 from Arjun Mehta. Credited to A/c XX1234')
     ).toEqual({ amount: 500, sender: 'Arjun Mehta' });
   });
 
   it('is case-insensitive', () => {
-    expect(parseCreditSms('received rs.50 from asha via upi')).toEqual({
+    expect(parseCreditSms('received rs.50 from asha via upi in a/c xx1234')).toEqual({
       amount: 50,
       sender: 'Asha',
     });
@@ -92,6 +92,6 @@ describe('parseCreditSms', () => {
   });
 
   it('does not mistake a debit SMS for a credit SMS', () => {
-    expect(parseCreditSms('Rs. 700 spent at Olive Cafe via UPI')).toBeNull();
+    expect(parseCreditSms('Rs. 700 spent at Olive Cafe via UPI from A/c XX1234')).toBeNull();
   });
 });

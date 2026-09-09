@@ -2,7 +2,7 @@
   "expo": {
     "name": "Pinch",
     "slug": "pinch",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "assetBundlePatterns": [
@@ -13,16 +13,21 @@
     },
     "android": {
       "package": "com.suhasisnice.pinch",
-      "versionCode": 4,
+      "versionCode": 5,
       "permissions": [
         "RECEIVE_SMS",
         "READ_SMS",
         "READ_CONTACTS",
         "POST_NOTIFICATIONS",
         "VIBRATE"
-      ]
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0E0E10"
+      }
     },
     "splash": {
+      "image": "./assets/splash-icon.png",
       "backgroundColor": "#0E0E10",
       "resizeMode": "contain"
     },
@@ -31,11 +36,16 @@
       [
         "expo-notifications",
         {
-          "color": "#39FF14"
+          "color": "#39FF14",
+          "icon": "./assets/notification-icon.png"
         }
       ],
       "expo-font",
       "./plugins/withPackageQueries"
-    ]
+    ],
+    "icon": "./assets/icon.png",
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
   }
 }

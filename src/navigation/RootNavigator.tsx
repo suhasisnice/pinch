@@ -10,6 +10,7 @@ import SquadScreen from '../screens/SquadScreen';
 import InsightsScreen from '../screens/InsightsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import ReviewScreen from '../screens/ReviewScreen';
+import TransactionsScreen from '../screens/TransactionsScreen';
 import Icon, { IconName } from '../components/Icon';
 import { palette, typography } from '../theme/theme';
 
@@ -17,6 +18,7 @@ export type RootStackParamList = {
   Tabs: undefined;
   Settings: undefined;
   Review: undefined;
+  Transactions: undefined;
 };
 
 export type TabParamList = {
@@ -100,6 +102,11 @@ export default function RootNavigator() {
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
         <Stack.Screen name="Review" component={ReviewScreen} options={{ title: 'Review' }} />
+        <Stack.Screen
+          name="Transactions"
+          component={TransactionsScreen}
+          options={{ title: 'Transactions' }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

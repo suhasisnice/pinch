@@ -15,11 +15,20 @@ param(
   [string]$DeviceName = "Take the L",
   [string]$StorageName = "Internal storage",
   [string]$FolderName = "Download",
-  [string]$TargetName = "Pinch.apk",
+  [string]$TargetName = "",
   [int]$TimeoutSeconds = 300
 )
 
 $ErrorActionPreference = "Stop"
+
+# Versioned filename by default. MTP silently ignores both a delete and the
+# overwrite flag, so copying onto an existing name leaves the *old* file in
+# place while reporting success — the worst possible failure for something
+# whose entire job is delivering a new build.
+if ([string]::IsNullOrWhiteSpace($TargetName)) {
+  $appJson = Get-Content (Join-Path (Split-Path -Parent $PSScriptRoot) "app.json") -Raw | ConvertFrom-Json
+  $TargetName = "Pinch-$($appJson.expo.version).apk"
+}
 
 function Warn($message) {
   Write-Host "[copy-to-phone] $message"

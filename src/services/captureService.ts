@@ -52,7 +52,9 @@ export async function ingestMessage(
   // different-looking sender.
   if (await db.isBlocked(message.sender, message.body)) return 'SKIPPED';
 
-  const parsed = parseMessage(message.body, message.source === 'SMS' ? message.sender : null);
+  const parsed = parseMessage(message.body, message.source === 'SMS' ? message.sender : null, {
+    source: message.source,
+  });
   if (!parsed) return 'SKIPPED';
 
   const occurredAt = new Date(message.receivedAt || Date.now());

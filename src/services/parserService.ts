@@ -174,9 +174,24 @@ const REFERENCE_PATTERNS: RegExp[] = [
   /\b(\d{12})\b/, // bare UPI RRN
 ];
 
+/**
+ * References to *your* account or card.
+ *
+ * This is the single most useful signal in the whole parser. A bank telling
+ * you money moved always says which account it moved from — "A/c XX1234",
+ * "Card ending 5678". A voucher blast never does, because it is not about an
+ * account at all. Requiring one is a structural test rather than a keyword
+ * guess, which is why it holds up against spam nobody has seen yet.
+ */
 const ACCOUNT_PATTERNS: RegExp[] = [
-  /\b(?:a\/c|acct|account|card)\s*(?:no\.?\s*)?[Xx*]+\s*(\d{3,6})\b/i,
-  /\b[Xx*]{2,}(\d{3,6})\b/,
+  // A/c XX1234, account no. xxxx1234, card no *1234
+  /\b(?:a\/c|a\/c no|ac|acct|account|card)\s*(?:no\.?|number)?\s*[Xx*]+\s*(\d{3,6})\b/i,
+  // Card ending 1234 / ending with 1234
+  /\b(?:ending|endg)\s*(?:with|in)?\s*(\d{3,6})\b/i,
+  // A/c 1234, linked to 1234 — digits directly after an account word
+  /\b(?:a\/c|acct|account)\s*(?:no\.?|number)?\s*(\d{4,6})\b/i,
+  // Bare masked number: XXXX1234, ****1234
+  /\b[Xx*]{2,}\s?(\d{3,6})\b/,
 ];
 
 // Noise that survives merchant capture and should be trimmed off the end.
@@ -244,7 +259,22 @@ export function isRejected(text: string): boolean {
  * to the review inbox — so that an unfamiliar bank format shows up as
  * something the user can confirm rather than vanishing silently.
  */
-export function parseMessage(text: string, sender?: string | null): ParsedMessage | null {
+export interface ParseOptions {
+  /**
+   * Where the message came from. SMS is held to the stricter standard: it
+   * must name an account or card, because anyone can send an SMS. A
+   * notification has already been filtered by package — it came from GPay or
+   * a bank's own app — so the sender is trustworthy even when the wording is
+   * casual and names no account.
+   */
+  source?: 'SMS' | 'NOTIFICATION';
+}
+
+export function parseMessage(
+  text: string,
+  sender?: string | null,
+  options: ParseOptions = {}
+): ParsedMessage | null {
   if (!text || text.trim().length < 6) return null;
   if (isRejected(text)) return null;
 
@@ -266,12 +296,20 @@ export function parseMessage(text: string, sender?: string | null): ParsedMessag
   const reference = extractFirst(text, REFERENCE_PATTERNS);
   const accountHint = extractFirst(text, ACCOUNT_PATTERNS);
 
+  // The structural gate. An SMS that quotes an amount and a verb but never
+  // says which account it came out of is describing someone else's money —
+  // an offer, a reward, a game's balance. Rejected outright rather than sent
+  // to review, because a review inbox full of coupons is its own kind of
+  // broken. Notifications skip this: their package allowlist already did the
+  // equivalent job.
+  if (options.source !== 'NOTIFICATION' && !accountHint) return null;
+
   // Confidence is additive over independent corroborating signals.
-  let confidence = 0.35;
+  let confidence = 0.3;
   if (isDebit !== isCredit) confidence += 0.2; // unambiguous direction
   if (counterparty && counterparty.length >= 3) confidence += 0.2;
   if (reference) confidence += 0.15;
-  if (accountHint) confidence += 0.1;
+  if (accountHint) confidence += 0.2;
   if (isLikelyBankSender(sender)) confidence += 0.15;
   if (/₹|rs\.?|inr/i.test(text)) confidence += 0.05;
 
