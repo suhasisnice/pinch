@@ -1,11 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AppState, AppStateStatus, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { Alert, AppState, AppStateStatus, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { initDatabase } from './src/db/dbService';
 import RootNavigator from './src/navigation/RootNavigator';
 import { configureNotifications } from './src/notifications/notificationService';
 import { ingestBatch, ingestPending } from './src/services/captureService';
-import { addMessageListener } from './modules/pinch-capture';
+import { runFirstRunSetup } from './src/services/onboardingService';
+import {
+  addMessageListener,
+  isCaptureAvailable,
+  openNotificationListenerSettings,
+} from './modules/pinch-capture';
 import { Button } from './src/components/ui';
 import { palette, spacing, typography } from './src/theme/theme';
 
@@ -29,6 +34,26 @@ export default function App() {
         // Pick up anything the native listeners buffered while the app was
         // closed. Never allowed to block startup.
         ingestPending().catch(() => undefined);
+
+        // First launch asks for SMS, contacts and notifications and imports
+        // recent texts, so the app has something in it before the user has
+        // done anything. Deliberately after the UI is up: permission dialogs
+        // on a blank loading screen have no context.
+        runFirstRunSetup()
+          .then((result) => {
+            if (cancelled || !result.ran) return;
+            if (isCaptureAvailable && result.sms && !result.listener) {
+              Alert.alert(
+                'One more thing',
+                'UPI apps like GPay and PhonePe often never send an SMS. Give Pinch notification access and it catches those too.',
+                [
+                  { text: 'Later', style: 'cancel' },
+                  { text: 'Open settings', onPress: openNotificationListenerSettings },
+                ]
+              );
+            }
+          })
+          .catch(() => undefined);
       } catch (error) {
         // Previously this had no catch at all, so a failed database open left
         // the app on the loading text forever with nothing to act on.

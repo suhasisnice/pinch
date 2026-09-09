@@ -15,6 +15,14 @@
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
 
+    <!--
+      Contacts. Used only to let the user pick a friend when splitting a bill,
+      so the WhatsApp nudge has a real number to open and names stay consistent
+      instead of being retyped (and misspelled) each time. Nothing is uploaded
+      and no contact is stored until the user actually picks one.
+    -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
     <application>
         <receiver
             android:name=".SmsReceiver"

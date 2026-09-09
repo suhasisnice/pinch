@@ -41,7 +41,10 @@ function labelFor(message: CapturedMessage): string {
  * shakier one is filed in the review inbox instead. The threshold matters:
  * silently logging a wrong transaction costs far more trust than asking.
  */
-export async function ingestMessage(message: CapturedMessage): Promise<'POSTED' | 'QUEUED' | 'SKIPPED'> {
+export async function ingestMessage(
+  message: CapturedMessage,
+  options: { silent?: boolean } = {}
+): Promise<'POSTED' | 'QUEUED' | 'SKIPPED'> {
   const parsed = parseMessage(message.body, message.source === 'SMS' ? message.sender : null);
   if (!parsed) return 'SKIPPED';
 
@@ -83,6 +86,7 @@ export async function ingestMessage(message: CapturedMessage): Promise<'POSTED' 
     rawText: message.body,
     externalRef: parsed.reference,
     dedupKey,
+    silent: options.silent,
   });
 
   return posted ? 'POSTED' : 'SKIPPED';
@@ -101,6 +105,12 @@ export interface PostTransactionInput {
   outingId?: number | null;
   /** Set for a credit that repays a specific debt rather than being income. */
   settlesContactId?: number | null;
+  /**
+   * Suppresses nudges. Used by the historical backfill: importing a month of
+   * old texts should fill in the ledger, not fire a burst of notifications
+   * about spending that happened weeks ago.
+   */
+  silent?: boolean;
 }
 
 /**
@@ -161,7 +171,14 @@ export async function postTransaction(input: PostTransactionInput): Promise<numb
   }
 
   if (kind === 'SPEND') {
-    await runSpendSideEffects(transactionId, input.amount, input.merchant, category, outingId);
+    await runSpendSideEffects(
+      transactionId,
+      input.amount,
+      input.merchant,
+      category,
+      outingId,
+      input.silent === true
+    );
   }
 
   return transactionId;
@@ -173,7 +190,8 @@ async function runSpendSideEffects(
   amount: number,
   merchant: string,
   category: string | null,
-  outingId: number | null
+  outingId: number | null,
+  silent: boolean
 ): Promise<void> {
   const goalsCrossed: Array<{ name: string; emoji: string; percent: number; remaining: number }> = [];
 
@@ -202,6 +220,8 @@ async function runSpendSideEffects(
   } catch {
     // Round-up is a bonus; never let it stop a transaction being recorded.
   }
+
+  if (silent) return;
 
   try {
     const settings = await getNotificationSettings();
@@ -258,7 +278,10 @@ export async function ingestPending(): Promise<IngestResult> {
   return ingestBatch(messages);
 }
 
-export async function ingestBatch(messages: CapturedMessage[]): Promise<IngestResult> {
+export async function ingestBatch(
+  messages: CapturedMessage[],
+  options: { silent?: boolean } = {}
+): Promise<IngestResult> {
   const result: IngestResult = { processed: 0, posted: 0, queuedForReview: 0, skipped: 0 };
 
   // Oldest first, so dedup windows and outing tagging see events in order.
@@ -267,7 +290,7 @@ export async function ingestBatch(messages: CapturedMessage[]): Promise<IngestRe
   for (const message of ordered) {
     result.processed += 1;
     try {
-      const outcome = await ingestMessage(message);
+      const outcome = await ingestMessage(message, options);
       if (outcome === 'POSTED') result.posted += 1;
       else if (outcome === 'QUEUED') result.queuedForReview += 1;
       else result.skipped += 1;
@@ -282,7 +305,9 @@ export async function ingestBatch(messages: CapturedMessage[]): Promise<IngestRe
 /** One-time backfill when the user first grants SMS access. */
 export async function backfillFromInbox(limit = 100): Promise<IngestResult> {
   const messages = await readRecentSms(limit);
-  return ingestBatch(messages);
+  // Silent: these are old messages, and nudging about last week's coffee the
+  // moment the app is installed is noise, not a warning.
+  return ingestBatch(messages, { silent: true });
 }
 
 /** Promotes a reviewed capture into a real transaction. */

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.provider.ContactsContract
 import android.provider.Settings
 import android.provider.Telephony
 import androidx.core.content.ContextCompat
@@ -102,6 +103,57 @@ class PinchCaptureModule : Module() {
             }
 
             promise.resolve(results.toListOfMaps())
+        }
+
+        // -- Contacts --------------------------------------------------------
+
+        Function("hasContactsPermission") {
+            hasPermission(Manifest.permission.READ_CONTACTS)
+        }
+
+        /**
+         * Phone contacts, for picking who a bill is split with.
+         *
+         * Deliberately read-only and on demand: nothing is copied into the
+         * app's database until the user actually picks someone. Numbers are
+         * returned so the WhatsApp nudge has something to open, and duplicates
+         * (the same person stored on SIM and account) are collapsed by name.
+         */
+        AsyncFunction("readContacts") { promise: Promise ->
+            if (!hasPermission(Manifest.permission.READ_CONTACTS)) {
+                promise.resolve(emptyList<Map<String, Any?>>())
+                return@AsyncFunction
+            }
+
+            val byName = LinkedHashMap<String, Map<String, Any?>>()
+            val projection = arrayOf(
+                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                ContactsContract.CommonDataKinds.Phone.NUMBER
+            )
+
+            context.contentResolver.query(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                projection,
+                null,
+                null,
+                "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} COLLATE NOCASE ASC"
+            )?.use { cursor ->
+                val nameIndex =
+                    cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                val numberIndex =
+                    cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+
+                while (cursor.moveToNext()) {
+                    val name = cursor.getString(nameIndex)?.trim().orEmpty()
+                    if (name.isEmpty()) continue
+                    val number = cursor.getString(numberIndex)?.trim()
+                    byName.getOrPut(name.lowercase()) {
+                        mapOf("name" to name, "phone" to number)
+                    }
+                }
+            }
+
+            promise.resolve(byName.values.toList())
         }
 
         // -- Notification listener -------------------------------------------

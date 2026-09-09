@@ -9,6 +9,8 @@ import { receivableConfidence } from '../math/budget';
 import { formatMoney, formatRelative, daysBetween } from '../utils/format';
 import { balanceColor, palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Card, CardTitle, EmptyState, Field, Loading, Row, Screen, ScreenTitle, Sheet } from '../components/ui';
+import ContactPicker from '../components/ContactPicker';
+import { isCaptureAvailable } from '../../modules/pinch-capture';
 
 export default function SquadScreen() {
   const [balances, setBalances] = useState<ContactBalance[] | null>(null);
@@ -266,10 +268,12 @@ function AddDebtSheet({
   onSaved: () => void;
 }) {
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [direction, setDirection] = useState<'THEY_OWE_ME' | 'I_OWE_THEM'>('THEY_OWE_ME');
   const [saving, setSaving] = useState(false);
+  const [pickerVisible, setPickerVisible] = useState(false);
 
   const parsed = Number(amount.replace(/[^\d.]/g, ''));
   const canSave = name.trim().length > 0 && Number.isFinite(parsed) && parsed > 0;
@@ -278,7 +282,7 @@ function AddDebtSheet({
     if (!canSave || saving) return;
     setSaving(true);
     try {
-      const contactId = await db.findOrCreateContactByName(name.trim());
+      const contactId = await db.findOrCreateContact({ name: name.trim(), phone });
       // No transactionId: when a friend fronts the bill, no money left your
       // account, so there is nothing of yours to attach the debt to.
       await db.createIOU({
@@ -288,6 +292,7 @@ function AddDebtSheet({
         reason: reason.trim() || null,
       });
       setName('');
+      setPhone(null);
       setAmount('');
       setReason('');
       onSaved();
@@ -312,10 +317,37 @@ function AddDebtSheet({
           style={styles.flex}
         />
       </View>
-      <Field label="Who" value={name} onChangeText={setName} placeholder="Rahul" />
+      <Field
+        label="Who"
+        value={name}
+        onChangeText={(next) => {
+          setName(next);
+          // Typing over a picked contact drops the number that came with it.
+          setPhone(null);
+        }}
+        placeholder="Rahul"
+        hint={phone ? `Will nudge on ${phone}` : undefined}
+      />
+      {isCaptureAvailable ? (
+        <Button
+          label="Pick from contacts"
+          variant="secondary"
+          onPress={() => setPickerVisible(true)}
+        />
+      ) : null}
       <Field label="How much" value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="0" />
       <Field label="What for" value={reason} onChangeText={setReason} placeholder="Dinner at Toit" />
       <Button label={saving ? 'Saving…' : 'Add'} onPress={save} disabled={!canSave || saving} />
+
+      <ContactPicker
+        visible={pickerVisible}
+        onClose={() => setPickerVisible(false)}
+        onPick={(contact) => {
+          setName(contact.name);
+          setPhone(contact.phone);
+          setPickerVisible(false);
+        }}
+      />
     </Sheet>
   );
 }
