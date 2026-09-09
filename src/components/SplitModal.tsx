@@ -56,7 +56,10 @@ export default function SplitModal({
 }) {
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
-  const [mode, setMode] = useState<SplitMode>('SHARES');
+  // Equal is right most of the time — someone paying for the table is
+  // usually splitting evenly, not weighing who ordered what. Shares and
+  // Exact stay one tap away for the times that isn't true.
+  const [mode, setMode] = useState<SplitMode>('EQUAL');
   const [newName, setNewName] = useState('');
   const [saving, setSaving] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -65,7 +68,7 @@ export default function SplitModal({
   useEffect(() => {
     if (!visible) return;
     setNewName('');
-    setMode('SHARES');
+    setMode('EQUAL');
     Promise.all([db.getContacts(), db.getSplitHistory()]).then(([rows, history]) => {
       const ranked = rankContactsBySplitHistory(history).map((entry) => entry.contactId);
       setRanking(ranked);
@@ -126,6 +129,12 @@ export default function SplitModal({
     setParticipants((prev) =>
       prev.map((p) => (p.contactId === contactId ? { ...p, included: !p.included } : p))
     );
+  }
+
+  /** One tap for "same as usual" — the common case of eating with the same people every time. */
+  function addEveryoneUsual() {
+    const ids = new Set(quickAdd.map((p) => p.contactId));
+    setParticipants((prev) => prev.map((p) => (ids.has(p.contactId) ? { ...p, included: true } : p)));
   }
 
   function bumpRatio(contactId: number) {
@@ -255,7 +264,14 @@ export default function SplitModal({
 
       {quickAdd.length > 0 ? (
         <View style={styles.quickBlock}>
-          <Text style={styles.quickLabel}>Usually with</Text>
+          <View style={styles.quickHeader}>
+            <Text style={styles.quickLabel}>Usually with</Text>
+            {quickAdd.length > 1 ? (
+              <Text style={styles.quickAddAll} onPress={addEveryoneUsual} suppressHighlighting>
+                Add everyone
+              </Text>
+            ) : null}
+          </View>
           <View style={styles.quickRow}>
             {quickAdd.map((participant) => (
               <Chip
@@ -308,6 +324,16 @@ export default function SplitModal({
         <Text style={styles.hint}>Add the people who were there to split this with them.</Text>
       ) : (
         <View style={styles.list}>
+          {included.length > 0 ? (
+            // Pinned first and not toggleable — you paid, so you are always
+            // in this. Shown in the same list as everyone else rather than
+            // only in the summary below, so the whole split reads as one
+            // picture: who owes what, you included, at a glance.
+            <View style={[styles.person, styles.personYou]}>
+              <Text style={[styles.personName, styles.personYouName]}>You</Text>
+              <Text style={styles.personShare}>{formatMoney(yourShare)}</Text>
+            </View>
+          ) : null}
           {participants.map((participant) => {
             const share = result?.shares.find((s) => s.contactId === participant.contactId);
             return (
@@ -435,12 +461,14 @@ const styles = StyleSheet.create({
   hint: { ...typography.caption, color: palette.textMuted, textAlign: 'center' },
 
   quickBlock: { gap: spacing.sm },
+  quickHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   quickLabel: {
     ...typography.micro,
     color: palette.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
+  quickAddAll: { ...typography.micro, color: palette.neonGreen },
   quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 
   list: { gap: spacing.sm },
@@ -456,6 +484,8 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
   },
   personOn: { borderColor: palette.neonGreen },
+  personYou: { backgroundColor: palette.surfaceHigh, borderColor: 'transparent' },
+  personYouName: { color: palette.textPrimary },
   personLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   personName: { ...typography.bodyBold, color: palette.textSecondary },
   personRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
