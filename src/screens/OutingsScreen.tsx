@@ -454,7 +454,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.border,
   },
-  iconChoiceOn: { borderColor: palette.violet, backgroundColor: 'rgba(167,139,250,0.14)' },
+  iconChoiceOn: { borderColor: palette.violet, backgroundColor: layer(palette.violet, 0.14) },
   note: { ...typography.caption, color: palette.textMuted, lineHeight: 17 },
 
   detailTotals: { flexDirection: 'row', gap: spacing.sm },

@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { BudgetSnapshot } from '../services/budgetService';
 import { formatMoney } from '../utils/format';
-import { palette, radii, spacing, typography } from '../theme/theme';
+import { layer, palette, radii, spacing, typography } from '../theme/theme';
 import { Sheet } from './ui';
 import Icon from './Icon';
 
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
   noteBox: {
     flexDirection: 'row',
     gap: spacing.sm,
-    backgroundColor: 'rgba(255,191,0,0.10)',
+    backgroundColor: layer(palette.warningAmber, 0.1),
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: palette.warningAmber,

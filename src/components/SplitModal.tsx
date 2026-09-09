@@ -17,7 +17,7 @@ import { Button, Chip, Field, Sheet } from './ui';
 import Icon from './Icon';
 import ContactPicker from './ContactPicker';
 import { isCaptureAvailable } from '../../modules/pinch-capture';
-import { palette, radii, spacing, typography } from '../theme/theme';
+import { layer, palette, radii, spacing, typography } from '../theme/theme';
 
 interface Participant {
   contactId: number;
@@ -505,7 +505,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: 'rgba(255,191,0,0.12)',
+    backgroundColor: layer(palette.warningAmber, 0.12),
     borderWidth: 1,
     borderColor: palette.warningAmber,
     borderRadius: radii.md,

@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
   // Amber stays: this is a status, and the colour is the fastest read on
   // the card. It is the container that becomes tonal, not the meaning.
   troubleBanner: {
-    backgroundColor: 'rgba(255,191,0,0.12)',
+    backgroundColor: layer(palette.warningAmber, 0.12),
     gap: spacing.sm,
   },
   troubleHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
