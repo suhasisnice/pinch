@@ -4,4 +4,13 @@ module.exports = {
   testEnvironment: 'node',
   testMatch: ['**/tests/**/*.test.ts', '**/src/**/__tests__/**/*.test.ts'],
   collectCoverageFrom: ['src/**/*.ts'],
+  moduleNameMapper: {
+    // The real module imports expo-modules-core, which ships ESM-only JS
+    // that fails to parse under Jest regardless of whether a test ever
+    // exercises a native call. See modules/pinch-capture/__mocks__/index.ts.
+    '(\\.\\./)+modules/pinch-capture$': '<rootDir>/modules/pinch-capture/__mocks__/index.ts',
+    // Same problem, one level further down the import chain: services that
+    // touch notifications pull this in too. See tests/mocks/expo-notifications.ts.
+    '^expo-notifications$': '<rootDir>/tests/mocks/expo-notifications.ts',
+  },
 };
