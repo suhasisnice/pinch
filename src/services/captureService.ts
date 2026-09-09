@@ -97,6 +97,9 @@ export async function ingestMessage(
     rawText: message.body,
     externalRef: parsed.reference,
     dedupKey,
+    // A reversal undoes a purchase; booking it as income would inflate the
+    // allowance instead of cancelling the spending it reverses.
+    kind: parsed.isRefund ? 'REFUND' : undefined,
     silent: options.silent,
   });
 
@@ -116,6 +119,8 @@ export interface PostTransactionInput {
   outingId?: number | null;
   /** Set for a credit that repays a specific debt rather than being income. */
   settlesContactId?: number | null;
+  /** Overrides the derived classification. Used for refunds and reversals. */
+  kind?: 'SPEND' | 'INCOME' | 'SETTLE_IN' | 'SETTLE_OUT' | 'REFUND';
   /**
    * Suppresses nudges. Used by the historical backfill: importing a month of
    * old texts should fill in the ledger, not fire a burst of notifications
@@ -137,8 +142,10 @@ export async function postTransaction(input: PostTransactionInput): Promise<numb
   const category =
     input.category ?? (input.direction === 'DEBIT' ? await db.categoriseMerchant(input.merchant) : null);
 
-  let kind: 'SPEND' | 'INCOME' | 'SETTLE_IN' | 'SETTLE_OUT';
-  if (input.direction === 'DEBIT') {
+  let kind: 'SPEND' | 'INCOME' | 'SETTLE_IN' | 'SETTLE_OUT' | 'REFUND';
+  if (input.kind) {
+    kind = input.kind;
+  } else if (input.direction === 'DEBIT') {
     kind = input.settlesContactId ? 'SETTLE_OUT' : 'SPEND';
   } else {
     kind = input.settlesContactId ? 'SETTLE_IN' : 'INCOME';

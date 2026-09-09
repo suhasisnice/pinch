@@ -2,6 +2,7 @@ import * as db from '../db/dbService';
 import { TransactionRow } from '../db/types';
 import { parseMessage } from './parserService';
 import { markDetectedTransfers } from './transferService';
+import { classifyStoredTransactions } from './classificationService';
 
 const REVALIDATION_KEY = 'pinch.revalidatedRules';
 
@@ -12,8 +13,10 @@ const REVALIDATION_KEY = 'pinch.revalidatedRules';
  * 2 — an SMS must name the account the money moved through.
  * 3 — money moved between the user's own accounts is detected and set aside.
  * 4 — money sent to a person and returned by them is cancelled out.
+ * 5 — wallet top-ups, card bills and cash withdrawals are recognised, and
+ *     reversals are booked against spending instead of as income.
  */
-export const PARSER_RULES_VERSION = 4;
+export const PARSER_RULES_VERSION = 5;
 
 export interface RevalidationResult {
   /** Transactions examined: captured, and still carrying their original text. */
@@ -26,6 +29,10 @@ export interface RevalidationResult {
   transfersFound: number;
   /** Spending those transfers were wrongly adding to the total. */
   transferSpend: number;
+  /** Payments that moved money rather than spending it. */
+  reclassified: number;
+  /** Spending those payments were wrongly adding to the total. */
+  reclassifiedSpend: number;
 }
 
 /**
@@ -49,6 +56,8 @@ export async function findStaleCaptures(): Promise<RevalidationResult> {
     rejectedSpend: 0,
     transfersFound: 0,
     transferSpend: 0,
+    reclassified: 0,
+    reclassifiedSpend: 0,
   };
 
   for (const row of all) {
@@ -87,6 +96,12 @@ export async function revalidateHistory(): Promise<RevalidationResult> {
   result.transfersFound = transfers.pairs.length;
   result.transferSpend = transfers.removedFromSpending;
 
+  // Last, so a wallet top-up already claimed as one leg of a transfer is not
+  // counted twice in what the user is told.
+  const classified = await classifyStoredTransactions();
+  result.reclassified = classified.applied.length;
+  result.reclassifiedSpend = classified.removedFromSpending;
+
   return result;
 }
 
@@ -107,5 +122,7 @@ export async function revalidateIfRulesChanged(): Promise<RevalidationResult | n
   const result = await revalidateHistory();
   await AsyncStorage.setItem(REVALIDATION_KEY, String(PARSER_RULES_VERSION));
 
-  return result.rejected.length > 0 || result.transfersFound > 0 ? result : null;
+  const changed =
+    result.rejected.length > 0 || result.transfersFound > 0 || result.reclassified > 0;
+  return changed ? result : null;
 }

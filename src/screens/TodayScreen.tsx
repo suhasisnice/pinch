@@ -16,12 +16,14 @@ import TransactionDetailSheet from '../components/TransactionDetailSheet';
 import MarkAsLoanSheet from '../components/MarkAsLoanSheet';
 import FreshStartSheet from '../components/FreshStartSheet';
 import BudgetBreakdownSheet from '../components/BudgetBreakdownSheet';
+import BalanceCard from '../components/BalanceCard';
 import Icon from '../components/Icon';
 
 export default function TodayScreen() {
   const navigation = useNavigation<any>();
   const [snapshot, setSnapshot] = useState<BudgetSnapshot | null>(null);
   const [today, setToday] = useState<TransactionRow[]>([]);
+  const [balance, setBalance] = useState<Awaited<ReturnType<typeof db.getBalanceState>> | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [addVisible, setAddVisible] = useState(false);
   const [addThenSplit, setAddThenSplit] = useState(false);
@@ -45,6 +47,7 @@ export default function TodayScreen() {
     end.setDate(end.getDate() + 1);
 
     setSnapshot(next);
+    setBalance(await db.getBalanceState());
     setToday(await db.getTransactionsBetween(start.toISOString(), end.toISOString()));
   }, []);
 
@@ -127,6 +130,8 @@ export default function TodayScreen() {
           <Text style={styles.reviewChevron}>›</Text>
         </Card>
       ) : null}
+
+      {balance ? <BalanceCard state={balance} onChanged={load} /> : null}
 
       {/* The number. Everything else on this screen explains it. */}
       <Card style={styles.hero} onPress={() => setBreakdownVisible(true)}>

@@ -11,6 +11,12 @@ export interface ParsedMessage {
   accountHint: string | null;
   /** 0..1. Below ACCEPT_THRESHOLD the parse goes to the review inbox. */
   confidence: number;
+  /**
+   * Money coming back rather than arriving: a reversed payment, a cancelled
+   * order, a merchant refund. Booked against spending instead of as income,
+   * because it undoes a purchase rather than funding a new one.
+   */
+  isRefund: boolean;
 }
 
 /**
@@ -118,6 +124,24 @@ const REJECT_PATTERNS: RegExp[] = [
   /\bcall\s+(?:us|now)\b/i,
   /\btoll[\s-]?free\b/i,
 ];
+
+/**
+ * Money that has already come back.
+ *
+ * These messages are full of words the reject list exists to catch —
+ * "reversed", "failed", "cancelled" — because they describe a payment that
+ * did not stick. But the money genuinely returned, and dropping the message
+ * leaves the original debit standing as spending that was undone. Requiring
+ * *past-tense arrival* separates them from "your payment failed, a refund
+ * will be issued", where nothing has moved yet.
+ */
+const REVERSAL_MARKERS = /\b(?:reversed|refund(?:ed)?|cancell?ed|failed|returned)\b/i;
+const ARRIVED_MARKERS =
+  /\b(?:credited\s+back|credited\s+to\s+your|has\s+been\s+credited|refunded\s+to\s+your|reversed\s+and\s+credited|money\s+is\s+back)\b/i;
+
+export function isReversalCredit(text: string): boolean {
+  return REVERSAL_MARKERS.test(text) && ARRIVED_MARKERS.test(text);
+}
 
 /** Sender IDs are shaped like VM-HDFCBK, AD-ICICIB, JD-SBIINB. */
 const BANK_SENDER = /^[A-Z]{2}-?([A-Z]{4,8})(?:-?[A-Z])?$/i;
@@ -276,7 +300,11 @@ export function parseMessage(
   options: ParseOptions = {}
 ): ParsedMessage | null {
   if (!text || text.trim().length < 6) return null;
-  if (isRejected(text)) return null;
+
+  // Checked before the reject list, which would otherwise throw away the very
+  // message that undoes a debit already on the books.
+  const refund = isReversalCredit(text);
+  if (!refund && isRejected(text)) return null;
 
   const amountRaw =
     text.match(new RegExp(AMOUNT, 'i'))?.[1] ?? text.match(new RegExp(AMOUNT_TRAILING, 'i'))?.[1];
@@ -285,11 +313,13 @@ export function parseMessage(
 
   const isDebit = DEBIT_VERBS.test(text);
   const isCredit = CREDIT_VERBS.test(text);
-  if (!isDebit && !isCredit) return null;
+  if (!refund && !isDebit && !isCredit) return null;
 
   // "debited ... ; MERCHANT credited" names both verbs. The account is the
   // subject of the sentence, so a debit reading wins.
-  const direction: ParsedDirection = isDebit ? 'DEBIT' : 'CREDIT';
+  // A reversal is money arriving, whatever verbs the sentence also contains —
+  // "Rs 250 debited ... has been reversed" names a debit and is a credit.
+  const direction: ParsedDirection = refund ? 'CREDIT' : isDebit ? 'DEBIT' : 'CREDIT';
 
   const rawName = extractFirst(text, MERCHANT_PATTERNS);
   const counterparty = rawName ? prettify(cleanName(rawName)) : null;
@@ -306,7 +336,8 @@ export function parseMessage(
 
   // Confidence is additive over independent corroborating signals.
   let confidence = 0.3;
-  if (isDebit !== isCredit) confidence += 0.2; // unambiguous direction
+  if (refund) confidence += 0.2; // an explicit reversal is unambiguous
+  else if (isDebit !== isCredit) confidence += 0.2; // unambiguous direction
   if (counterparty && counterparty.length >= 3) confidence += 0.2;
   if (reference) confidence += 0.15;
   if (accountHint) confidence += 0.2;
@@ -320,6 +351,7 @@ export function parseMessage(
     reference,
     accountHint,
     confidence: Math.min(1, Number(confidence.toFixed(2))),
+    isRefund: refund,
   };
 }
 

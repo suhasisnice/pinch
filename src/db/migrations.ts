@@ -311,12 +311,62 @@ const V5_TRANSFERS: Migration = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// v6 — single transactions that are not spending.
+//
+// v5 covered money that moves in a *pair* of legs. This covers the ones that
+// arrive alone: loading a wallet, paying a credit card bill. The money really
+// did leave the account, so it cannot be rejected as junk, but it was not
+// spent on anything — it changed hands between two things the user owns.
+//
+// A reason rather than a flag, because the right treatment differs: a wallet
+// top-up should vanish from spending entirely, while a cash withdrawal is
+// still spending and only wants a better category.
+// ---------------------------------------------------------------------------
+const V6_NON_SPEND: Migration = {
+  version: 6,
+  name: 'non_spend_reason',
+  statements: [
+    `ALTER TABLE Transactions ADD COLUMN non_spend_reason TEXT;`,
+    `CREATE INDEX IF NOT EXISTS idx_txn_non_spend ON Transactions(non_spend_reason);`,
+  ],
+};
+
+// ---------------------------------------------------------------------------
+// v7 — what the bank actually says.
+//
+// Everything else in this database is inferred from messages, which means it
+// drifts: a cash payment sends no SMS, a bank format goes unparsed, a
+// notification is missed while permissions are off. A balance the user types
+// in is ground truth, and the gap between it and the running total is the
+// only honest measure of how much the app is missing.
+//
+// Stored as a history rather than a single value, so the drift between two
+// snapshots can be compared against what was captured in between.
+// ---------------------------------------------------------------------------
+const V7_BALANCE: Migration = {
+  version: 7,
+  name: 'balance_snapshots',
+  statements: [
+    `CREATE TABLE IF NOT EXISTS BalanceSnapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      amount REAL NOT NULL,
+      recorded_at TEXT NOT NULL,
+      note TEXT,
+      created_at TEXT NOT NULL
+    );`,
+    `CREATE INDEX IF NOT EXISTS idx_balance_time ON BalanceSnapshots(recorded_at);`,
+  ],
+};
+
 export const MIGRATIONS: Migration[] = [
   V1_INITIAL,
   V2_CONTACT_PHONE,
   V3_CORE_MODEL,
   V4_BLOCKLIST,
   V5_TRANSFERS,
+  V6_NON_SPEND,
+  V7_BALANCE,
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
