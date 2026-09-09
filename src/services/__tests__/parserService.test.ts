@@ -25,7 +25,7 @@ describe('parseDebitSms', () => {
   it('is case-insensitive', () => {
     expect(parseDebitSms('rs.99 spent at chai point via upi')).toEqual({
       amount: 99,
-      merchant: 'chai point',
+      merchant: 'Chai Point',
     });
   });
 
@@ -77,7 +77,7 @@ describe('parseCreditSms', () => {
   it('is case-insensitive', () => {
     expect(parseCreditSms('received rs.50 from asha via upi')).toEqual({
       amount: 50,
-      sender: 'asha',
+      sender: 'Asha',
     });
   });
 

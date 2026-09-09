@@ -3,3 +3,11 @@ dist/
 .expo/
 *.db
 coverage/
+
+# Native projects are generated from app.json by `npm run native:prebuild`
+# (Expo CNG). Do not commit them, or app.json changes silently stop applying.
+/android/
+/ios/
+
+# Local scratch (screenshots, logs)
+errors/

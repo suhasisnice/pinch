@@ -1,47 +1,84 @@
 import { DbAdapter } from './types';
+import { runMigrations } from './migrations';
 
-// Exact table structures per the Phase 1 contract. Phase 2 code relies on
-// these names and columns — do not rename.
-export const SCHEMA_STATEMENTS: string[] = [
-  `CREATE TABLE IF NOT EXISTS Transactions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    amount REAL NOT NULL,
-    merchant TEXT NOT NULL,
-    timestamp TEXT NOT NULL,
-    type TEXT NOT NULL CHECK (type IN ('DEBIT', 'CREDIT'))
-  );`,
-  `CREATE TABLE IF NOT EXISTS Contacts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    is_ghost INTEGER NOT NULL DEFAULT 0
-  );`,
-  `CREATE TABLE IF NOT EXISTS IOUs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    transaction_id INTEGER NOT NULL REFERENCES Transactions(id),
-    contact_id INTEGER NOT NULL REFERENCES Contacts(id),
-    split_amount REAL NOT NULL,
-    is_settled INTEGER NOT NULL DEFAULT 0
-  );`,
-];
-
-export async function initSchema(db: DbAdapter): Promise<void> {
-  for (const statement of SCHEMA_STATEMENTS) {
-    await db.execAsync(statement);
-  }
-  await ensureContactsPhoneColumn(db);
-}
+export { MIGRATIONS, LATEST_VERSION, runMigrations } from './migrations';
 
 /**
- * Additive migration: Contacts didn't originally have a phone number (the
- * Phase 1 contract locked id/name/is_ghost). The Nudge feature needs one to
- * deep-link WhatsApp, so add it as a nullable column. Existing DBs created
- * before this migration get it retrofitted; the ALTER throws "duplicate
- * column name" on DBs that already have it, which we swallow.
+ * Brings the database up to the latest schema version.
+ *
+ * Structure is defined entirely by the ordered migration list in
+ * migrations.ts — a fresh install replays every migration from zero and lands
+ * on exactly the same shape an upgraded install reaches, so there is only one
+ * schema definition to keep correct.
  */
-async function ensureContactsPhoneColumn(db: DbAdapter): Promise<void> {
-  try {
-    await db.execAsync(`ALTER TABLE Contacts ADD COLUMN phone TEXT;`);
-  } catch {
-    // Column already exists.
-  }
+export async function initSchema(db: DbAdapter): Promise<void> {
+  await runMigrations(db);
 }
+
+/** Spend categories. `null` on a transaction means "not yet categorised". */
+export const CATEGORIES = [
+  'Food',
+  'Outing',
+  'Transport',
+  'Shopping',
+  'Subscriptions',
+  'Academics',
+  'Health',
+  'Other',
+] as const;
+
+export type Category = (typeof CATEGORIES)[number];
+
+/**
+ * Seed merchant -> category rules. Deliberately skewed to what actually shows
+ * up on an Indian student's statement. Users can override any of these, and a
+ * correction upserts into MerchantRules so the fix sticks.
+ */
+export const DEFAULT_MERCHANT_RULES: ReadonlyArray<{ pattern: string; category: Category }> = [
+  { pattern: 'swiggy', category: 'Food' },
+  { pattern: 'zomato', category: 'Food' },
+  { pattern: 'zepto', category: 'Food' },
+  { pattern: 'blinkit', category: 'Food' },
+  { pattern: 'instamart', category: 'Food' },
+  { pattern: 'dominos', category: 'Food' },
+  { pattern: 'mcdonald', category: 'Food' },
+  { pattern: 'starbucks', category: 'Food' },
+  { pattern: 'cafe', category: 'Food' },
+  { pattern: 'canteen', category: 'Food' },
+  { pattern: 'mess', category: 'Food' },
+  { pattern: 'uber', category: 'Transport' },
+  { pattern: 'ola', category: 'Transport' },
+  { pattern: 'rapido', category: 'Transport' },
+  { pattern: 'irctc', category: 'Transport' },
+  { pattern: 'redbus', category: 'Transport' },
+  { pattern: 'metro', category: 'Transport' },
+  { pattern: 'petrol', category: 'Transport' },
+  { pattern: 'amazon', category: 'Shopping' },
+  { pattern: 'flipkart', category: 'Shopping' },
+  { pattern: 'myntra', category: 'Shopping' },
+  { pattern: 'ajio', category: 'Shopping' },
+  { pattern: 'decathlon', category: 'Shopping' },
+  { pattern: 'netflix', category: 'Subscriptions' },
+  { pattern: 'spotify', category: 'Subscriptions' },
+  { pattern: 'prime', category: 'Subscriptions' },
+  { pattern: 'hotstar', category: 'Subscriptions' },
+  { pattern: 'youtube', category: 'Subscriptions' },
+  { pattern: 'jio', category: 'Subscriptions' },
+  { pattern: 'airtel', category: 'Subscriptions' },
+  { pattern: 'bookmyshow', category: 'Outing' },
+  { pattern: 'pvr', category: 'Outing' },
+  { pattern: 'inox', category: 'Outing' },
+  { pattern: 'cinepolis', category: 'Outing' },
+  { pattern: 'bar', category: 'Outing' },
+  { pattern: 'brewery', category: 'Outing' },
+  { pattern: 'pharmacy', category: 'Health' },
+  { pattern: 'apollo', category: 'Health' },
+  { pattern: 'pharmeasy', category: 'Health' },
+  { pattern: 'hospital', category: 'Health' },
+  { pattern: 'medical', category: 'Health' },
+  { pattern: 'book', category: 'Academics' },
+  { pattern: 'stationery', category: 'Academics' },
+  { pattern: 'xerox', category: 'Academics' },
+  { pattern: 'udemy', category: 'Academics' },
+  { pattern: 'coursera', category: 'Academics' },
+];

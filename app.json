@@ -2,13 +2,35 @@
   "expo": {
     "name": "Pinch",
     "slug": "pinch",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true
     },
-    "android": {}
+    "android": {
+      "package": "com.suhasisnice.pinch",
+      "versionCode": 2,
+      "permissions": [
+        "RECEIVE_SMS",
+        "READ_SMS",
+        "POST_NOTIFICATIONS",
+        "VIBRATE"
+      ]
+    },
+    "splash": {
+      "backgroundColor": "#0E0E10",
+      "resizeMode": "contain"
+    },
+    "plugins": [
+      "expo-splash-screen",
+      [
+        "expo-notifications",
+        {
+          "color": "#39FF14"
+        }
+      ]
+    ]
   }
 }

@@ -1,0 +1,26 @@
+[
+    {
+        "merged": "com.suhasisnice.pinchcapture.pinch-capture-merged_res-25:/drawable-anydpi-v21/ic_call_decline_low.xml",
+        "source": "com.suhasisnice.pinchcapture.pinch-capture-core-1.12.0-12:/drawable-anydpi-v21/ic_call_decline_low.xml"
+    },
+    {
+        "merged": "com.suhasisnice.pinchcapture.pinch-capture-merged_res-25:/drawable-anydpi-v21/ic_call_answer_video_low.xml",
+        "source": "com.suhasisnice.pinchcapture.pinch-capture-core-1.12.0-12:/drawable-anydpi-v21/ic_call_answer_video_low.xml"
+    },
+    {
+        "merged": "com.suhasisnice.pinchcapture.pinch-capture-merged_res-25:/drawable-anydpi-v21/ic_call_answer_video.xml",
+        "source": "com.suhasisnice.pinchcapture.pinch-capture-core-1.12.0-12:/drawable-anydpi-v21/ic_call_answer_video.xml"
+    },
+    {
+        "merged": "com.suhasisnice.pinchcapture.pinch-capture-merged_res-25:/drawable-anydpi-v21/ic_call_answer.xml",
+        "source": "com.suhasisnice.pinchcapture.pinch-capture-core-1.12.0-12:/drawable-anydpi-v21/ic_call_answer.xml"
+    },
+    {
+        "merged": "com.suhasisnice.pinchcapture.pinch-capture-merged_res-25:/drawable-anydpi-v21/ic_call_decline.xml",
+        "source": "com.suhasisnice.pinchcapture.pinch-capture-core-1.12.0-12:/drawable-anydpi-v21/ic_call_decline.xml"
+    },
+    {
+        "merged": "com.suhasisnice.pinchcapture.pinch-capture-merged_res-25:/drawable-anydpi-v21/ic_call_answer_low.xml",
+        "source": "com.suhasisnice.pinchcapture.pinch-capture-core-1.12.0-12:/drawable-anydpi-v21/ic_call_answer_low.xml"
+    }
+]
