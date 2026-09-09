@@ -293,7 +293,31 @@ const V4_BLOCKLIST: Migration = {
   ],
 };
 
-export const MIGRATIONS: Migration[] = [V1_INITIAL, V2_CONTACT_PHONE, V3_CORE_MODEL, V4_BLOCKLIST];
+// ---------------------------------------------------------------------------
+// v5 — money moved between the user's own accounts.
+//
+// Stored as a link to the other leg rather than a new `kind`, for two
+// reasons. Changing the kind CHECK constraint would mean rebuilding the whole
+// Transactions table, and the pairing is the useful part: knowing a debit is
+// a transfer is much less helpful than knowing which credit it landed in.
+// Nulling the column undoes the classification.
+// ---------------------------------------------------------------------------
+const V5_TRANSFERS: Migration = {
+  version: 5,
+  name: 'self_transfers',
+  statements: [
+    `ALTER TABLE Transactions ADD COLUMN transfer_pair_id INTEGER;`,
+    `CREATE INDEX IF NOT EXISTS idx_txn_transfer ON Transactions(transfer_pair_id);`,
+  ],
+};
+
+export const MIGRATIONS: Migration[] = [
+  V1_INITIAL,
+  V2_CONTACT_PHONE,
+  V3_CORE_MODEL,
+  V4_BLOCKLIST,
+  V5_TRANSFERS,
+];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
 

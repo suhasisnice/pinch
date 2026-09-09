@@ -27,6 +27,7 @@ import { formatMoney } from '../utils/format';
 import { palette, spacing, typography } from '../theme/theme';
 import { Button, Card, CardTitle, Field, Loading, Row, Screen, ScreenTitle } from '../components/ui';
 import Icon from '../components/Icon';
+import FreshStartSheet from '../components/FreshStartSheet';
 
 export default function SettingsScreen() {
   const navigation = useNavigation<any>();
@@ -40,6 +41,13 @@ export default function SettingsScreen() {
   const [blocked, setBlocked] = useState<Array<{ pattern: string; reason: string | null }>>([]);
   const [excluded, setExcluded] = useState<TransactionRow[]>([]);
   const [counts, setCounts] = useState<Awaited<ReturnType<typeof db.countData>> | null>(null);
+  // Set the moment either budget field is touched, and cleared only by a
+  // successful save. Without it, load() runs on every focus and overwrites
+  // whatever is half-typed with the value already stored — so a new figure
+  // was reverted before the save button could read it, and every save wrote
+  // the old number back. That is what "the budget is stuck" looked like.
+  const [budgetEdited, setBudgetEdited] = useState(false);
+  const [freshVisible, setFreshVisible] = useState(false);
 
   const refreshPermissions = useCallback(() => {
     setSmsGranted(hasSmsPermission());
@@ -58,12 +66,13 @@ export default function SettingsScreen() {
     setBlocked(blockRows);
     setExcluded(excludedRows);
     setCounts(await db.countData());
-    // Show the period actually in force, not the last thing typed into the box.
-    setAllowance(String(period?.allowance ?? amount));
-    setPeriodDays(String(period?.daysTotal ?? 30));
+    if (!budgetEdited) {
+      setAllowance(String(period?.allowance ?? amount));
+      setPeriodDays(String(period?.daysTotal ?? 30));
+    }
     setNotifications(notificationSettings);
     refreshPermissions();
-  }, [refreshPermissions]);
+  }, [refreshPermissions, budgetEdited]);
 
   useFocusEffect(
     useCallback(() => {
@@ -97,6 +106,7 @@ export default function SettingsScreen() {
     try {
       await setMonthlyAllowance(parsed);
       const period = await db.startBudgetPeriod({ allowance: parsed, days });
+      setBudgetEdited(false);
       Alert.alert(
         'Budget updated',
         `${formatMoney(parsed)} over ${days} days — about ${formatMoney(
@@ -170,6 +180,7 @@ export default function SettingsScreen() {
         await db.startBudgetPeriod({ allowance: parsed, days });
       }
 
+      setBudgetEdited(false);
       await load();
       Alert.alert(
         'Starting fresh',
@@ -231,14 +242,20 @@ export default function SettingsScreen() {
         <Field
           label="Allowance"
           value={allowance}
-          onChangeText={setAllowance}
+          onChangeText={(text) => {
+            setBudgetEdited(true);
+            setAllowance(text);
+          }}
           keyboardType="numeric"
           placeholder="9000"
         />
         <Field
           label="Days it has to last"
           value={periodDays}
-          onChangeText={setPeriodDays}
+          onChangeText={(text) => {
+            setBudgetEdited(true);
+            setPeriodDays(text);
+          }}
           keyboardType="numeric"
           placeholder="30"
           hint="Starts today. Set this when your allowance actually lands, not on the 1st."
@@ -429,6 +446,15 @@ export default function SettingsScreen() {
             : ''}
         </Text>
         <Button
+          label="Start from my current balance"
+          onPress={() => setFreshVisible(true)}
+          style={{ marginBottom: spacing.sm }}
+        />
+        <Text style={styles.note}>
+          Ignores everything you spent before today and asks only what you have now.
+        </Text>
+
+        <Button
           label={busy ? 'Checking…' : 'Recheck imported messages'}
           variant="secondary"
           onPress={recheckHistory}
@@ -456,6 +482,16 @@ export default function SettingsScreen() {
           Both start a new budget period from today, using the allowance above.
         </Text>
       </Card>
+
+      <FreshStartSheet
+        visible={freshVisible}
+        onClose={() => setFreshVisible(false)}
+        onDone={() => {
+          setFreshVisible(false);
+          setBudgetEdited(false);
+          load();
+        }}
+      />
 
       <Card onPress={() => navigation.navigate('Transactions')}>
         <CardTitle>All transactions ›</CardTitle>

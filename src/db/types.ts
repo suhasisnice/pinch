@@ -33,6 +33,9 @@ export interface TransactionRow {
   dedup_key: string | null;
   outing_id: number | null;
   note: string | null;
+  /** The other leg, when this row is one half of a move between your accounts. */
+  transfer_pair_id: number | null;
+  excluded_at: string | null;
   created_at: string;
 }
 
