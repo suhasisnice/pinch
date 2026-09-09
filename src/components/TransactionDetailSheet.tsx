@@ -3,6 +3,7 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import * as db from '../db/dbService';
 import { TransactionRow } from '../db/types';
 import { CATEGORIES } from '../db/schema';
+import { learnFromCategoryCorrection } from '../services/classificationService';
 import { formatMoney, formatRelative } from '../utils/format';
 import { palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Chip, Field, Sheet } from './ui';
@@ -59,11 +60,17 @@ export default function TransactionDetailSheet({
     if (!canSave || busy) return;
     setBusy(true);
     try {
+      const trimmedMerchant = merchant.trim();
       await db.updateTransaction(transaction!.id, {
         amount: parsedAmount,
-        merchant: merchant.trim(),
+        merchant: trimmedMerchant,
         category,
       });
+      // A category set by hand is the strongest signal the app ever gets —
+      // stronger than its own guess, right or wrong. Feed it back so the
+      // next message from this merchant, and eventually similarly-named
+      // ones, do not need the same correction again.
+      await learnFromCategoryCorrection(trimmedMerchant, category);
       setEditing(false);
       onChanged();
     } finally {

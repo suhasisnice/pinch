@@ -71,3 +71,20 @@ export async function classifyStoredTransactions(): Promise<ClassificationResult
 
   return result;
 }
+
+/**
+ * Teaches the categoriser from a category the user set or corrected by hand.
+ *
+ * Feeds both learning tables: the exact-match one (so this merchant is right
+ * next time, with certainty) and the token-weight one (so what the words in
+ * its name mean generalises to merchants never seen before). A blank
+ * category is not a correction — there is nothing to learn from "cleared" —
+ * so it is a no-op rather than teaching the tables to forget.
+ */
+export async function learnFromCategoryCorrection(
+  merchant: string,
+  category: string | null
+): Promise<void> {
+  if (!category) return;
+  await Promise.all([db.learnMerchantRule(merchant, category), db.bumpTokenWeights(merchant, category)]);
+}

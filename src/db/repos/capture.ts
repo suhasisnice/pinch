@@ -1,5 +1,6 @@
 import { getAdapter } from '../connection';
 import { CaptureInboxRow, CaptureStatus, Direction } from '../types';
+import { classifyTokens, tokenize, TokenWeights } from '../../math/merchantClassifier';
 
 export interface NewCapture {
   rawText: string;
@@ -146,4 +147,76 @@ export async function learnMerchantRule(merchant: string, category: string): Pro
      ON CONFLICT(pattern) DO UPDATE SET category = excluded.category, hit_count = hit_count + 1;`,
     [pattern, category, new Date().toISOString()]
   );
+}
+
+// ---------------------------------------------------------------------------
+// Token-level categorisation — a fallback for a merchant name MerchantRules
+// has never seen. See src/math/merchantClassifier.ts for the scoring itself;
+// this is just the DB plumbing around it.
+// ---------------------------------------------------------------------------
+
+/** The whole learned vocabulary, shaped for classifyTokens. Small table. */
+export async function getCategoryTokenWeights(): Promise<TokenWeights> {
+  const db = getAdapter();
+  const rows = await db.getAllAsync<{ token: string; category: string; weight: number }>(
+    `SELECT token, category, weight FROM CategoryTokenWeights;`
+  );
+  const weights: TokenWeights = {};
+  for (const row of rows) {
+    if (!weights[row.category]) weights[row.category] = {};
+    weights[row.category][row.token] = row.weight;
+  }
+  return weights;
+}
+
+/**
+ * Best category for a merchant MerchantRules has no exact pattern for.
+ *
+ * Tries the precise, user-taught table first — a direct correction should
+ * always win over a generic word guess — and only reaches for the token
+ * classifier when that comes back empty.
+ */
+export async function smartCategoriseMerchant(merchant: string): Promise<string | null> {
+  const exact = await categoriseMerchant(merchant);
+  if (exact) return exact;
+
+  const weights = await getCategoryTokenWeights();
+  const result = classifyTokens(tokenize(merchant), weights);
+  return result?.category ?? null;
+}
+
+/**
+ * A correction from this specific user is worth several seed guesses, not
+ * one. The seed vocabulary is a generic prior spread across ~200 words so
+ * that a fresh install is not silent; against that much accumulated mass, a
+ * single +1 could never move a word's classification even when the word is
+ * brand new to the table — the correction would be true and permanently
+ * outvoted. Chosen so that one correction on a genuinely new word is enough
+ * to be trusted, while a word split across two different corrected
+ * categories still has to earn a second correction before either wins.
+ */
+const CORRECTION_WEIGHT = 5;
+
+/**
+ * Reinforces the token vocabulary from a category the user just confirmed,
+ * whether by correcting a wrong guess or accepting a right one.
+ *
+ * Deliberately separate from learnMerchantRule (the exact-string table):
+ * that one only ever helps this exact merchant name again, while this one
+ * generalises — correcting "Truffles Cafe" to Food teaches "cafe" broadly,
+ * which is what lets the next unfamiliar café get it right on day one.
+ */
+export async function bumpTokenWeights(merchant: string, category: string): Promise<void> {
+  const tokens = tokenize(merchant);
+  if (tokens.length === 0) return;
+
+  const db = getAdapter();
+  for (const token of tokens) {
+    await db.runAsync(
+      `INSERT INTO CategoryTokenWeights (token, category, weight)
+       VALUES (?, ?, ?)
+       ON CONFLICT(token, category) DO UPDATE SET weight = weight + ?;`,
+      [token, category, CORRECTION_WEIGHT, CORRECTION_WEIGHT]
+    );
+  }
 }

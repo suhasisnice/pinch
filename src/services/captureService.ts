@@ -140,7 +140,7 @@ export interface PostTransactionInput {
 export async function postTransaction(input: PostTransactionInput): Promise<number | null> {
   const occurredAt = input.occurredAt ?? new Date().toISOString();
   const category =
-    input.category ?? (input.direction === 'DEBIT' ? await db.categoriseMerchant(input.merchant) : null);
+    input.category ?? (input.direction === 'DEBIT' ? await db.smartCategoriseMerchant(input.merchant) : null);
 
   let kind: 'SPEND' | 'INCOME' | 'SETTLE_IN' | 'SETTLE_OUT' | 'REFUND';
   if (input.kind) {
