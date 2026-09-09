@@ -340,3 +340,25 @@ export async function getTotalPayable(): Promise<number> {
   );
   return row?.total ?? 0;
 }
+
+/**
+ * Every time a bill was split with someone, for ranking the quick-add row.
+ *
+ * Settled debts count as much as open ones — the question here is "who do you
+ * go out with", not "who owes you", and someone who always pays back promptly
+ * would otherwise be the first to disappear from the list.
+ */
+export async function getSplitHistory(sinceDays = 180): Promise<
+  Array<{ contactId: number; at: string }>
+> {
+  const db = getAdapter();
+  const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000).toISOString();
+
+  return db.getAllAsync<{ contactId: number; at: string }>(
+    `SELECT contact_id AS contactId, created_at AS at
+     FROM IOUs
+     WHERE created_at >= ?
+     ORDER BY created_at DESC;`,
+    [since]
+  );
+}

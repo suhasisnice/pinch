@@ -11,6 +11,7 @@ import {
   SplitParticipant,
   computeSplit,
 } from '../math/splitEngine';
+import { rankContactsBySplitHistory } from '../math/insights';
 import { formatMoney } from '../utils/format';
 import { Button, Chip, Field, Sheet } from './ui';
 import Icon from './Icon';
@@ -59,15 +60,29 @@ export default function SplitModal({
   const [newName, setNewName] = useState('');
   const [saving, setSaving] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [ranking, setRanking] = useState<number[]>([]);
 
   useEffect(() => {
     if (!visible) return;
     setNewName('');
     setMode('SHARES');
-    db.getContacts().then((rows) => {
+    Promise.all([db.getContacts(), db.getSplitHistory()]).then(([rows, history]) => {
+      const ranked = rankContactsBySplitHistory(history).map((entry) => entry.contactId);
+      setRanking(ranked);
       setContacts(rows);
+
+      // Everyone you split with recently first, then the rest alphabetically:
+      // a contact list imported from the phone is mostly people you will
+      // never split a bill with, and they should not be in the way.
+      const order = new Map(ranked.map((id, index) => [id, index]));
+      const sorted = [...rows].sort((a, b) => {
+        const ra = order.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+        const rb = order.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+        return ra - rb || a.name.localeCompare(b.name);
+      });
+
       setParticipants(
-        rows.map((contact) => ({
+        sorted.map((contact) => ({
           contactId: contact.id,
           name: contact.name,
           included: false,
@@ -149,8 +164,18 @@ export default function SplitModal({
     const id = await db.findOrCreateContact({ name, phone: picked?.phone ?? null });
     const rows = await db.getContacts();
     setContacts(rows);
+
+    // Keep the ranked order; rebuilding straight from the database would put
+    // the list back into alphabetical order behind the user's back.
+    const order = new Map(ranking.map((rankedId, index) => [rankedId, index]));
+    const sorted = [...rows].sort((a, b) => {
+      const ra = a.id === id ? -1 : order.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+      const rb = b.id === id ? -1 : order.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+      return ra - rb || a.name.localeCompare(b.name);
+    });
+
     setParticipants(
-      rows.map((contact) => {
+      sorted.map((contact) => {
         const existing = participants.find((p) => p.contactId === contact.id);
         return (
           existing ?? {
@@ -187,6 +212,14 @@ export default function SplitModal({
     }
   }
 
+  // Only people you have actually split with before, and only those not
+  // already added — a quick-add button for someone already in the list would
+  // silently remove them.
+  const quickAdd = ranking
+    .map((id) => participants.find((p) => p.contactId === id))
+    .filter((p): p is Participant => p !== undefined && !p.included)
+    .slice(0, 6);
+
   const overAssigned = mode === 'EXACT' && (result?.overAssigned ?? false);
 
   return (
@@ -219,6 +252,21 @@ export default function SplitModal({
         ))}
       </View>
       <Text style={styles.modeHint}>{SPLIT_MODE_HINTS[mode]}</Text>
+
+      {quickAdd.length > 0 ? (
+        <View style={styles.quickBlock}>
+          <Text style={styles.quickLabel}>Usually with</Text>
+          <View style={styles.quickRow}>
+            {quickAdd.map((participant) => (
+              <Chip
+                key={participant.contactId}
+                label={`+ ${participant.name}`}
+                onPress={() => toggle(participant.contactId)}
+              />
+            ))}
+          </View>
+        </View>
+      ) : null}
 
       <View style={styles.addRow}>
         <View style={styles.addField}>
@@ -385,6 +433,15 @@ const styles = StyleSheet.create({
   addButton: { paddingHorizontal: spacing.lg },
 
   hint: { ...typography.caption, color: palette.textMuted, textAlign: 'center' },
+
+  quickBlock: { gap: spacing.sm },
+  quickLabel: {
+    ...typography.micro,
+    color: palette.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 
   list: { gap: spacing.sm },
   person: {

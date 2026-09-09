@@ -481,3 +481,59 @@ export function spendingPersonality(slices: CategorySlice[]): SpendingPersonalit
     }
   );
 }
+
+// ---------------------------------------------------------------------------
+// Who you actually split with.
+// ---------------------------------------------------------------------------
+
+export interface SplitHistoryEntry {
+  contactId: number;
+  /** When a bill was split with this person. */
+  at: string;
+}
+
+export interface RankedContact {
+  contactId: number;
+  score: number;
+  splits: number;
+  lastAt: string;
+}
+
+/** Half-life, in days, of one past split's contribution to the ranking. */
+export const SPLIT_RECENCY_HALF_LIFE = 30;
+
+/**
+ * Ranks people by how often you split with them, discounted by how long ago.
+ *
+ * A plain count is wrong here: the flatmate you split with twenty times last
+ * term would sit permanently above the friend you have been out with three
+ * times this week, and the point of a quick-add row is the people you are
+ * likely to pick *now*. Each past split decays with a 30-day half-life —
+ * the same shape used to weight how reliably someone pays you back, so the
+ * app ages evidence consistently wherever it does it.
+ */
+export function rankContactsBySplitHistory(
+  history: SplitHistoryEntry[],
+  now: Date = new Date()
+): RankedContact[] {
+  const byContact = new Map<number, { score: number; splits: number; lastAt: string }>();
+
+  for (const entry of history) {
+    const days = Math.max(0, (now.getTime() - Date.parse(entry.at)) / 86_400_000);
+    const weight = Math.pow(0.5, days / SPLIT_RECENCY_HALF_LIFE);
+
+    const current = byContact.get(entry.contactId);
+    if (!current) {
+      byContact.set(entry.contactId, { score: weight, splits: 1, lastAt: entry.at });
+      continue;
+    }
+
+    current.score += weight;
+    current.splits += 1;
+    if (entry.at > current.lastAt) current.lastAt = entry.at;
+  }
+
+  return [...byContact.entries()]
+    .map(([contactId, value]) => ({ contactId, ...value }))
+    .sort((a, b) => b.score - a.score || b.lastAt.localeCompare(a.lastAt));
+}
