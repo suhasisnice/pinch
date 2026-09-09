@@ -190,8 +190,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     backgroundColor: palette.surfaceElevated,
     borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: palette.border,
   },
   previewLabel: { ...typography.micro, color: palette.textSecondary, textTransform: 'uppercase', letterSpacing: 1 },
   previewAmount: { ...typography.display, color: palette.primary },

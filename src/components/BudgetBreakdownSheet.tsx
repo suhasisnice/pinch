@@ -140,8 +140,6 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     backgroundColor: palette.surfaceElevated,
     borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: palette.border,
     padding: spacing.sm,
   },
   periodText: { ...typography.caption, color: palette.textSecondary, flex: 1 },
