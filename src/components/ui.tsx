@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { palette, radii, spacing, typography } from '../theme/theme';
+import Icon, { IconName } from './Icon';
 
 /** Shared primitives. Kept in one file so spacing and radii stay consistent. */
 
@@ -208,19 +209,21 @@ export function ProgressBar({
 }
 
 export function EmptyState({
-  emoji,
+  icon,
   title,
   body,
   action,
 }: {
-  emoji: string;
+  icon: IconName;
   title: string;
   body: string;
   action?: React.ReactNode;
 }) {
   return (
     <View style={styles.empty}>
-      <Text style={styles.emptyEmoji}>{emoji}</Text>
+      <View style={styles.emptyIcon}>
+        <Icon name={icon} size={26} color={palette.textMuted} />
+      </View>
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyBody}>{body}</Text>
       {action ? <View style={styles.emptyAction}>{action}</View> : null}
@@ -392,7 +395,16 @@ const styles = StyleSheet.create({
   progressTrack: { width: '100%', backgroundColor: palette.surfaceHigh, overflow: 'hidden' },
 
   empty: { alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm },
-  emptyEmoji: { fontSize: 40 },
+  emptyIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.surfaceElevated,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
   emptyTitle: { ...typography.cardTitle, color: palette.textPrimary },
   emptyBody: {
     ...typography.body,

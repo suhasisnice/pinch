@@ -78,7 +78,7 @@ export async function getTransactionsBetween(
   const db = getAdapter();
   return db.getAllAsync<TransactionRow>(
     `SELECT * FROM Transactions
-     WHERE occurred_at >= ? AND occurred_at < ?
+     WHERE excluded_at IS NULL AND occurred_at >= ? AND occurred_at < ?
      ORDER BY occurred_at DESC;`,
     [startIso, endIso]
   );
@@ -97,6 +97,202 @@ export async function setTransactionOuting(id: number, outingId: number | null):
 export async function deleteTransaction(id: number): Promise<void> {
   const db = getAdapter();
   await db.runAsync(`DELETE FROM Transactions WHERE id = ?;`, [id]);
+}
+
+
+/**
+ * Edits a transaction the user is correcting by hand.
+ *
+ * A capture that read the merchant wrong is far more common than one that
+ * should be thrown away entirely, and retyping the whole thing to fix a name
+ * is busywork.
+ */
+export async function updateTransaction(
+  id: number,
+  fields: {
+    amount?: number;
+    merchant?: string;
+    category?: string | null;
+    occurredAt?: string;
+    note?: string | null;
+    direction?: Direction;
+    kind?: TransactionKind;
+  }
+): Promise<void> {
+  const db = getAdapter();
+  const sets: string[] = [];
+  const params: unknown[] = [];
+
+  if (fields.amount !== undefined) {
+    sets.push('amount = ?');
+    params.push(Math.abs(fields.amount));
+  }
+  if (fields.merchant !== undefined) {
+    sets.push('merchant = ?');
+    params.push(fields.merchant.trim());
+  }
+  if (fields.category !== undefined) {
+    sets.push('category = ?');
+    params.push(fields.category);
+  }
+  if (fields.occurredAt !== undefined) {
+    sets.push('occurred_at = ?');
+    params.push(fields.occurredAt);
+  }
+  if (fields.note !== undefined) {
+    sets.push('note = ?');
+    params.push(fields.note);
+  }
+  if (fields.direction !== undefined) {
+    sets.push('direction = ?');
+    params.push(fields.direction);
+  }
+  if (fields.kind !== undefined) {
+    sets.push('kind = ?');
+    params.push(fields.kind);
+  }
+  if (sets.length === 0) return;
+
+  params.push(id);
+  await db.runAsync(`UPDATE Transactions SET ${sets.join(', ')} WHERE id = ?;`, params);
+}
+
+/**
+ * Marks a transaction as not real spending, or restores it.
+ *
+ * Kept rather than deleted so its dedup key still blocks the same promotional
+ * SMS from being re-imported by the next backfill - deleting it would let the
+ * junk straight back in.
+ */
+export async function setTransactionExcluded(id: number, excluded: boolean): Promise<void> {
+  const db = getAdapter();
+  await db.runAsync(`UPDATE Transactions SET excluded_at = ? WHERE id = ?;`, [
+    excluded ? new Date().toISOString() : null,
+    id,
+  ]);
+}
+
+export async function getExcludedTransactions(): Promise<TransactionRow[]> {
+  const db = getAdapter();
+  return db.getAllAsync<TransactionRow>(
+    `SELECT * FROM Transactions WHERE excluded_at IS NOT NULL ORDER BY occurred_at DESC;`
+  );
+}
+
+/**
+ * Spend totals per calendar month, newest first.
+ *
+ * The basis for any statement about "last month" - without it, insights can
+ * only ever describe the period you happen to be in and can never notice a
+ * trend across them.
+ */
+export async function getMonthlySpend(
+  monthsBack = 6,
+  now: Date = new Date()
+): Promise<Array<{ month: string; total: number; count: number; days: number }>> {
+  const db = getAdapter();
+  const start = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1), 1);
+
+  return db.getAllAsync<{ month: string; total: number; count: number; days: number }>(
+    `SELECT substr(occurred_at, 1, 7) AS month,
+            SUM(amount) AS total,
+            COUNT(*) AS count,
+            COUNT(DISTINCT substr(occurred_at, 1, 10)) AS days
+     FROM Transactions
+     WHERE kind = 'SPEND' AND excluded_at IS NULL AND occurred_at >= ?
+     GROUP BY month
+     ORDER BY month DESC;`,
+    [start.toISOString()]
+  );
+}
+
+/** Category totals per month, for spotting what actually changed. */
+export async function getCategoryByMonth(
+  monthsBack = 6,
+  now: Date = new Date()
+): Promise<Array<{ month: string; category: string; total: number }>> {
+  const db = getAdapter();
+  const start = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1), 1);
+
+  return db.getAllAsync<{ month: string; category: string; total: number }>(
+    `SELECT substr(occurred_at, 1, 7) AS month,
+            COALESCE(category, 'Uncategorised') AS category,
+            SUM(amount) AS total
+     FROM Transactions
+     WHERE kind = 'SPEND' AND excluded_at IS NULL AND occurred_at >= ?
+     GROUP BY month, category
+     ORDER BY month DESC, total DESC;`,
+    [start.toISOString()]
+  );
+}
+
+/**
+ * Merchants charged in more than one distinct month - the raw material for
+ * spotting a subscription the user has forgotten about.
+ */
+export async function getRepeatMerchants(
+  monthsBack = 6,
+  now: Date = new Date()
+): Promise<
+  Array<{ merchant: string; months: number; charges: number; total: number; lastAt: string }>
+> {
+  const db = getAdapter();
+  const start = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1), 1);
+
+  return db.getAllAsync<{
+    merchant: string;
+    months: number;
+    charges: number;
+    total: number;
+    lastAt: string;
+  }>(
+    `SELECT merchant,
+            COUNT(DISTINCT substr(occurred_at, 1, 7)) AS months,
+            COUNT(*) AS charges,
+            SUM(amount) AS total,
+            MAX(occurred_at) AS lastAt
+     FROM Transactions
+     WHERE kind = 'SPEND' AND excluded_at IS NULL AND occurred_at >= ?
+     GROUP BY lower(merchant)
+     HAVING months >= 2
+     ORDER BY total DESC;`,
+    [start.toISOString()]
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Blocklist: senders and merchants that are never a transaction.
+// ---------------------------------------------------------------------------
+
+export async function addToBlocklist(pattern: string, reason?: string | null): Promise<void> {
+  const db = getAdapter();
+  await db.runAsync(
+    `INSERT OR IGNORE INTO CaptureBlocklist (pattern, reason, created_at) VALUES (?, ?, ?);`,
+    [pattern.trim().toLowerCase(), reason ?? null, new Date().toISOString()]
+  );
+}
+
+export async function removeFromBlocklist(pattern: string): Promise<void> {
+  const db = getAdapter();
+  await db.runAsync(`DELETE FROM CaptureBlocklist WHERE pattern = ?;`, [
+    pattern.trim().toLowerCase(),
+  ]);
+}
+
+export async function getBlocklist(): Promise<Array<{ pattern: string; reason: string | null }>> {
+  const db = getAdapter();
+  return db.getAllAsync<{ pattern: string; reason: string | null }>(
+    `SELECT pattern, reason FROM CaptureBlocklist ORDER BY created_at DESC;`
+  );
+}
+
+/** True when any blocked pattern appears in the sender, merchant or body. */
+export async function isBlocked(...candidates: Array<string | null | undefined>): Promise<boolean> {
+  const patterns = await getBlocklist();
+  if (patterns.length === 0) return false;
+
+  const haystack = candidates.filter(Boolean).join(' ').toLowerCase();
+  return patterns.some((entry) => haystack.includes(entry.pattern));
 }
 
 // ---------------------------------------------------------------------------
@@ -120,7 +316,8 @@ export async function getGrossSpendBetween(startIso: string, endIso: string): Pr
        COALESCE(SUM(CASE WHEN kind = 'SPEND' THEN amount ELSE 0 END), 0)
        - COALESCE(SUM(CASE WHEN kind = 'REFUND' THEN amount ELSE 0 END), 0) AS total
      FROM Transactions
-     WHERE kind IN ('SPEND', 'REFUND') AND occurred_at >= ? AND occurred_at < ?;`,
+     WHERE kind IN ('SPEND', 'REFUND') AND excluded_at IS NULL
+       AND occurred_at >= ? AND occurred_at < ?;`,
     [startIso, endIso]
   );
   return row?.total ?? 0;
@@ -131,7 +328,7 @@ export async function getIncomeBetween(startIso: string, endIso: string): Promis
   const db = getAdapter();
   const row = await db.getFirstAsync<{ total: number | null }>(
     `SELECT COALESCE(SUM(amount), 0) AS total FROM Transactions
-     WHERE kind = 'INCOME' AND occurred_at >= ? AND occurred_at < ?;`,
+     WHERE kind = 'INCOME' AND excluded_at IS NULL AND occurred_at >= ? AND occurred_at < ?;`,
     [startIso, endIso]
   );
   return row?.total ?? 0;
@@ -158,6 +355,7 @@ export async function getOpenReceivablesOnSpendBetween(
        JOIN Transactions ON Transactions.id = IOUs.transaction_id
        WHERE IOUs.direction = 'THEY_OWE_ME'
          AND Transactions.kind = 'SPEND'
+         AND Transactions.excluded_at IS NULL
          AND Transactions.occurred_at >= ? AND Transactions.occurred_at < ?
      ) WHERE open_amount > 0;`,
     [startIso, endIso]
@@ -176,7 +374,8 @@ export async function getSpendByCategory(
             SUM(amount) AS total,
             COUNT(*) AS count
      FROM Transactions
-     WHERE kind = 'SPEND' AND occurred_at >= ? AND occurred_at < ?
+     WHERE kind = 'SPEND' AND excluded_at IS NULL
+       AND occurred_at >= ? AND occurred_at < ?
      GROUP BY COALESCE(category, 'Uncategorised')
      ORDER BY total DESC;`,
     [startIso, endIso]
@@ -192,7 +391,8 @@ export async function getDailySpend(
   return db.getAllAsync<{ day: string; total: number }>(
     `SELECT substr(occurred_at, 1, 10) AS day, SUM(amount) AS total
      FROM Transactions
-     WHERE kind = 'SPEND' AND occurred_at >= ? AND occurred_at < ?
+     WHERE kind = 'SPEND' AND excluded_at IS NULL
+       AND occurred_at >= ? AND occurred_at < ?
      GROUP BY day
      ORDER BY day ASC;`,
     [startIso, endIso]

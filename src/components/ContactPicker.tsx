@@ -68,7 +68,7 @@ export default function ContactPicker({
 
       {phase === 'DENIED' ? (
         <EmptyState
-          emoji="📇"
+          icon="contacts"
           title="No contacts access"
           body="Pinch only reads contacts so you can pick who a bill is split with. You can still type a name instead."
           action={<Button label="Try again" variant="secondary" onPress={load} />}
@@ -79,7 +79,7 @@ export default function ContactPicker({
         <>
           <Field label="Search" value={query} onChangeText={setQuery} placeholder="Type a name" />
           {filtered.length === 0 ? (
-            <EmptyState emoji="🔍" title="No matches" body="Try a different spelling." />
+            <EmptyState icon="search" title="No matches" body="Try a different spelling." />
           ) : (
             <View>
               {filtered.map((contact) => (

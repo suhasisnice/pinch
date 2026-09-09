@@ -1,4 +1,9 @@
-import { buildNudgeMessage, buildWhatsAppUrl, sanitizePhoneForWhatsApp } from '../src/utils/nudgeMessage';
+import {
+  buildNudgeMessage,
+  buildWhatsAppUrl,
+  normalizePhoneForWhatsApp,
+  sanitizePhoneForWhatsApp,
+} from '../src/utils/nudgeMessage';
 
 describe('buildNudgeMessage', () => {
   test('formats a whole-number amount without decimals', () => {
@@ -24,19 +29,35 @@ describe('sanitizePhoneForWhatsApp', () => {
   });
 });
 
+describe('normalizePhoneForWhatsApp', () => {
+  test('prefixes a bare 10-digit Indian mobile number with 91', () => {
+    expect(normalizePhoneForWhatsApp('98765 43210')).toBe('919876543210');
+  });
+
+  test('strips a leading 0 before prefixing', () => {
+    expect(normalizePhoneForWhatsApp('09876543210')).toBe('919876543210');
+  });
+
+  test('leaves a number that already carries a country code alone', () => {
+    expect(normalizePhoneForWhatsApp('+91 98765 43210')).toBe('919876543210');
+  });
+
+  test('does not guess at a number of an unexpected length', () => {
+    expect(normalizePhoneForWhatsApp('12345')).toBe('12345');
+  });
+});
+
 describe('buildWhatsAppUrl', () => {
-  test('includes the phone param when a phone is given', () => {
-    const url = buildWhatsAppUrl('Hey there', '+91 98765-43210');
-    expect(url).toBe('whatsapp://send?phone=+919876543210&text=Hey%20there');
+  test('builds a wa.me click-to-chat link when a phone is on file', () => {
+    const url = buildWhatsAppUrl('Hey there', '98765 43210');
+    expect(url).toBe('https://wa.me/919876543210?text=Hey%20there');
   });
 
-  test('omits the phone param when no phone is on file, letting WhatsApp pick the recipient', () => {
-    const url = buildWhatsAppUrl('Hey there', null);
-    expect(url).toBe('whatsapp://send?text=Hey%20there');
+  test('falls back to the contact picker when no phone is on file', () => {
+    expect(buildWhatsAppUrl('Hey there', null)).toBe('whatsapp://send?text=Hey%20there');
   });
 
-  test('omits the phone param when phone is undefined', () => {
-    const url = buildWhatsAppUrl('Hey there');
-    expect(url).toBe('whatsapp://send?text=Hey%20there');
+  test('falls back to the contact picker when phone is undefined', () => {
+    expect(buildWhatsAppUrl('Hey there')).toBe('whatsapp://send?text=Hey%20there');
   });
 });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text } from 'react-native';
+
 import { NavigationContainer, DarkTheme, Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -10,6 +10,7 @@ import SquadScreen from '../screens/SquadScreen';
 import InsightsScreen from '../screens/InsightsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import ReviewScreen from '../screens/ReviewScreen';
+import Icon, { IconName } from '../components/Icon';
 import { palette, typography } from '../theme/theme';
 
 export type RootStackParamList = {
@@ -41,14 +42,15 @@ const pinchTheme: Theme = {
   },
 };
 
-// Emoji rather than an icon font: it keeps the bundle smaller, renders
-// identically across Android versions, and suits the tone of the app.
-const TAB_ICONS: Record<keyof TabParamList, string> = {
-  Today: '⚡',
-  Outings: '🎉',
-  Goals: '🎯',
-  Squad: '🤝',
-  Insights: '📊',
+// Drawn from Feather / Material Community Icons rather than emoji: emoji are
+// rendered by the system font, so the same character is a different picture
+// on every Android skin and none of them are designed to sit in a tab bar.
+const TAB_ICONS: Record<keyof TabParamList, IconName> = {
+  Today: 'today',
+  Outings: 'outings',
+  Goals: 'goals',
+  Squad: 'squad',
+  Insights: 'insights',
 };
 
 function Tabs() {
@@ -67,9 +69,11 @@ function Tabs() {
         },
         tabBarLabelStyle: { ...typography.micro, fontSize: 10 },
         tabBarIcon: ({ focused }) => (
-          <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>
-            {TAB_ICONS[route.name as keyof TabParamList]}
-          </Text>
+          <Icon
+            name={TAB_ICONS[route.name as keyof TabParamList]}
+            size={21}
+            color={focused ? palette.neonGreen : palette.textMuted}
+          />
         ),
       })}
     >

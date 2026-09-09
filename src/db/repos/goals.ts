@@ -26,7 +26,7 @@ export async function createGoal(input: {
     `INSERT INTO Goals (name, emoji, target_amount, deadline, created_at) VALUES (?, ?, ?, ?, ?);`,
     [
       input.name.trim(),
-      input.emoji ?? '🎯',
+      input.emoji ?? 'goals',
       input.targetAmount,
       input.deadline ?? null,
       new Date().toISOString(),

@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { RefreshControl, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { GoalProgress } from '../db/repos/goals';
@@ -10,9 +10,10 @@ import { getMonthlyAllowance } from '../settings/settingsStore';
 import { formatMoney } from '../utils/format';
 import { palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Card, CardTitle, Chip, EmptyState, Field, Loading, ProgressBar, Screen, ScreenTitle, Sheet } from '../components/ui';
+import Icon, { GOAL_ICONS } from '../components/Icon';
+import { LabelIconBadge } from '../components/LabelIcon';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-const EMOJI_CHOICES = ['🎯', '💻', '🏖', '🎧', '📱', '🎸', '🚲', '👟', '🎓', '🎁'];
 
 export default function GoalsScreen() {
   const [goals, setGoals] = useState<GoalProgress[] | null>(null);
@@ -86,7 +87,7 @@ export default function GoalsScreen() {
       {goals.length === 0 ? (
         <Card>
           <EmptyState
-            emoji="🎯"
+            icon="goals"
             title="No goals yet"
             body="A goal claims part of your allowance up front, so the money is gone before you can spend it. Add one and watch it come out of your daily number."
           />
@@ -117,7 +118,7 @@ export default function GoalsScreen() {
         }}
       />
 
-      <ContributeSheet
+      <ManageGoalSheet
         goal={contributeTo}
         onClose={() => setContributeTo(null)}
         onSaved={() => {
@@ -152,7 +153,7 @@ function GoalCard({
   return (
     <Card>
       <View style={styles.goalHead}>
-        <Text style={styles.goalEmoji}>{goal.emoji}</Text>
+        <LabelIconBadge label={goal.emoji} color={palette.violet} />
         <View style={styles.goalHeadText}>
           <Text style={styles.goalName}>{goal.name}</Text>
           <Text style={styles.goalMeta}>
@@ -176,7 +177,7 @@ function GoalCard({
       />
 
       {goal.isComplete ? (
-        <Text style={styles.goalDone}>Fully funded. Go get it 🎉</Text>
+        <Text style={styles.goalDone}>Fully funded. Go get it.</Text>
       ) : (
         <Text style={styles.goalPace}>
           {formatMoney(perDay)}/day to finish{daysLeft !== null ? ' on time' : ''}
@@ -186,7 +187,7 @@ function GoalCard({
       <View style={styles.goalActions}>
         <Button label="Add money" variant="secondary" onPress={onContribute} style={styles.flex} />
         <Chip
-          label={isRoundUp ? '↑ Round-ups on' : 'Round-ups'}
+          label={isRoundUp ? 'Round-ups on' : 'Round-ups'}
           selected={isRoundUp}
           onPress={onToggleRoundUp}
           color={palette.violet}
@@ -208,7 +209,7 @@ function CreateGoalSheet({
   const [name, setName] = useState('');
   const [target, setTarget] = useState('');
   const [days, setDays] = useState('');
-  const [emoji, setEmoji] = useState('🎯');
+  const [icon, setIcon] = useState<string>('goals');
   const [saving, setSaving] = useState(false);
 
   const parsedTarget = Number(target.replace(/[^\d.]/g, ''));
@@ -222,7 +223,7 @@ function CreateGoalSheet({
       await db.createGoal({
         name: name.trim(),
         targetAmount: parsedTarget,
-        emoji,
+        emoji: icon,
         deadline:
           Number.isFinite(parsedDays) && parsedDays > 0
             ? new Date(Date.now() + parsedDays * MS_PER_DAY).toISOString()
@@ -231,7 +232,7 @@ function CreateGoalSheet({
       setName('');
       setTarget('');
       setDays('');
-      setEmoji('🎯');
+      setIcon('goals');
       onSaved();
     } finally {
       setSaving(false);
@@ -240,11 +241,7 @@ function CreateGoalSheet({
 
   return (
     <Sheet visible={visible} onClose={onClose} title="New goal">
-      <View style={styles.emojiRow}>
-        {EMOJI_CHOICES.map((choice) => (
-          <Chip key={choice} label={choice} selected={emoji === choice} onPress={() => setEmoji(choice)} color={palette.violet} />
-        ))}
-      </View>
+      <IconPicker value={icon} onChange={setIcon} />
       <Field label="What for" value={name} onChangeText={setName} placeholder="Laptop" />
       <Field label="How much" value={target} onChangeText={setTarget} keyboardType="numeric" placeholder="45000" />
       <Field
@@ -260,7 +257,41 @@ function CreateGoalSheet({
   );
 }
 
-function ContributeSheet({
+/** The shared icon grid, used when creating and when editing a goal. */
+function IconPicker({ value, onChange }: { value: string; onChange: (next: string) => void }) {
+  return (
+    <View style={styles.iconRow}>
+      {GOAL_ICONS.map((choice) => (
+        <Pressable
+          key={choice}
+          onPress={() => onChange(choice)}
+          style={({ pressed }) => [
+            styles.iconChoice,
+            value === choice && styles.iconChoiceOn,
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          <Icon
+            name={choice}
+            size={20}
+            color={value === choice ? palette.violet : palette.textMuted}
+          />
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+/**
+ * Everything you can do to a goal once it exists: put money in, take money
+ * back out, change what it is, or get rid of it.
+ *
+ * Archive and delete are both offered because they answer different
+ * questions. Archiving keeps a finished goal and the contributions behind it
+ * as a record; deleting is for a goal that should never have existed, and
+ * takes its contribution history with it.
+ */
+function ManageGoalSheet({
   goal,
   onClose,
   onSaved,
@@ -271,13 +302,38 @@ function ContributeSheet({
 }) {
   const [amount, setAmount] = useState('');
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  const [name, setName] = useState('');
+  const [target, setTarget] = useState('');
+  const [days, setDays] = useState('');
+  const [icon, setIcon] = useState('goals');
+
+  useEffect(() => {
+    if (!goal) return;
+    setAmount('');
+    setEditing(false);
+    setName(goal.name);
+    setTarget(String(goal.targetAmount));
+    setIcon(goal.emoji);
+    setDays(
+      goal.deadline
+        ? String(Math.max(0, Math.ceil((new Date(goal.deadline).getTime() - Date.now()) / MS_PER_DAY)))
+        : ''
+    );
+  }, [goal]);
+
   if (!goal) return null;
 
   const parsed = Number(amount.replace(/[^\d.]/g, ''));
-  const canSave = Number.isFinite(parsed) && parsed > 0;
+  const canContribute = Number.isFinite(parsed) && parsed > 0;
+
+  const parsedTarget = Number(target.replace(/[^\d.]/g, ''));
+  const parsedDays = Number(days.replace(/[^\d]/g, ''));
+  const canSaveEdits = name.trim().length > 0 && Number.isFinite(parsedTarget) && parsedTarget > 0;
 
   async function apply(sign: 1 | -1) {
-    if (!canSave || saving) return;
+    if (!canContribute || saving) return;
     setSaving(true);
     try {
       await db.contributeToGoal(goal!.id, parsed * sign, 'MANUAL');
@@ -288,17 +344,113 @@ function ContributeSheet({
     }
   }
 
+  async function saveEdits() {
+    if (!canSaveEdits || saving) return;
+    setSaving(true);
+    try {
+      await db.updateGoal(goal!.id, {
+        name: name.trim(),
+        targetAmount: parsedTarget,
+        emoji: icon,
+        deadline:
+          Number.isFinite(parsedDays) && parsedDays > 0
+            ? new Date(Date.now() + parsedDays * MS_PER_DAY).toISOString()
+            : null,
+      });
+      setEditing(false);
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function confirmDelete() {
+    Alert.alert(
+      'Delete this goal?',
+      `"${goal!.name}" and everything saved into it (${formatMoney(goal!.savedAmount)}) will be removed. This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await db.deleteGoal(goal!.id);
+            onSaved();
+          },
+        },
+      ]
+    );
+  }
+
+  if (editing) {
+    return (
+      <Sheet visible={goal !== null} onClose={() => setEditing(false)} title="Edit goal">
+        <IconPicker value={icon} onChange={setIcon} />
+        <Field label="What for" value={name} onChangeText={setName} placeholder="Laptop" />
+        <Field
+          label="How much"
+          value={target}
+          onChangeText={setTarget}
+          keyboardType="numeric"
+          placeholder="45000"
+        />
+        <Field
+          label="Days left"
+          value={days}
+          onChangeText={setDays}
+          keyboardType="numeric"
+          placeholder="180"
+          hint="Leave blank to drop the deadline."
+        />
+        <Button
+          label={saving ? 'Saving…' : 'Save changes'}
+          onPress={saveEdits}
+          disabled={!canSaveEdits || saving}
+        />
+        <Button label="Cancel" variant="ghost" onPress={() => setEditing(false)} />
+      </Sheet>
+    );
+  }
+
   return (
-    <Sheet visible={goal !== null} onClose={onClose} title={`${goal.emoji} ${goal.name}`}>
+    <Sheet visible={goal !== null} onClose={onClose} title={goal.name}>
       <Text style={styles.contributeMeta}>
         {formatMoney(goal.remainingAmount)} to go of {formatMoney(goal.targetAmount)}
       </Text>
-      <Field label="Amount" value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="0" autoFocus />
-      <Button label={saving ? 'Saving…' : 'Add to goal'} onPress={() => apply(1)} disabled={!canSave || saving} />
+      <Field
+        label="Amount"
+        value={amount}
+        onChangeText={setAmount}
+        keyboardType="numeric"
+        placeholder="0"
+      />
+      <Button
+        label={saving ? 'Saving…' : 'Add to goal'}
+        onPress={() => apply(1)}
+        disabled={!canContribute || saving}
+      />
       {/* Rough weeks happen. Better to let someone take money back honestly
           than have them abandon the goal and the app with it. */}
-      <Button label="Take some back" variant="ghost" onPress={() => apply(-1)} disabled={!canSave || saving} />
-      <Button label="Archive this goal" variant="danger" onPress={async () => { await db.archiveGoal(goal!.id); onSaved(); }} />
+      <Button
+        label="Take some back"
+        variant="ghost"
+        onPress={() => apply(-1)}
+        disabled={!canContribute || saving}
+      />
+
+      <Button label="Edit goal" variant="secondary" onPress={() => setEditing(true)} />
+      <Button
+        label="Archive"
+        variant="ghost"
+        onPress={async () => {
+          await db.archiveGoal(goal!.id);
+          onSaved();
+        }}
+      />
+      <Button label="Delete goal" variant="danger" onPress={confirmDelete} />
+      <Text style={styles.dangerNote}>
+        Archiving keeps the record. Deleting removes the goal and its contributions.
+      </Text>
     </Sheet>
   );
 }
@@ -309,7 +461,6 @@ const styles = StyleSheet.create({
   reserveNote: { ...typography.caption, color: palette.textMuted, marginTop: spacing.xs, lineHeight: 17 },
 
   goalHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  goalEmoji: { fontSize: 28 },
   goalHeadText: { flex: 1 },
   goalName: { ...typography.cardTitle, color: palette.textPrimary },
   goalMeta: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
@@ -319,6 +470,18 @@ const styles = StyleSheet.create({
   goalActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md },
   flex: { flex: 1 },
 
-  emojiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  iconRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  iconChoice: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.input,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.surfaceElevated,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  iconChoiceOn: { borderColor: palette.violet, backgroundColor: 'rgba(167,139,250,0.14)' },
+  dangerNote: { ...typography.micro, color: palette.textMuted, textAlign: 'center' },
   contributeMeta: { ...typography.body, color: palette.textSecondary, textAlign: 'center' },
 });
