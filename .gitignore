@@ -9,5 +9,10 @@ coverage/
 /android/
 /ios/
 
+# Gradle build output inside local native modules
+modules/*/android/build/
+modules/*/android/.gradle/
+**/.gradle/
+
 # Local scratch (screenshots, logs)
 errors/
