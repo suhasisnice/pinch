@@ -530,7 +530,7 @@ function Toggle({
       <Switch
         value={value}
         onValueChange={onChange}
-        trackColor={{ false: palette.surfaceHigh, true: palette.neonGreen }}
+        trackColor={{ false: palette.surfaceHigh, true: palette.primary }}
         thumbColor={palette.textPrimary}
       />
     </View>
@@ -539,8 +539,8 @@ function Toggle({
 
 const styles = StyleSheet.create({
   note: { ...typography.caption, color: palette.textMuted, lineHeight: 18, marginTop: spacing.sm },
-  ok: { ...typography.bodyBold, color: palette.neonGreen },
-  undo: { ...typography.caption, color: palette.neonGreen, fontWeight: '700' },
+  ok: { ...typography.bodyBold, color: palette.primary },
+  undo: { ...typography.caption, color: palette.primary, fontWeight: '700' },
   groupLabel: {
     ...typography.micro,
     color: palette.textSecondary,

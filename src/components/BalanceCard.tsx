@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   amount: { ...typography.heroCompact, fontSize: 30, color: palette.textPrimary, marginTop: 2 },
   empty: { ...typography.body, color: palette.textMuted, marginTop: spacing.xs },
   meta: { ...typography.micro, color: palette.textMuted, marginTop: 2, lineHeight: 15 },
-  update: { ...typography.caption, color: palette.neonGreen, marginTop: spacing.sm },
+  update: { ...typography.caption, color: palette.primary, marginTop: spacing.sm },
 
   intro: { ...typography.body, color: palette.textSecondary, lineHeight: 20 },
   driftBox: {

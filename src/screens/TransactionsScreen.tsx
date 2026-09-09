@@ -113,7 +113,7 @@ export default function TransactionsScreen() {
             label={option.label}
             selected={filter === option.key}
             onPress={() => setFilter(option.key)}
-            color={option.key === 'IGNORED' ? palette.warningAmber : palette.neonGreen}
+            color={option.key === 'IGNORED' ? palette.warningAmber : palette.primary}
           />
         ))}
       </View>

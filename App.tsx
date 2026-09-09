@@ -15,6 +15,7 @@ import {
 import { Button } from './src/components/ui';
 import { formatMoney } from './src/utils/format';
 import { palette, spacing, typography } from './src/theme/theme';
+import Icon from './src/components/Icon';
 
 type Status = { phase: 'LOADING' } | { phase: 'READY' } | { phase: 'ERROR'; message: string };
 
@@ -140,7 +141,9 @@ export default function App() {
     return (
       <View style={styles.center}>
         <StatusBar barStyle="light-content" />
-        <Text style={styles.errorEmoji}>😵</Text>
+        <View style={styles.errorIcon}>
+          <Icon name="warning" size={28} color={palette.onErrorContainer} />
+        </View>
         <Text style={styles.errorTitle}>Pinch couldn't start</Text>
         <Text style={styles.errorBody}>{status.message}</Text>
         <View style={styles.errorAction}>
@@ -177,10 +180,18 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.xs,
   },
-  loadingMark: { ...typography.hero, fontSize: 40, color: palette.neonGreen },
+  loadingMark: { ...typography.hero, fontSize: 40, color: palette.primary },
   loadingText: { ...typography.caption, color: palette.textSecondary },
 
-  errorEmoji: { fontSize: 44, marginBottom: spacing.sm },
+  errorIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.errorContainer,
+    marginBottom: spacing.sm,
+  },
   errorTitle: { ...typography.display, color: palette.textPrimary },
   errorBody: {
     ...typography.body,
