@@ -253,8 +253,6 @@ const styles = StyleSheet.create({
     backgroundColor: palette.surfaceElevated,
     borderRadius: radii.md,
     padding: spacing.sm,
-    borderWidth: 1,
-    borderColor: palette.border,
   },
   rawLabel: {
     ...typography.micro,
