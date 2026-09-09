@@ -14,6 +14,7 @@ import {
   requestSmsPermission,
 } from '../../modules/pinch-capture';
 import { backfillFromInbox } from '../services/captureService';
+import { revalidateHistory } from '../services/revalidationService';
 import {
   getMonthlyAllowance,
   getNotificationSettings,
@@ -190,6 +191,22 @@ export default function SettingsScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Clear', style: 'destructive', onPress: () => startFresh(everything) },
     ]);
+  }
+
+  async function recheckHistory() {
+    setBusy(true);
+    try {
+      const result = await revalidateHistory();
+      await load();
+      Alert.alert(
+        result.rejected.length === 0 ? 'Nothing to clean up' : 'History rechecked',
+        result.rejected.length === 0
+          ? `Checked ${result.checked} imported messages and they all still look like real transactions.`
+          : `${result.rejected.length} of ${result.checked} imported messages were not real transactions. ${formatMoney(result.rejectedSpend)} removed from your spending. Restore any of them below.`
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function runBackfill() {
@@ -410,6 +427,16 @@ export default function SettingsScreen() {
           {counts
             ? `${counts.transactions} transactions, ${counts.captures} waiting for review, ${counts.ious} debts.`
             : ''}
+        </Text>
+        <Button
+          label={busy ? 'Checking…' : 'Recheck imported messages'}
+          variant="secondary"
+          onPress={recheckHistory}
+          disabled={busy}
+        />
+        <Text style={styles.note}>
+          Re-reads everything imported using the current, stricter rules and drops whatever is
+          not a real transaction. Nothing is deleted — you can put any of it back.
         </Text>
         <Button
           label="Clear spending history"

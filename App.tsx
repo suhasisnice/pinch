@@ -6,12 +6,14 @@ import RootNavigator from './src/navigation/RootNavigator';
 import { configureNotifications } from './src/notifications/notificationService';
 import { ingestBatch, ingestPending } from './src/services/captureService';
 import { runFirstRunSetup } from './src/services/onboardingService';
+import { revalidateIfRulesChanged } from './src/services/revalidationService';
 import {
   addMessageListener,
   isCaptureAvailable,
   openNotificationListenerSettings,
 } from './modules/pinch-capture';
 import { Button } from './src/components/ui';
+import { formatMoney } from './src/utils/format';
 import { palette, spacing, typography } from './src/theme/theme';
 
 type Status = { phase: 'LOADING' } | { phase: 'READY' } | { phase: 'ERROR'; message: string };
@@ -30,6 +32,26 @@ export default function App() {
         await initDatabase();
         await configureNotifications();
         if (!cancelled) setStatus({ phase: 'READY' });
+
+        // Re-read imported history under the current parser rules before
+        // anything shows a number. Tightening the parser fixes what happens
+        // next; it does nothing about what is already stored, and the budget
+        // is computed from what is stored. Runs once per rule-set version.
+        revalidateIfRulesChanged()
+          .then((result) => {
+            if (cancelled || !result) return;
+            Alert.alert(
+              'Cleaned up your history',
+              `${result.rejected.length} imported message${
+                result.rejected.length === 1 ? '' : 's'
+              } turned out not to be real transactions, and ${formatMoney(
+                result.rejectedSpend
+              )} of spending has been removed from your totals.
+
+You can review or restore any of them in Settings.`
+            );
+          })
+          .catch(() => undefined);
 
         // Pick up anything the native listeners buffered while the app was
         // closed. Never allowed to block startup.

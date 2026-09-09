@@ -2,7 +2,7 @@
   "expo": {
     "name": "Pinch",
     "slug": "pinch",
-    "version": "0.4.0",
+    "version": "0.4.1",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "assetBundlePatterns": [
@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "com.suhasisnice.pinch",
-      "versionCode": 5,
+      "versionCode": 6,
       "permissions": [
         "RECEIVE_SMS",
         "READ_SMS",
@@ -41,7 +41,9 @@
         }
       ],
       "expo-font",
-      "./plugins/withPackageQueries"
+      "./plugins/withPackageQueries",
+      "./plugins/withGradleTuning",
+      "./plugins/withAbiFilter"
     ],
     "icon": "./assets/icon.png",
     "web": {
