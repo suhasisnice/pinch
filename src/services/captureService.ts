@@ -12,6 +12,7 @@ import {
 import { roundUpAmount } from '../math/budget';
 import { classifyNewTransaction } from './classificationService';
 import { checkForTransferMatch } from './transferService';
+import { checkForSettlement } from './settlementService';
 
 export interface IngestResult {
   processed: number;
@@ -219,8 +220,15 @@ export async function postTransaction(input: PostTransactionInput): Promise<numb
   // here means it is correct within the same session it happened in.
   // Every kind runs through this, not just SPEND: the transfer's credit leg
   // needs the same check as its debit leg, and neither is a SPEND.
+  //
+  // Settlement is checked before the transfer match, not after: once a
+  // credit is confirmed to be closing a debt its kind becomes SETTLE_IN,
+  // which the round-trip detector already treats as decided and leaves
+  // alone. Checking the other order would let a payment that settles a
+  // real, tracked debt get mistaken for an untracked wash instead.
   try {
     await classifyNewTransaction(transactionId);
+    await checkForSettlement(transactionId);
     await checkForTransferMatch(transactionId);
   } catch {
     // Never lets a classification hiccup block a transaction that already

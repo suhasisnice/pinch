@@ -278,6 +278,25 @@ export async function getContactById(id: number): Promise<ContactRow | null> {
   return db.getFirstAsync<ContactRow>(`SELECT * FROM Contacts WHERE id = ?;`, [id]);
 }
 
+/**
+ * Looks up a contact by name without creating one when there is no match.
+ *
+ * Unlike findOrCreateContact, this must never create a row: it exists for
+ * checking whether an incoming payment might be someone paying back a debt,
+ * and running that check against every stranger who ever sends money would
+ * fill the Squad tab with one-off senders who were never a real contact.
+ */
+export async function findContactIdByName(name: string): Promise<number | null> {
+  const db = getAdapter();
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const row = await db.getFirstAsync<{ id: number }>(
+    `SELECT id FROM Contacts WHERE lower(name) = lower(?);`,
+    [trimmed]
+  );
+  return row?.id ?? null;
+}
+
 export async function updateContact(
   id: number,
   fields: { name?: string; phone?: string | null; isGhost?: boolean }
