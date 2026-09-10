@@ -117,3 +117,74 @@ export async function learnFromCategoryCorrection(
   if (!category) return;
   await Promise.all([db.learnMerchantRule(merchant, category), db.bumpTokenWeights(merchant, category)]);
 }
+
+export interface CategoryBackfillResult {
+  /** Rows that had no category and now have one. */
+  categorised: number;
+  /** Distinct merchant names the classifier had an opinion about. */
+  merchantsRecognised: number;
+  /** Distinct merchant names it could not place, left as they were. */
+  merchantsUnrecognised: number;
+}
+
+/**
+ * Gives a category to spending that was recorded before there was anything
+ * able to categorise it.
+ *
+ * The token classifier runs inside postTransaction, so it only ever sees
+ * transactions captured after it shipped. Everything already in the ledger —
+ * which, on a real install, is most of it — stayed Uncategorised no matter
+ * how good the classifier got. Insights is built almost entirely on category
+ * breakdown, so that one gap was enough to make the whole screen read as
+ * empty.
+ *
+ * Only fills blanks. A category the user set by hand is never overwritten,
+ * and neither is one an earlier run already worked out.
+ *
+ * Grouped by merchant rather than run per row: the classifier reloads the
+ * whole token table on each call, and a ledger of a thousand transactions
+ * holds far fewer than a thousand distinct shop names.
+ */
+export async function backfillCategories(): Promise<CategoryBackfillResult> {
+  const all = await db.getAllTransactions();
+
+  const needing = all.filter(
+    (row) =>
+      row.category === null &&
+      row.direction === 'DEBIT' &&
+      row.kind === 'SPEND' &&
+      row.excluded_at === null &&
+      row.transfer_pair_id === null &&
+      row.non_spend_reason === null
+  );
+
+  const byMerchant = new Map<string, number[]>();
+  for (const row of needing) {
+    const key = row.merchant.trim().toLowerCase();
+    if (!key) continue;
+    const ids = byMerchant.get(key);
+    if (ids) ids.push(row.id);
+    else byMerchant.set(key, [row.id]);
+  }
+
+  const result: CategoryBackfillResult = {
+    categorised: 0,
+    merchantsRecognised: 0,
+    merchantsUnrecognised: 0,
+  };
+
+  for (const [merchant, ids] of byMerchant) {
+    const category = await db.smartCategoriseMerchant(merchant);
+    if (!category) {
+      result.merchantsUnrecognised += 1;
+      continue;
+    }
+    result.merchantsRecognised += 1;
+    for (const id of ids) {
+      await db.setTransactionCategory(id, category);
+      result.categorised += 1;
+    }
+  }
+
+  return result;
+}
