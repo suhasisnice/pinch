@@ -2,7 +2,7 @@ import * as db from '../db/dbService';
 import { TransactionRow } from '../db/types';
 import { parseMessage } from './parserService';
 import { markDetectedTransfers } from './transferService';
-import { classifyStoredTransactions } from './classificationService';
+import { backfillCategories, classifyStoredTransactions } from './classificationService';
 
 const REVALIDATION_KEY = 'pinch.revalidatedRules';
 
@@ -15,8 +15,13 @@ const REVALIDATION_KEY = 'pinch.revalidatedRules';
  * 4 — money sent to a person and returned by them is cancelled out.
  * 5 — wallet top-ups, card bills and cash withdrawals are recognised, and
  *     reversals are booked against spending instead of as income.
+ * 6 — spending recorded before the merchant classifier existed gets a
+ *     category. Until this, the classifier only ever saw transactions
+ *     captured after it shipped, so an existing ledger stayed Uncategorised
+ *     however good it got — and Insights, which is built on category
+ *     breakdown, read as empty because of it.
  */
-export const PARSER_RULES_VERSION = 5;
+export const PARSER_RULES_VERSION = 6;
 
 export interface RevalidationResult {
   /** Transactions examined: captured, and still carrying their original text. */
@@ -33,6 +38,10 @@ export interface RevalidationResult {
   reclassified: number;
   /** Spending those payments were wrongly adding to the total. */
   reclassifiedSpend: number;
+  /** Older transactions that finally got a category. */
+  categorised: number;
+  /** Distinct merchants the classifier still could not place. */
+  merchantsUnrecognised: number;
 }
 
 /**
@@ -58,6 +67,8 @@ export async function findStaleCaptures(): Promise<RevalidationResult> {
     transferSpend: 0,
     reclassified: 0,
     reclassifiedSpend: 0,
+    categorised: 0,
+    merchantsUnrecognised: 0,
   };
 
   for (const row of all) {
@@ -102,6 +113,12 @@ export async function revalidateHistory(): Promise<RevalidationResult> {
   result.reclassified = classified.applied.length;
   result.reclassifiedSpend = classified.removedFromSpending;
 
+  // After all of the above, so nothing junk, transferred or non-spend gets a
+  // spending category it has no business carrying.
+  const backfilled = await backfillCategories();
+  result.categorised = backfilled.categorised;
+  result.merchantsUnrecognised = backfilled.merchantsUnrecognised;
+
   return result;
 }
 
@@ -123,6 +140,9 @@ export async function revalidateIfRulesChanged(): Promise<RevalidationResult | n
   await AsyncStorage.setItem(REVALIDATION_KEY, String(PARSER_RULES_VERSION));
 
   const changed =
-    result.rejected.length > 0 || result.transfersFound > 0 || result.reclassified > 0;
+    result.rejected.length > 0 ||
+    result.transfersFound > 0 ||
+    result.reclassified > 0 ||
+    result.categorised > 0;
   return changed ? result : null;
 }

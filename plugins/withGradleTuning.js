@@ -25,6 +25,24 @@ const PROPERTIES = {
 
   // Re-encoding PNGs saves a few KB and costs seconds on every build.
   'android.enablePngCrunchInReleaseBuilds': 'false',
+
+  // Gradle ships conservative defaults meant for a machine it knows nothing
+  // about. This one has twenty cores and 25 GB of RAM, and was using one
+  // worker and a 2 GB heap.
+  //
+  // Parallel builds the independent modules at once — an Expo tree is
+  // dozens of small sibling modules, which is close to the best case for it.
+  'org.gradle.parallel': 'true',
+
+  // The build cache reuses task outputs across builds, including after a
+  // prebuild --clean wipes android/. Without it every clean rebuild
+  // recompiles dependencies that never changed.
+  'org.gradle.caching': 'true',
+
+  // A 2 GB heap makes the compiler and the Hermes step spend their time in
+  // garbage collection rather than work. Still leaves most of the machine
+  // free — this is a ceiling, not a reservation.
+  'org.gradle.jvmargs': '-Xmx6144m -XX:MaxMetaspaceSize=1024m',
 };
 
 module.exports = function withGradleTuning(config) {

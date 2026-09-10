@@ -69,6 +69,19 @@ export default function App() {
                 )}.`
               );
             }
+            if (result.categorised > 0) {
+              lines.push(
+                `${result.categorised} older transaction${
+                  result.categorised === 1 ? '' : 's'
+                } finally got a category, so Insights has something to work with.${
+                  result.merchantsUnrecognised > 0
+                    ? ` ${result.merchantsUnrecognised} merchant${
+                        result.merchantsUnrecognised === 1 ? '' : 's'
+                      } still unrecognised — set one by hand and it learns the rest.`
+                    : ''
+                }`
+              );
+            }
             lines.push('Anything here can be restored in Settings.');
 
             Alert.alert('Cleaned up your history', lines.join('\n\n'));
