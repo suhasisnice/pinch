@@ -12,5 +12,8 @@ module.exports = {
     // Same problem, one level further down the import chain: services that
     // touch notifications pull this in too. See tests/mocks/expo-notifications.ts.
     '^expo-notifications$': '<rootDir>/tests/mocks/expo-notifications.ts',
+    // react-native itself ships Flow syntax plain ts-jest cannot parse. See
+    // tests/mocks/react-native.ts.
+    '^react-native$': '<rootDir>/tests/mocks/react-native.ts',
   },
 };
