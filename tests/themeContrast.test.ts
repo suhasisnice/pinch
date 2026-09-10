@@ -1,4 +1,4 @@
-import { palette } from '../src/theme/theme';
+import { categoryColors, onColor, palette } from '../src/theme/theme';
 
 /**
  * Contrast is a property of the palette, so it can be checked like any other
@@ -68,6 +68,32 @@ describe('palette contrast', () => {
 
     for (let i = 1; i < ladder.length; i += 1) {
       expect(luminance(ladder[i])).toBeGreaterThan(luminance(ladder[i - 1]));
+    }
+  });
+});
+
+describe('onColor', () => {
+  const tints = [
+    palette.violet,
+    palette.mint,
+    palette.warningAmber,
+    palette.neonGreen,
+    // The one that motivated this: a mid-tone red where a fixed dark label
+    // would have landed at 4.02:1 and nothing would have flagged it.
+    palette.danger,
+    palette.sky,
+    palette.pink,
+    palette.primary,
+    palette.tertiary,
+  ];
+
+  it.each(tints)('picks a label that clears AA on %s', (tint) => {
+    expect(contrast(onColor(tint), tint)).toBeGreaterThanOrEqual(AA);
+  });
+
+  it('clears AA on every category colour a chip could be tinted with', () => {
+    for (const tint of Object.values(categoryColors)) {
+      expect(contrast(onColor(tint), tint)).toBeGreaterThanOrEqual(AA);
     }
   });
 });
