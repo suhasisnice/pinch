@@ -348,7 +348,12 @@ export default function SplitModal({
               >
                 <View style={styles.personLeft}>
                   {mode === 'EXACT' ? (
-                    <Pressable onPress={() => toggle(participant.contactId)} hitSlop={8}>
+                    <Pressable
+                      onPress={() => toggle(participant.contactId)}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${participant.included ? "Remove" : "Add"} ${participant.name}`}
+                    >
                       <Icon
                         name={participant.included ? 'check' : 'add'}
                         size={16}

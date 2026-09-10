@@ -104,7 +104,13 @@ export default function TodayScreen() {
             )} · ${snapshot.daysRemaining} days left`}
           />
         </View>
-        <Text style={styles.gear} onPress={() => navigation.navigate('Settings')} suppressHighlighting>
+        <Text
+          style={styles.gear}
+          onPress={() => navigation.navigate("Settings")}
+          accessibilityRole="button"
+          accessibilityLabel="Settings"
+          suppressHighlighting
+        >
           <Icon name="settings" size={22} color={palette.textSecondary} />
         </Text>
       </View>

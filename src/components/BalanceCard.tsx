@@ -43,7 +43,12 @@ export default function BalanceCard({
       <Card style={styles.card}>
         <View style={styles.head}>
           <Text style={styles.label}>In the bank</Text>
-          <Pressable onPress={() => setShown((v) => !v)} hitSlop={12}>
+          <Pressable
+            onPress={() => setShown((v) => !v)}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel={shown ? "Hide balance" : "Show balance"}
+          >
             <Icon name={shown ? 'eye' : 'eyeOff'} size={16} color={palette.textMuted} />
           </Pressable>
         </View>

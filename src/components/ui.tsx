@@ -108,6 +108,7 @@ export function Card({
         onPress={onPress}
         onPressIn={press.onPressIn}
         onPressOut={press.onPressOut}
+        accessibilityRole="button"
         // A state layer, not a colour change: the surface keeps its identity
         // and simply takes on a film of the content colour while held.
         style={({ pressed }) => [
@@ -190,6 +191,9 @@ export function Button({
         disabled={disabled}
         onPressIn={disabled ? undefined : press.onPressIn}
         onPressOut={disabled ? undefined : press.onPressOut}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ disabled }}
         style={({ pressed }) => [
           styles.button,
           containerStyle,
@@ -212,11 +216,14 @@ export function FAB({
   icon,
   label,
   onPress,
+  accessibilityLabel,
   style,
 }: {
   icon: IconName;
   label?: string;
   onPress: () => void;
+  /** Required when there is no visible label — an icon alone says nothing aloud. */
+  accessibilityLabel?: string;
   style?: ViewStyle;
 }) {
   const press = usePressScale(0.94);
@@ -227,6 +234,8 @@ export function FAB({
         onPress={onPress}
         onPressIn={press.onPressIn}
         onPressOut={press.onPressOut}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel ?? label}
         style={({ pressed }) => [
           styles.fab,
           label ? styles.fabExtended : null,
@@ -305,6 +314,9 @@ export function Chip({
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected }}
       style={({ pressed }) => [
         styles.chip,
         selected && { backgroundColor: selectedBackground, borderColor: 'transparent' },
@@ -461,7 +473,13 @@ export function Sheet({
           <View style={styles.sheetHandle} />
           <View style={styles.sheetHeader}>
             <Text style={styles.sheetTitle}>{title}</Text>
-            <Pressable onPress={onClose} hitSlop={12} style={styles.sheetCloseHit}>
+            <Pressable
+              onPress={onClose}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              style={styles.sheetCloseHit}
+            >
               <Text style={styles.sheetClose}>Done</Text>
             </Pressable>
           </View>
@@ -513,6 +531,8 @@ export function Row({
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={subtitle ? `${title}, ${subtitle}` : title}
       style={({ pressed }) => [
         styles.row,
         pressed && {
