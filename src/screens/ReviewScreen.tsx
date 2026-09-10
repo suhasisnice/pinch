@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   meta: { ...typography.micro, color: palette.textMuted, marginTop: 2 },
 
   raw: {
-    backgroundColor: palette.surfaceElevated,
+    backgroundColor: palette.surfaceContainerHigh,
     borderRadius: radii.md,
     padding: spacing.sm,
     marginTop: spacing.sm,

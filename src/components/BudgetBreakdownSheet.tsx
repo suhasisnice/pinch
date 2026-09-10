@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: palette.surfaceElevated,
+    backgroundColor: palette.surfaceContainerHigh,
     borderRadius: radii.md,
     padding: spacing.sm,
   },

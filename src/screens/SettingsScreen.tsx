@@ -530,7 +530,7 @@ function Toggle({
       <Switch
         value={value}
         onValueChange={onChange}
-        trackColor={{ false: palette.surfaceHigh, true: palette.primary }}
+        trackColor={{ false: palette.surfaceContainerHighest, true: palette.primary }}
         thumbColor={palette.textPrimary}
       />
     </View>

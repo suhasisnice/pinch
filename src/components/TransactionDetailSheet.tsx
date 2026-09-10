@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
   sourceText: { ...typography.micro, color: palette.textMuted },
 
   rawBox: {
-    backgroundColor: palette.surfaceElevated,
+    backgroundColor: palette.surfaceContainerHigh,
     borderRadius: radii.md,
     padding: spacing.sm,
   },
