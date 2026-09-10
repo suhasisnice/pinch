@@ -30,8 +30,13 @@ const REVALIDATION_KEY = 'pinch.revalidatedRules';
  *     as plain income. Only ran going forward from the moment it shipped,
  *     so a repayment credited before then is still sitting there as income
  *     until it is re-checked here.
+ * 9 — categorising a merchant that has never been seen before now groups by
+ *     fuzzy name match, not an exact string. A chain captured under several
+ *     spellings — truncated by an SMS length limit, differently capitalised
+ *     by a notification — used to need every spelling recognised on its own;
+ *     this re-groups what is already Uncategorised under the new rule.
  */
-export const PARSER_RULES_VERSION = 8;
+export const PARSER_RULES_VERSION = 9;
 
 export interface RevalidationResult {
   /** Transactions examined: captured, and still carrying their original text. */

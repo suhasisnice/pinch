@@ -1,4 +1,4 @@
-import { classifyTokens, tokenize, TokenWeights } from '../src/math/merchantClassifier';
+import { classifyTokens, sameMerchant, tokenize, TokenWeights } from '../src/math/merchantClassifier';
 
 const WEIGHTS: TokenWeights = {
   Food: { zomato: 20, swiggy: 20, cafe: 10, restaurant: 8, biryani: 5, pizza: 6 },
@@ -18,6 +18,44 @@ describe('tokenize', () => {
 
   it('splits a VPA-shaped name on the @ handle', () => {
     expect(tokenize('swiggy@ybl')).toEqual(['swiggy', 'ybl']);
+  });
+});
+
+describe('sameMerchant', () => {
+  it('ignores case and punctuation differences', () => {
+    expect(sameMerchant('CORNER HOUSE', 'corner-house')).toBe(true);
+  });
+
+  it('ignores spacing differences, including a run of double spaces', () => {
+    expect(sameMerchant('Corner  House', 'Corner House')).toBe(true);
+  });
+
+  it('recognises a name truncated by an SMS length limit', () => {
+    expect(sameMerchant('CORNER HOU', 'Corner House')).toBe(true);
+  });
+
+  it('recognises a VPA-style handle with the spaces removed entirely', () => {
+    expect(sameMerchant('cornerhouse', 'Corner House')).toBe(true);
+  });
+
+  it('recognises a truncated VPA-style handle', () => {
+    expect(sameMerchant('cornerhous', 'Corner House')).toBe(true);
+  });
+
+  it('does not match a short word against an unrelated longer one that happens to start with it', () => {
+    expect(sameMerchant('Cafe', 'Cafeteria')).toBe(false);
+  });
+
+  it('does not match two different restaurants', () => {
+    expect(sameMerchant('Corner House', 'Truffles')).toBe(false);
+  });
+
+  it('does not match when more than a small tail was truncated', () => {
+    expect(sameMerchant('Corner', 'Corner House Koramangala')).toBe(false);
+  });
+
+  it('treats an empty string as never matching anything', () => {
+    expect(sameMerchant('', 'Corner House')).toBe(false);
   });
 });
 

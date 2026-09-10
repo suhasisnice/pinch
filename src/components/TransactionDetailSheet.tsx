@@ -3,7 +3,7 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import * as db from '../db/dbService';
 import { TransactionRow } from '../db/types';
 import { CATEGORIES } from '../db/schema';
-import { learnFromCategoryCorrection } from '../services/classificationService';
+import { learnFromCategoryCorrection, propagateCategoryCorrection } from '../services/classificationService';
 import { formatMoney, formatRelative } from '../utils/format';
 import { palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Chip, Field, Sheet } from './ui';
@@ -66,16 +66,23 @@ export default function TransactionDetailSheet({
     setBusy(true);
     try {
       const trimmedMerchant = merchant.trim();
+      const categoryChanged = category !== transaction!.category;
       await db.updateTransaction(transaction!.id, {
         amount: parsedAmount,
         merchant: trimmedMerchant,
         category,
       });
-      // A category set by hand is the strongest signal the app ever gets —
-      // stronger than its own guess, right or wrong. Feed it back so the
-      // next message from this merchant, and eventually similarly-named
-      // ones, do not need the same correction again.
-      await learnFromCategoryCorrection(trimmedMerchant, category);
+      if (categoryChanged) {
+        // A category set by hand is the strongest signal the app ever gets —
+        // stronger than its own guess, right or wrong. Feed it back so the
+        // next message from this merchant, and eventually similarly-named
+        // ones, do not need the same correction again...
+        await learnFromCategoryCorrection(trimmedMerchant, category);
+        // ...and reach every other visit to the same place already sitting
+        // in the ledger, not just future ones. Matching is fuzzy, since the
+        // same chain rarely gets written identically twice.
+        await propagateCategoryCorrection(trimmedMerchant, category, transaction!.id);
+      }
       setEditing(false);
       onChanged();
     } finally {

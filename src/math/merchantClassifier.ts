@@ -38,6 +38,64 @@ export function tokenize(text: string): string[] {
     .filter((word) => word.length >= 2 && !STOPWORDS.has(word));
 }
 
+/** Lowercased, punctuation collapsed to single spaces, trimmed. */
+function normaliseMerchantName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+/**
+ * A name is a prefix of another once both are reduced to the same
+ * character set — catches an SMS truncating "CORNER HOUSE" down to
+ * "CORNER HOU" partway through a word, which a whitespace-aware prefix
+ * check alone would miss.
+ *
+ * A plain "is one a prefix of the other" is too loose on its own: "Cafe" is
+ * a prefix of "Cafeteria", but they are different businesses, not one
+ * truncated into the other. Real truncation only ever drops a handful of
+ * characters off the end of an otherwise-whole name, so both a small
+ * absolute budget (at most 8 characters lost) and a proportional one (the
+ * shorter name is still at least 60% of the longer one) have to hold.
+ */
+function isTruncatedPrefix(shorter: string, longer: string): boolean {
+  if (shorter.length < 4 || !longer.startsWith(shorter)) return false;
+  const dropped = longer.length - shorter.length;
+  return dropped <= 8 && shorter.length >= longer.length * 0.6;
+}
+
+/**
+ * Whether two merchant strings plausibly name the same place.
+ *
+ * A bank or payment app has no fixed way of writing a merchant's name: the
+ * same restaurant shows up as "CORNER HOUSE", "Corner Hou" (cut off at an
+ * SMS length limit), or "cornerhouse" (a VPA handle with no spaces at all).
+ * A single correction should reach every one of those, not just an exact
+ * repeat of whatever string happened to be edited.
+ *
+ * Deliberately not fuzzy in the sense of edit distance or anything
+ * probabilistic — the three specific, cheap, and safe-to-automate cases
+ * this exists for are exact-after-normalising, one name cut short partway
+ * through the other, and spacing removed entirely.
+ */
+export function sameMerchant(a: string, b: string): boolean {
+  const na = normaliseMerchantName(a);
+  const nb = normaliseMerchantName(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+
+  const [shorter, longer] = na.length <= nb.length ? [na, nb] : [nb, na];
+  if (isTruncatedPrefix(shorter, longer)) return true;
+
+  const ca = na.replace(/\s+/g, '');
+  const cb = nb.replace(/\s+/g, '');
+  if (ca === cb) return true;
+
+  const [cShorter, cLonger] = ca.length <= cb.length ? [ca, cb] : [cb, ca];
+  return isTruncatedPrefix(cShorter, cLonger);
+}
+
 /** Per-category token counts, as stored: weights[category][token] = count. */
 export type TokenWeights = Record<string, Record<string, number>>;
 

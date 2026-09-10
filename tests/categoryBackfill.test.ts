@@ -1,5 +1,5 @@
 import * as db from '../src/db/dbService';
-import { backfillCategories } from '../src/services/classificationService';
+import { backfillCategories, propagateCategoryCorrection } from '../src/services/classificationService';
 import { createSqlJsAdapter } from './utils/sqljsAdapter';
 
 beforeEach(async () => {
@@ -91,5 +91,72 @@ describe('backfillCategories', () => {
 
     expect(result.categorised).toBeGreaterThan(0);
     expect((await db.getTransactionById(second))?.category).toBe('Food');
+  });
+
+  it('groups the same chain written differently across messages into one lookup', async () => {
+    const full = await spend('Corner House');
+    const truncated = await spend('CORNER HOU');
+    const noSpaces = await spend('cornerhouse');
+
+    const { learnFromCategoryCorrection } = await import(
+      '../src/services/classificationService'
+    );
+    await learnFromCategoryCorrection('Corner House', 'Food');
+
+    const result = await backfillCategories();
+
+    expect(result.merchantsRecognised).toBe(1);
+    expect(result.categorised).toBe(3);
+    expect((await db.getTransactionById(full))?.category).toBe('Food');
+    expect((await db.getTransactionById(truncated))?.category).toBe('Food');
+    expect((await db.getTransactionById(noSpaces))?.category).toBe('Food');
+  });
+});
+
+describe('propagateCategoryCorrection', () => {
+  it('reaches a differently-spelled visit to the same place from months ago', async () => {
+    const old = await spend('CORNER HOU', { occurredAt: '2026-06-01T12:00:00.000Z' });
+    const recent = await spend('Corner House');
+
+    const result = await propagateCategoryCorrection('Corner House', 'Food', recent);
+
+    expect(result.updated).toBe(1);
+    expect((await db.getTransactionById(old))?.category).toBe('Food');
+  });
+
+  it('overwrites a category that was already set, unlike backfillCategories', async () => {
+    const wronglyTagged = await spend('CORNER HOU');
+    await db.setTransactionCategory(wronglyTagged, 'Shopping');
+
+    await propagateCategoryCorrection('Corner House', 'Food', undefined);
+
+    expect((await db.getTransactionById(wronglyTagged))?.category).toBe('Food');
+  });
+
+  it('leaves an unrelated merchant alone', async () => {
+    const other = await spend('Truffles Cafe');
+
+    await propagateCategoryCorrection('Corner House', 'Food', undefined);
+
+    expect((await db.getTransactionById(other))?.category).toBeNull();
+  });
+
+  it('does nothing when the correction clears the category', async () => {
+    const id = await spend('Corner House');
+    await db.setTransactionCategory(id, 'Food');
+
+    const result = await propagateCategoryCorrection('Corner House', null, undefined);
+
+    expect(result.updated).toBe(0);
+    expect((await db.getTransactionById(id))?.category).toBe('Food');
+  });
+
+  it('never touches an excluded or transferred row', async () => {
+    const excluded = await spend('CORNER HOU');
+    await db.setTransactionExcluded(excluded, true);
+
+    const result = await propagateCategoryCorrection('Corner House', 'Food', undefined);
+
+    expect(result.updated).toBe(0);
   });
 });
