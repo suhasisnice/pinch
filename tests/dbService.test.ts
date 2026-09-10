@@ -39,7 +39,7 @@ describe('transactions', () => {
     const at = new Date().toISOString();
     await spend(340, 'SWIGGY', { occurredAt: at });
 
-    const match = await db.findProbableDuplicate(340, at);
+    const match = await db.findProbableDuplicate(340, 'DEBIT', at);
     expect(match?.merchant).toBe('SWIGGY');
   });
 
@@ -48,7 +48,29 @@ describe('transactions', () => {
     await spend(340, 'Swiggy', { occurredAt: at });
 
     const hoursLater = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();
-    expect(await db.findProbableDuplicate(340, hoursLater)).toBeNull();
+    expect(await db.findProbableDuplicate(340, 'DEBIT', hoursLater)).toBeNull();
+  });
+
+  it('does not treat a same-amount payment the other way as a duplicate', async () => {
+    // Send someone 200, they send 200 straight back: two real, opposite
+    // payments, not one message reported twice. Matching on amount alone
+    // used to read the reply as a duplicate of the original and drop it.
+    const at = new Date().toISOString();
+    await spend(200, 'Shreyas', { occurredAt: at });
+
+    const secondsLater = new Date(Date.parse(at) + 30 * 1000).toISOString();
+    expect(await db.findProbableDuplicate(200, 'CREDIT', secondsLater)).toBeNull();
+  });
+
+  it('catches a same-direction duplicate several minutes apart', async () => {
+    // A bank's own SMS for a UPI payment routinely lags the paying app's
+    // push notification by minutes, not seconds.
+    const at = new Date().toISOString();
+    await spend(150, 'Zomato', { occurredAt: at });
+
+    const fourMinutesLater = new Date(Date.parse(at) + 4 * 60 * 1000).toISOString();
+    const match = await db.findProbableDuplicate(150, 'DEBIT', fourMinutesLater);
+    expect(match?.merchant).toBe('Zomato');
   });
 });
 

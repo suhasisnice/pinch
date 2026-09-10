@@ -67,6 +67,25 @@ export async function ingestMessage(
 
   if (await db.isBlocked(merchant)) return 'SKIPPED';
 
+  // Second line of defence behind the UNIQUE dedup key: the same payment
+  // reported by SMS and by a notification, worded differently and carrying
+  // no reference number to match on. Checked before the confidence gate
+  // below, not after — a shakier parse of a payment that is already
+  // correctly on the books (say, a bank SMS confirming what a payment app's
+  // notification already posted) must never reach the review inbox at all,
+  // where "is this real" is the wrong question to ask about it.
+  //
+  // Skipped whenever a match is found, regardless of whether its dedup key
+  // happens to equal this one's: that equality only means addTransaction's
+  // own UNIQUE check would have caught it further down for a confident
+  // parse. A capture heading for the review inbox never reaches
+  // addTransaction at all, so relying on that downstream idempotency here
+  // would let a low-confidence echo of an already-posted payment through.
+  const existing = await db.findProbableDuplicate(parsed.amount, parsed.direction, occurredAt.toISOString());
+  if (existing) {
+    return 'SKIPPED';
+  }
+
   if (parsed.confidence < ACCEPT_THRESHOLD) {
     const id = await db.recordCapture({
       rawText: message.body,
@@ -80,14 +99,6 @@ export async function ingestMessage(
       dedupKey,
     });
     return id === null ? 'SKIPPED' : 'QUEUED';
-  }
-
-  // Second line of defence behind the UNIQUE dedup key: the same payment
-  // reported by SMS and by a notification within seconds, worded differently
-  // and carrying no reference number to match on.
-  const existing = await db.findProbableDuplicate(parsed.amount, occurredAt.toISOString());
-  if (existing && existing.dedup_key !== dedupKey) {
-    return 'SKIPPED';
   }
 
   const posted = await postTransaction({
