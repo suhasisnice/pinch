@@ -450,7 +450,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.surfaceElevated,
+    backgroundColor: palette.surfaceContainerHigh,
     borderWidth: 1,
     borderColor: palette.border,
   },

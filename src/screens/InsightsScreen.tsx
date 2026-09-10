@@ -416,7 +416,7 @@ export default function InsightsScreen() {
                       styles.monthBar,
                       {
                         height: Math.max(6, (month.total / maxMonth) * 88),
-                        backgroundColor: isCurrent ? palette.primary : palette.surfaceHigh,
+                        backgroundColor: isCurrent ? palette.primary : palette.surfaceContainerHighest,
                       },
                     ]}
                   />
@@ -516,7 +516,7 @@ export default function InsightsScreen() {
               </View>
               <ProgressBar
                 fraction={day.average / (heaviestDay.average || 1)}
-                color={day.weekday === heaviestDay.weekday ? palette.violet : palette.surfaceHigh}
+                color={day.weekday === heaviestDay.weekday ? palette.violet : palette.surfaceContainerHighest}
                 height={6}
               />
             </View>

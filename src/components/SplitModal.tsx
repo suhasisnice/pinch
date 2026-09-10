@@ -443,7 +443,7 @@ const styles = StyleSheet.create({
 
   modeRow: {
     flexDirection: 'row',
-    backgroundColor: palette.surfaceElevated,
+    backgroundColor: palette.surfaceContainerHigh,
     borderRadius: radii.pill,
     padding: 4,
     gap: 4,
@@ -484,12 +484,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: spacing.md,
     borderRadius: radii.md,
-    backgroundColor: palette.surfaceElevated,
+    backgroundColor: palette.surfaceContainerHigh,
     borderWidth: 1,
     borderColor: palette.border,
   },
   personOn: { borderColor: palette.primary },
-  personYou: { backgroundColor: palette.surfaceHigh, borderColor: 'transparent' },
+  personYou: { backgroundColor: palette.surfaceContainerHighest, borderColor: 'transparent' },
   personYouName: { color: palette.textPrimary },
   personLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   personName: { ...typography.bodyBold, color: palette.textSecondary },

@@ -71,15 +71,14 @@ export const palette = {
   ...surfaces,
 
   /**
-   * Legacy names, kept pointing at the tonal scale so that every screen
-   * written before this system existed inherits it without being touched.
-   * New code should prefer the surfaceContainer* names above, which say
-   * where in the stack they sit rather than just "more elevated than what".
+   * The page and the default card, named for their job rather than their
+   * position in the stack. Both are MD3 role names in their own right; the
+   * surfaceContainer* ladder above is what everything else reaches for,
+   * because "high" and "highest" say where a tone sits relative to the rest
+   * in a way that "elevated" never quite did.
    */
   background: surfaces.surfaceContainerLowest,
   surface: surfaces.surfaceContainerLow,
-  surfaceElevated: surfaces.surfaceContainerHigh,
-  surfaceHigh: surfaces.surfaceContainerHighest,
 
   outline: '#938F99',
   outlineVariant: '#49454F',

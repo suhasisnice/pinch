@@ -163,7 +163,7 @@ export default function FreshStartSheet({
         <Switch
           value={forgetHistory}
           onValueChange={setForgetHistory}
-          trackColor={{ false: palette.surfaceHigh, true: palette.danger }}
+          trackColor={{ false: palette.surfaceContainerHighest, true: palette.danger }}
           thumbColor={palette.textPrimary}
         />
       </View>
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 2,
     paddingVertical: spacing.md,
-    backgroundColor: palette.surfaceElevated,
+    backgroundColor: palette.surfaceContainerHigh,
     borderRadius: radii.md,
   },
   previewLabel: { ...typography.micro, color: palette.textSecondary, textTransform: 'uppercase', letterSpacing: 1 },
