@@ -5,6 +5,7 @@ import {
   classifyNonSpend,
   removesFromSpending,
 } from '../math/classification';
+import { sameMerchant } from '../math/merchantClassifier';
 
 export interface ClassificationResult {
   applied: Array<{ id: number; merchant: string; amount: number; reason: NonSpendReason }>;
@@ -118,6 +119,51 @@ export async function learnFromCategoryCorrection(
   await Promise.all([db.learnMerchantRule(merchant, category), db.bumpTokenWeights(merchant, category)]);
 }
 
+export interface CategoryPropagationResult {
+  /** Other transactions that also got this category. */
+  updated: number;
+}
+
+/**
+ * Applies a category correction to every other transaction that is plausibly
+ * the same merchant, not just the one that was just edited.
+ *
+ * learnFromCategoryCorrection only ever taught the classifier for the next
+ * time this merchant shows up — a visit to the same restaurant chain from
+ * months ago, already sitting there with whatever category it was first
+ * (wrongly) given, was never revisited. Unlike backfillCategories, this is
+ * allowed to overwrite an existing category: correcting one instance by
+ * hand is the strongest signal the app ever gets, stronger than whatever
+ * guess is already sitting on the others.
+ *
+ * Matching is fuzzy (see sameMerchant) because the same place rarely shows
+ * up written identically twice — an SMS truncates it, a notification
+ * capitalises it differently, a VPA handle drops the spaces.
+ */
+export async function propagateCategoryCorrection(
+  merchant: string,
+  category: string | null,
+  excludeTransactionId?: number
+): Promise<CategoryPropagationResult> {
+  if (!category) return { updated: 0 };
+
+  const all = await db.getAllTransactions();
+  let updated = 0;
+
+  for (const row of all) {
+    if (row.id === excludeTransactionId) continue;
+    if (row.direction !== 'DEBIT' || row.kind !== 'SPEND') continue;
+    if (row.excluded_at !== null || row.transfer_pair_id !== null) continue;
+    if (row.category === category) continue;
+    if (!sameMerchant(row.merchant, merchant)) continue;
+
+    await db.setTransactionCategory(row.id, category);
+    updated += 1;
+  }
+
+  return { updated };
+}
+
 export interface CategoryBackfillResult {
   /** Rows that had no category and now have one. */
   categorised: number;
@@ -143,7 +189,10 @@ export interface CategoryBackfillResult {
  *
  * Grouped by merchant rather than run per row: the classifier reloads the
  * whole token table on each call, and a ledger of a thousand transactions
- * holds far fewer than a thousand distinct shop names.
+ * holds far fewer than a thousand distinct shop names. Grouping is fuzzy
+ * (see sameMerchant), so a chain captured under several slightly different
+ * spellings — a truncated SMS, a differently-capitalised notification — is
+ * still one lookup and one answer rather than several unrecognised ones.
  */
 export async function backfillCategories(): Promise<CategoryBackfillResult> {
   const all = await db.getAllTransactions();
@@ -158,13 +207,17 @@ export async function backfillCategories(): Promise<CategoryBackfillResult> {
       row.non_spend_reason === null
   );
 
-  const byMerchant = new Map<string, number[]>();
+  const clusters: Array<{ names: string[]; ids: number[] }> = [];
   for (const row of needing) {
-    const key = row.merchant.trim().toLowerCase();
+    const key = row.merchant.trim();
     if (!key) continue;
-    const ids = byMerchant.get(key);
-    if (ids) ids.push(row.id);
-    else byMerchant.set(key, [row.id]);
+    const cluster = clusters.find((c) => c.names.some((name) => sameMerchant(name, key)));
+    if (cluster) {
+      if (!cluster.names.includes(key)) cluster.names.push(key);
+      cluster.ids.push(row.id);
+    } else {
+      clusters.push({ names: [key], ids: [row.id] });
+    }
   }
 
   const result: CategoryBackfillResult = {
@@ -173,14 +226,18 @@ export async function backfillCategories(): Promise<CategoryBackfillResult> {
     merchantsUnrecognised: 0,
   };
 
-  for (const [merchant, ids] of byMerchant) {
-    const category = await db.smartCategoriseMerchant(merchant);
+  for (const cluster of clusters) {
+    let category: string | null = null;
+    for (const name of cluster.names) {
+      category = await db.smartCategoriseMerchant(name);
+      if (category) break;
+    }
     if (!category) {
       result.merchantsUnrecognised += 1;
       continue;
     }
     result.merchantsRecognised += 1;
-    for (const id of ids) {
+    for (const id of cluster.ids) {
       await db.setTransactionCategory(id, category);
       result.categorised += 1;
     }
