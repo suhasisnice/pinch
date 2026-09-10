@@ -12,12 +12,19 @@ import Icon from './Icon';
 /**
  * View, edit, split, or get rid of a single transaction.
  *
- * "Get rid of" branches by where the row came from. A manual entry is just
- * deleted — it has no SMS or notification behind it to reappear from. A
- * captured one (SMS/NOTIFICATION) is *excluded* instead: the row is hidden
- * from every total but kept, because its dedup_key is what stops the exact
- * same message being re-added by the next backfill. Deleting it outright
- * would let the junk straight back in the next time SMS history is imported.
+ * "Get rid of" branches by where the row came from, and — for a captured
+ * one — by why. A manual entry is just deleted outright; it has no SMS or
+ * notification behind it to reappear from. A captured one (SMS/NOTIFICATION)
+ * is always *excluded* rather than removed, because its dedup_key is what
+ * stops the exact same message being re-added by the next backfill.
+ *
+ * Delete and Report both exclude, but they are not the same action wearing
+ * two labels. Delete is for real money that genuinely moved — a friend's
+ * cash back-and-forth, a one-off test payment — that you simply do not want
+ * counted; it says nothing about the message and never touches the
+ * blocklist. Report is a claim that the message itself was junk, and is the
+ * only path that offers to block the sender, mirroring the review inbox's
+ * own reject flow.
  */
 export default function TransactionDetailSheet({
   transaction,
@@ -39,7 +46,6 @@ export default function TransactionDetailSheet({
   const [category, setCategory] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [blockToo, setBlockToo] = useState(true);
 
   useEffect(() => {
     if (!transaction) return;
@@ -47,7 +53,6 @@ export default function TransactionDetailSheet({
     setMerchant(transaction.merchant);
     setCategory(transaction.category);
     setEditing(false);
-    setBlockToo(true);
   }, [transaction]);
 
   if (!transaction) return null;
@@ -89,16 +94,33 @@ export default function TransactionDetailSheet({
     }
   }
 
-  async function excludeAndMaybeBlock() {
+  /**
+   * Both Report and Delete hide a captured row the same way underneath —
+   * excluded, not removed, because the dedup_key is what stops the exact
+   * same message being re-added by the next backfill. What differs is
+   * intent, not mechanics: Delete says nothing about the message itself,
+   * while Report is a claim that the message was junk, and only Report
+   * offers to act on that claim by blocking the sender.
+   */
+  async function excludeTransaction() {
     setBusy(true);
     try {
       await db.setTransactionExcluded(transaction!.id, true);
-      if (blockToo) {
-        // The merchant string is what future parses of this sender will
-        // produce too, so blocking on it catches the next message from the
-        // same voucher/rummy/marketing blast without needing the raw sender.
-        await db.addToBlocklist(transaction!.merchant, 'Excluded from a transaction');
-      }
+      onChanged();
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function excludeAndBlock() {
+    setBusy(true);
+    try {
+      await db.setTransactionExcluded(transaction!.id, true);
+      // The merchant string is what future parses of this sender will
+      // produce too, so blocking on it catches the next message from the
+      // same voucher/rummy/marketing blast without needing the raw sender.
+      await db.addToBlocklist(transaction!.merchant, 'Reported from a transaction');
       onChanged();
       onClose();
     } finally {
@@ -113,15 +135,35 @@ export default function TransactionDetailSheet({
     ]);
   }
 
-  function confirmExclude() {
+  /**
+   * Plain removal. No claim about the message, no mention of the sender —
+   * this is for real money that moved (a friend paid you back in cash for
+   * something, a one-off back-and-forth) that you just don't want counted.
+   */
+  function confirmDeleteCaptured() {
     Alert.alert(
-      'Not a real transaction?',
-      blockToo
-        ? `This will stop counting toward your spending, and similar messages from "${transaction!.merchant}" will be skipped automatically from now on.`
-        : `This will stop counting toward your spending.`,
+      'Delete this transaction?',
+      'It stops counting toward your spending. You can bring it back from Settings › Ignored.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove it', style: 'destructive', onPress: excludeAndMaybeBlock },
+        { text: 'Delete', style: 'destructive', onPress: excludeTransaction },
+      ]
+    );
+  }
+
+  /**
+   * The message itself is the problem — fake, spam, a scam. Mirrors the
+   * review inbox's own reject flow, so blocking a sender always looks and
+   * reads the same regardless of where it was found from.
+   */
+  function confirmReport() {
+    Alert.alert(
+      'Report this transaction',
+      `Should Pinch keep reading messages from "${transaction!.merchant}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Just this one', onPress: excludeTransaction },
+        { text: 'Block sender', style: 'destructive', onPress: excludeAndBlock },
       ]
     );
   }
@@ -214,18 +256,8 @@ export default function TransactionDetailSheet({
 
           {isCaptured ? (
             <View style={styles.excludeBlock}>
-              <Chip
-                label="Also block this sender"
-                selected={blockToo}
-                onPress={() => setBlockToo(!blockToo)}
-                color={palette.warningAmber}
-              />
-              <Button
-                label="Not a real transaction"
-                variant="danger"
-                onPress={confirmExclude}
-                disabled={busy}
-              />
+              <Button label="Delete" variant="danger" onPress={confirmDeleteCaptured} disabled={busy} />
+              <Button label="Report as fake or spam" variant="ghost" onPress={confirmReport} disabled={busy} />
             </View>
           ) : (
             <Button label="Delete" variant="danger" onPress={confirmDelete} disabled={busy} />
