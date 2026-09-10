@@ -18,6 +18,10 @@ export async function setNotificationChannelAsync(): Promise<null> {
   return null;
 }
 
+export async function setNotificationCategoryAsync(): Promise<null> {
+  return null;
+}
+
 export async function getPermissionsAsync(): Promise<{ granted: boolean }> {
   return { granted: false };
 }
@@ -30,6 +34,23 @@ export async function scheduleNotificationAsync(): Promise<string> {
   return 'mock-notification-id';
 }
 
-export function addNotificationResponseReceivedListener(): { remove: () => void } {
-  return { remove: () => {} };
+type ResponseHandler = (response: {
+  notification: { request: { content: { data: unknown } } };
+  actionIdentifier: string;
+}) => void;
+
+let registeredHandler: ResponseHandler | null = null;
+
+export function addNotificationResponseReceivedListener(handler: ResponseHandler): {
+  remove: () => void;
+} {
+  registeredHandler = handler;
+  return { remove: () => {
+    registeredHandler = null;
+  } };
+}
+
+/** Test-only: simulates the user tapping a notification or one of its buttons. */
+export function __simulateNotificationResponse(data: unknown, actionIdentifier: string): void {
+  registeredHandler?.({ notification: { request: { content: { data } } }, actionIdentifier });
 }

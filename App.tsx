@@ -1,9 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, AppState, AppStateStatus, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { initDatabase } from './src/db/dbService';
+import { initDatabase, setTransactionExcluded } from './src/db/dbService';
 import RootNavigator from './src/navigation/RootNavigator';
-import { configureNotifications } from './src/notifications/notificationService';
+import {
+  addNotificationResponseListener,
+  configureNotifications,
+  TXN_DECLINE_ACTION,
+} from './src/notifications/notificationService';
 import { ingestBatch, ingestPending } from './src/services/captureService';
 import { runFirstRunSetup } from './src/services/onboardingService';
 import { revalidateIfRulesChanged } from './src/services/revalidationService';
@@ -152,6 +156,20 @@ export default function App() {
       ingestBatch([message]).catch(() => undefined);
     });
     return () => subscription?.remove();
+  }, [status.phase]);
+
+  // "Remove it" on the transaction notification — the only action that
+  // needs handling. A plain tap or "Looks right" both mean the transaction
+  // stands as posted, which is already true, so there is nothing to do.
+  useEffect(() => {
+    if (status.phase !== 'READY') return;
+    const subscription = addNotificationResponseListener((payload, actionIdentifier) => {
+      if (actionIdentifier !== TXN_DECLINE_ACTION) return;
+      const transactionId = payload.transactionId as number | undefined;
+      if (transactionId === undefined) return;
+      setTransactionExcluded(transactionId, true).catch(() => undefined);
+    });
+    return () => subscription.remove();
   }, [status.phase]);
 
   // And a drain on every foreground, for whatever arrived while backgrounded.

@@ -7,6 +7,17 @@ import { startOfDayIso } from '../utils/format';
 
 const CHANNEL_ID = 'pinch-nudges';
 
+/**
+ * The action set on a notification for a transaction that just landed.
+ * "Accept" needs no handling — the transaction already posted, so a plain
+ * tap or an explicit accept are the same thing. "Decline" is the one that
+ * matters: it excludes the transaction without ever having to open the
+ * app, the same plain removal the transaction sheet's own Delete offers.
+ */
+export const TXN_DECISION_CATEGORY = 'txn-decision';
+export const TXN_DECLINE_ACTION = 'DECLINE';
+const TXN_ACCEPT_ACTION = 'ACCEPT';
+
 let configured = false;
 
 /**
@@ -34,6 +45,13 @@ export async function configureNotifications(): Promise<void> {
       sound: null,
     });
   }
+
+  // isDestructive is iOS-only and this app is Android-only, but the field
+  // is harmless to omit — the button title alone already says enough.
+  await Notifications.setNotificationCategoryAsync(TXN_DECISION_CATEGORY, [
+    { identifier: TXN_ACCEPT_ACTION, buttonTitle: 'Looks right' },
+    { identifier: TXN_DECLINE_ACTION, buttonTitle: 'Remove it' },
+  ]);
 }
 
 export async function requestNotificationPermission(): Promise<boolean> {
@@ -113,6 +131,12 @@ export async function deliver(
     transactionId: (planned.payload?.transactionId as number | undefined) ?? null,
   });
 
+  // Only a notification that names one specific transaction gets the
+  // accept/decline buttons — TXN_PULSE and OVERSPEND are the two that fire
+  // the moment a transaction lands, which is the only case "remove it"
+  // means anything coherent.
+  const isTxnDecision = planned.type === 'TXN_PULSE' || planned.type === 'OVERSPEND';
+
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -120,6 +144,7 @@ export async function deliver(
         body: planned.body,
         data: planned.payload ?? {},
         ...(Platform.OS === 'android' ? { channelId: CHANNEL_ID } : {}),
+        ...(isTxnDecision ? { categoryIdentifier: TXN_DECISION_CATEGORY } : {}),
       },
       trigger: null, // immediate
     });
@@ -138,11 +163,17 @@ export async function deliverAll(
   }
 }
 
+/**
+ * `actionIdentifier` is Accept, Decline, or expo's own default identifier
+ * for a plain tap on the notification body rather than either button —
+ * callers that only care about an explicit Decline should check for that
+ * exact value and ignore everything else.
+ */
 export function addNotificationResponseListener(
-  handler: (payload: Record<string, unknown>) => void
+  handler: (payload: Record<string, unknown>, actionIdentifier: string) => void
 ) {
   return Notifications.addNotificationResponseReceivedListener((response) => {
     const data = response.notification.request.content.data as Record<string, unknown>;
-    handler(data ?? {});
+    handler(data ?? {}, response.actionIdentifier);
   });
 }
