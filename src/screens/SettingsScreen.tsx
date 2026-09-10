@@ -28,6 +28,7 @@ import { palette, spacing, typography } from '../theme/theme';
 import { Button, Card, CardTitle, Field, Loading, Row, Screen, ScreenTitle } from '../components/ui';
 import Icon from '../components/Icon';
 import FreshStartSheet from '../components/FreshStartSheet';
+import appConfig from '../../app.json';
 
 export default function SettingsScreen() {
   const navigation = useNavigation<any>();
@@ -506,6 +507,10 @@ export default function SettingsScreen() {
       {isCaptureAvailable ? (
         <Button label="Open app settings" variant="ghost" onPress={openAppSettings} />
       ) : null}
+
+      <Text style={styles.version}>
+        Pinch {appConfig.expo.version} ({appConfig.expo.android.versionCode})
+      </Text>
     </Screen>
   );
 }
@@ -538,6 +543,13 @@ function Toggle({
 }
 
 const styles = StyleSheet.create({
+  version: {
+    ...typography.micro,
+    color: palette.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.md,
+    marginBottom: spacing.lg,
+  },
   note: { ...typography.caption, color: palette.textMuted, lineHeight: 18, marginTop: spacing.sm },
   ok: { ...typography.bodyBold, color: palette.primary },
   undo: { ...typography.caption, color: palette.primary, fontWeight: '700' },
