@@ -43,6 +43,12 @@ export async function getBudgetSnapshot(
   allowanceFallback: number,
   now: Date = new Date()
 ): Promise<BudgetSnapshot> {
+  // Before ensureBudgetPeriod quietly replaces a period that has run out,
+  // move whatever it left behind. Must happen first: once the new period
+  // exists, the old one's own totals are no longer the "current" period's
+  // to query.
+  await sweepExpiredPeriod(now);
+
   const period = await db.ensureBudgetPeriod(allowanceFallback, now);
   const nowIso = now.toISOString();
 
@@ -138,6 +144,64 @@ async function getKindTotal(kind: string, startIso: string, endIso: string): Pro
     [kind, startIso, endIso]
   );
   return row?.total ?? 0;
+}
+
+const AUTO_SAVINGS_GOAL_NAME = 'Savings';
+/** A placeholder, not a real target — this goal has no natural finish line. */
+const AUTO_SAVINGS_GOAL_DEFAULT_TARGET = 50_000;
+
+/**
+ * The goal that catches whatever a finished period leaves behind. Created
+ * automatically the first time there is something to sweep; reused after
+ * that. An ordinary goal in every other respect — freely renamed, retargeted
+ * or spent back down from the Goals tab like any other.
+ */
+async function ensureSavingsGoal(): Promise<number> {
+  const goals = await db.getActiveGoals();
+  const existing = goals.find((g) => g.name.toLowerCase() === AUTO_SAVINGS_GOAL_NAME.toLowerCase());
+  if (existing) return existing.id;
+
+  return db.createGoal({
+    name: AUTO_SAVINGS_GOAL_NAME,
+    targetAmount: AUTO_SAVINGS_GOAL_DEFAULT_TARGET,
+    emoji: 'savings',
+  });
+}
+
+/**
+ * Moves what a finished period left over into savings, instead of letting
+ * ensureBudgetPeriod's next call fold it silently into the new period's
+ * opening balance.
+ *
+ * Scoped deliberately narrow: only the period's own allowance and the cash
+ * that moved within it (income, settlements). Receivables, payables and the
+ * goal reserve are left out on purpose — they are standing obligations
+ * queried fresh regardless of which period is "current", not something that
+ * belonged to the period which just ended, so folding them in here would
+ * double-count them the moment the new period's own snapshot runs.
+ *
+ * Never sweeps a shortfall: a negative leftover would mean the pool went
+ * underwater, which the user has already said cannot happen for them (no
+ * credit use), and moving money *out* of savings on a guess would be an
+ * unpleasant surprise to get wrong.
+ */
+async function sweepExpiredPeriod(now: Date): Promise<void> {
+  const nowIso = now.toISOString();
+  const expiring = await db.getCurrentBudgetPeriod(now);
+  if (!expiring || expiring.endsOn > nowIso) return;
+
+  const [grossSpend, income, settledIn, settledOut] = await Promise.all([
+    db.getGrossSpendBetween(expiring.startsOn, expiring.endsOn),
+    db.getIncomeBetween(expiring.startsOn, expiring.endsOn),
+    getKindTotal('SETTLE_IN', expiring.startsOn, expiring.endsOn),
+    getKindTotal('SETTLE_OUT', expiring.startsOn, expiring.endsOn),
+  ]);
+
+  const leftover = expiring.allowance + income - grossSpend + settledIn - settledOut;
+  if (leftover <= 0.009) return;
+
+  const goalId = await ensureSavingsGoal();
+  await db.contributeToGoal(goalId, leftover, 'AUTO');
 }
 
 /**
