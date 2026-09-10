@@ -23,12 +23,12 @@
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0E0E10"
+        "backgroundColor": "#0F0D13"
       }
     },
     "splash": {
       "image": "./assets/splash-icon.png",
-      "backgroundColor": "#0E0E10",
+      "backgroundColor": "#0F0D13",
       "resizeMode": "contain"
     },
     "plugins": [
@@ -36,7 +36,7 @@
       [
         "expo-notifications",
         {
-          "color": "#39FF14",
+          "color": "#D0BCFF",
           "icon": "./assets/notification-icon.png"
         }
       ],
