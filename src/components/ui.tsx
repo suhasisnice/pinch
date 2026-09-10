@@ -13,7 +13,16 @@ import {
   ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { elevation, layer, palette, radii, spacing, stateLayer, typography } from '../theme/theme';
+import {
+  elevation,
+  layer,
+  onColor,
+  palette,
+  radii,
+  spacing,
+  stateLayer,
+  typography,
+} from '../theme/theme';
 import { duration, easing, usePressScale, useReducedMotion } from './motion';
 import Icon, { IconName } from './Icon';
 
@@ -309,7 +318,9 @@ export function Chip({
   color?: string;
 }) {
   const selectedBackground = color ?? palette.secondaryContainer;
-  const selectedLabel = color ? palette.onPrimary : palette.onSecondaryContainer;
+  // A caller-supplied tint can be any colour, so the label is measured
+  // against it rather than assumed. See onColor in theme.ts.
+  const selectedLabel = color ? onColor(color) : palette.onSecondaryContainer;
 
   return (
     <Pressable

@@ -117,8 +117,7 @@ export const stateLayer = {
   drag: 0.16,
 } as const;
 
-/** A content colour at state-layer opacity, ready to overlay. */
-export function layer(hex: string, opacity: number): string {
+function channels(hex: string): [number, number, number] {
   const value = hex.replace('#', '');
   const full =
     value.length === 3
@@ -127,10 +126,47 @@ export function layer(hex: string, opacity: number): string {
           .map((c) => c + c)
           .join('')
       : value;
-  const r = parseInt(full.slice(0, 2), 16);
-  const g = parseInt(full.slice(2, 4), 16);
-  const b = parseInt(full.slice(4, 6), 16);
+  return [
+    parseInt(full.slice(0, 2), 16),
+    parseInt(full.slice(2, 4), 16),
+    parseInt(full.slice(4, 6), 16),
+  ];
+}
+
+/** A content colour at state-layer opacity, ready to overlay. */
+export function layer(hex: string, opacity: number): string {
+  const [r, g, b] = channels(hex);
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
+/** Relative luminance, per WCAG 2.1. */
+function luminance(hex: string): number {
+  return channels(hex)
+    .map((c) => c / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)))
+    .reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
+}
+
+function contrastRatio(a: string, b: string): number {
+  const la = luminance(a);
+  const lb = luminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+/**
+ * A foreground that stays readable on an arbitrary background.
+ *
+ * Components that accept a colour from their caller — a chip tinted by
+ * category, say — cannot assume a fixed label colour. Pinning one works
+ * until someone passes a mid-tone: the app's own danger red against the
+ * dark-violet on-primary lands at 4.02:1, under AA, and nothing would have
+ * said so. Measuring both candidates and taking the better one is correct
+ * for every colour instead of for the three that happen to be in use.
+ */
+export function onColor(background: string): string {
+  const dark = '#1C1B1F';
+  const light = '#FFFFFF';
+  return contrastRatio(dark, background) >= contrastRatio(light, background) ? dark : light;
 }
 
 /** One colour per spend category, used consistently across every chart. */
