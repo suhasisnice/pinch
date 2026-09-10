@@ -31,6 +31,14 @@
       "backgroundColor": "#0F0D13",
       "resizeMode": "contain"
     },
+    "androidStatusBar": {
+      "barStyle": "light-content",
+      "backgroundColor": "#0F0D13"
+    },
+    "androidNavigationBar": {
+      "barStyle": "light-content",
+      "backgroundColor": "#0F0D13"
+    },
     "plugins": [
       "expo-splash-screen",
       [
