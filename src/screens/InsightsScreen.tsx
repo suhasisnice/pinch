@@ -23,6 +23,8 @@ import {
   weekdayPattern,
 } from '../math/insights';
 import { daysUntilBroke } from '../math/budget';
+import { FindingTone, buildFindings } from '../math/insightsSummary';
+import { FadeSlideIn } from '../components/motion';
 import { formatMoney, formatMoneyCompact } from '../utils/format';
 import { categoryColor, layer, palette, radii, spacing, typography } from '../theme/theme';
 import { Card, CardTitle, Dot, EmptyState, Loading, ProgressBar, Row, Screen, ScreenTitle } from '../components/ui';
@@ -147,6 +149,37 @@ export default function InsightsScreen() {
   const heaviestDay = weekdays[0] ?? null;
   const recurringTotal = recurring.reduce((sum, charge) => sum + charge.typicalAmount, 0);
 
+  const periodDays = Math.max(
+    1,
+    Math.round(
+      (Date.parse(snapshot.periodEnd) - Date.parse(snapshot.periodStart)) / (24 * 60 * 60 * 1000)
+    )
+  );
+  // getSpendByCategory folds everything uncategorised into one slice, so the
+  // share of the ledger the breakdown cannot speak for is readable straight
+  // off it.
+  const categorised = slices.filter((slice) => slice.category !== 'Uncategorised');
+  const uncategorisedFraction =
+    slices.find((slice) => slice.category === 'Uncategorised')?.fraction ?? 0;
+
+  const findings = buildFindings({
+    spendablePool: snapshot.budget.spendablePool,
+    allowance: snapshot.budget.allowance,
+    dailyLimit: snapshot.budget.dailyLimit,
+    daysRemaining: snapshot.daysRemaining,
+    periodDays,
+    grossSpend: snapshot.budget.grossSpend,
+    typicalDay: typical.typical,
+    meanDay: typical.mean,
+    brokeIn,
+    categories: categorised,
+    shifts,
+    recurring,
+    thisWeek: weeks.thisWeek,
+    lastWeek: weeks.lastWeek,
+    uncategorisedFraction,
+  });
+
   // Only truly empty when there is no history either — a fresh period with a
   // year of past months behind it still has plenty to say.
   if (daily.length === 0 && months.length === 0) {
@@ -173,21 +206,36 @@ export default function InsightsScreen() {
         )}`}
       />
 
-      <Card style={styles.windowNote}>
-        <Icon name="info" size={15} color={palette.textSecondary} />
-        <Text style={styles.windowNoteText}>
-          Cards below measure different windows, and each one says which. Only "This period"
-          matches the number on Today — the rest look further back on purpose.
-        </Text>
-      </Card>
-
-      {personality ? (
-        <Card style={styles.personality}>
-          <Text style={styles.personalityLabel}>This period you are</Text>
-          <Text style={styles.personalityName}>{personality.label}</Text>
-          <Text style={styles.personalityBlurb}>{personality.blurb}</Text>
+      {/* The readings, strongest first. Everything below this card is the
+          evidence for them — which is the order the screen should have been
+          in from the start, rather than twelve charts and a reader left to
+          do the analysis themselves. */}
+      {findings.length > 0 ? (
+        <FadeSlideIn>
+          <Card style={styles.findings}>
+            {findings.slice(0, 4).map((finding, index) => (
+              <View
+                key={finding.id}
+                style={[styles.finding, index > 0 && styles.findingDivided]}
+              >
+                <View style={[styles.findingMark, { backgroundColor: toneColor(finding.tone) }]} />
+                <View style={styles.findingBody}>
+                  <Text style={[styles.findingHeadline, { color: toneColor(finding.tone) }]}>
+                    {finding.headline}
+                  </Text>
+                  <Text style={styles.findingDetail}>{finding.detail}</Text>
+                </View>
+              </View>
+            ))}
+          </Card>
+        </FadeSlideIn>
+      ) : (
+        <Card>
+          <Text style={styles.muted}>
+            Nothing stands out this period — spending is tracking where it should.
+          </Text>
         </Card>
-      ) : null}
+      )}
 
       <Card>
         <CardTitle right={<Text style={styles.windowLabel}>last 7 days</Text>}>
@@ -538,11 +586,31 @@ export default function InsightsScreen() {
               : `At ${formatMoney(avgBurn)}/day you run out in ${brokeIn} days — ${snapshot.daysRemaining - brokeIn} days short.`}
         </Text>
       </Card>
+
+      {/* Last, because it is a joke rather than a finding. It used to sit
+          second, above everything you could act on. */}
+      {personality ? (
+        <Card style={styles.personality}>
+          <Text style={styles.personalityLabel}>This period you are</Text>
+          <Text style={styles.personalityName}>{personality.label}</Text>
+          <Text style={styles.personalityBlurb}>{personality.blurb}</Text>
+        </Card>
+      ) : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  findings: { gap: 0, paddingVertical: spacing.sm },
+  finding: { flexDirection: 'row', gap: spacing.sm, paddingVertical: spacing.sm },
+  findingDivided: { borderTopWidth: 1, borderTopColor: palette.outlineVariant },
+  // A tone-coloured rule down the side, so urgency is legible before a word
+  // of it is read.
+  findingMark: { width: 3, borderRadius: 2, alignSelf: 'stretch' },
+  findingBody: { flex: 1, gap: 3 },
+  findingHeadline: { ...typography.cardTitle },
+  findingDetail: { ...typography.caption, color: palette.textSecondary, lineHeight: 18 },
+
   personality: { alignItems: 'center', gap: 2 },
   personalityLabel: { ...typography.heroLabel, color: palette.textSecondary },
   personalityName: { ...typography.display, color: palette.violet },
@@ -568,8 +636,6 @@ const styles = StyleSheet.create({
 
   habitValue: { ...typography.bodyBold, color: palette.textPrimary },
 
-  windowNote: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
-  windowNoteText: { ...typography.caption, color: palette.textSecondary, flex: 1, lineHeight: 17 },
   windowLabel: { ...typography.micro, color: palette.textMuted },
 
   cardIntro: {
@@ -623,3 +689,17 @@ const styles = StyleSheet.create({
   projection: { ...typography.body, color: palette.textSecondary, lineHeight: 20 },
   muted: { ...typography.caption, color: palette.textMuted },
 });
+
+/** A finding's colour carries its urgency, so the eye ranks them before the words do. */
+function toneColor(tone: FindingTone): string {
+  switch (tone) {
+    case 'CRITICAL':
+      return palette.danger;
+    case 'WARNING':
+      return palette.warningAmber;
+    case 'GOOD':
+      return palette.mint;
+    default:
+      return palette.textPrimary;
+  }
+}
