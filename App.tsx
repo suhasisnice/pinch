@@ -89,6 +89,15 @@ export default function App() {
                 }`
               );
             }
+            if (result.settled > 0) {
+              lines.push(
+                `${result.settled} payment${
+                  result.settled === 1 ? '' : 's'
+                } turned out to be someone paying back what they owed, not new income — worth ${formatMoney(
+                  result.settledAmount
+                )}.`
+              );
+            }
             lines.push('Anything here can be restored in Settings.');
 
             Alert.alert('Cleaned up your history', lines.join('\n\n'));
