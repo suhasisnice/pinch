@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
@@ -204,6 +204,7 @@ function ContactSheet({
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [mergeVisible, setMergeVisible] = useState(false);
   if (!balance) return null;
 
   const net = balance.netAmount;
@@ -296,6 +297,82 @@ function ContactSheet({
         variant="ghost"
         onPress={markGhost}
       />
+      <Button label="Same person as someone else?" variant="ghost" onPress={() => setMergeVisible(true)} />
+
+      <MergeContactSheet
+        visible={mergeVisible}
+        contactId={balance.contactId}
+        contactName={balance.name}
+        onClose={() => setMergeVisible(false)}
+        onMerged={() => {
+          setMergeVisible(false);
+          onChanged();
+        }}
+      />
+    </Sheet>
+  );
+}
+
+function MergeContactSheet({
+  visible,
+  contactId,
+  contactName,
+  onClose,
+  onMerged,
+}: {
+  visible: boolean;
+  contactId: number;
+  contactName: string;
+  onClose: () => void;
+  onMerged: () => void;
+}) {
+  const [others, setOthers] = useState<Array<{ id: number; name: string; phone: string | null }>>([]);
+  const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    if (!visible) return;
+    setQuery('');
+    db.getContacts().then((contacts) => {
+      setOthers(contacts.filter((c) => c.id !== contactId).map((c) => ({ id: c.id, name: c.name, phone: c.phone })));
+    });
+  }, [visible, contactId]);
+
+  const filtered = query.trim()
+    ? others.filter((c) => c.name.toLowerCase().includes(query.trim().toLowerCase()))
+    : others;
+
+  function pick(other: { id: number; name: string }) {
+    Alert.alert(
+      `Merge with ${other.name}?`,
+      `Every debt with either name moves onto one balance under "${contactName}". "${other.name}" disappears — this cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Merge',
+          style: 'destructive',
+          onPress: async () => {
+            await db.mergeContacts(contactId, other.id);
+            onMerged();
+          },
+        },
+      ]
+    );
+  }
+
+  return (
+    <Sheet visible={visible} onClose={onClose} title={`Merge into ${contactName}`}>
+      <Text style={styles.mergeIntro}>
+        Same person showing up twice — an SMS worded their name one way, a notification worded it
+        another. Pick who they really are.
+      </Text>
+      <Field label="Search" value={query} onChangeText={setQuery} placeholder="Search people" />
+      {filtered.length === 0 ? (
+        <EmptyState icon="squad" title="No one else to merge with" body="Everyone else already has their own balance." />
+      ) : (
+        filtered.map((other) => (
+          <Row key={other.id} title={other.name} subtitle={other.phone ?? undefined} onPress={() => pick(other)} />
+        ))
+      )}
     </Sheet>
   );
 }
@@ -413,6 +490,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     lineHeight: 18,
   },
+
+  mergeIntro: { ...typography.body, color: palette.textSecondary, lineHeight: 20 },
 
   groupLabel: {
     ...typography.micro,

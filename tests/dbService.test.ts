@@ -243,6 +243,52 @@ describe('IOUs', () => {
     expect(again).toBe(contactId);
     expect(await db.getContacts()).toHaveLength(1);
   });
+
+  it('matches an existing contact by phone even when the name is worded differently', async () => {
+    // "Rahul" from beforeEach was saved with +919000000000. A different
+    // capture path naming him "Rahul Kumar" but carrying the same number
+    // (in a different format) should resolve to the same contact, not fork
+    // his balance across two rows that never settle each other.
+    const again = await db.findOrCreateContact({ name: 'Rahul Kumar', phone: '090000 00000' });
+    expect(again).toBe(contactId);
+    expect(await db.getContacts()).toHaveLength(1);
+  });
+
+  it('still matches by name when no phone is known', async () => {
+    const again = await db.findOrCreateContact({ name: 'rahul' });
+    expect(again).toBe(contactId);
+    expect(await db.getContacts()).toHaveLength(1);
+  });
+});
+
+describe('merging contacts', () => {
+  it('moves every IOU onto the kept contact and removes the other one', async () => {
+    const keepId = await db.addContact('Dad');
+    const mergeId = await db.addContact('D Kumar');
+
+    const openIou = await db.createIOU({ contactId: keepId, amount: 100, direction: 'THEY_OWE_ME' });
+    const forkedIou = await db.createIOU({ contactId: mergeId, amount: 229, direction: 'THEY_OWE_ME' });
+
+    await db.mergeContacts(keepId, mergeId);
+
+    expect((await db.getIOUById(openIou))?.contactId).toBe(keepId);
+    expect((await db.getIOUById(forkedIou))?.contactId).toBe(keepId);
+
+    const contacts = await db.getContacts();
+    expect(contacts.map((c) => c.id)).not.toContain(mergeId);
+
+    const balance = (await db.getContactBalances()).find((b) => b.contactId === keepId);
+    expect(balance?.netAmount).toBe(329);
+  });
+
+  it('carries the phone number over when the kept contact has none', async () => {
+    const keepId = await db.addContact('Dad');
+    const mergeId = await db.addContact('D Kumar', false, '9876543210');
+
+    await db.mergeContacts(keepId, mergeId);
+
+    expect((await db.getContactById(keepId))?.phone).toBe('9876543210');
+  });
 });
 
 describe('goals', () => {
