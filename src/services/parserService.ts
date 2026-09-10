@@ -156,8 +156,32 @@ const AMOUNT_TRAILING = String.raw`([\d,]+(?:\.\d{1,2})?)\s*(?:rs\.?|inr|₹)`;
 // mistaken for the amount.
 const AMOUNT_VERB_ADJACENT = String.raw`\b(?:debited|credited|paid|sent|received|withdrawn|deducted|deposited)\s+(?:by|of|for)?\s*([\d,]+(?:\.\d{1,2})?)\b`;
 
-const DEBIT_VERBS =
-  /\b(?:debited|spent|paid|withdrawn|deducted|purchase|txn of|sent|transferred to|trf to)\b/i;
+/**
+ * Verbs that can only mean money leaving. Nothing else in the sentence can
+ * talk them out of it.
+ */
+const DEBIT_VERBS_STRONG = /\b(?:debited|spent|withdrawn|deducted|purchase|txn of)\b/i;
+
+/**
+ * Verbs that describe a payment without saying which end of it you are on.
+ *
+ * "Sent Rs.500 From A/C x1234 To ZOMATO" and "Piggy sent ₹230 to you" use the
+ * same word for opposite directions; the verb is not the deciding evidence,
+ * the recipient is. These only count as a debit when nothing says the money
+ * arrived with the user.
+ */
+const DEBIT_VERBS_DIRECTIONAL = /\b(?:paid|sent|transferred to|trf to)\b/i;
+
+/**
+ * The money landed with the user.
+ *
+ * Payment apps phrase an incoming transfer as a sentence about the sender —
+ * "X sent you", "X paid you ₹230 to you" — so the only reliable marker is
+ * who it went to.
+ */
+const INBOUND_MARKERS =
+  /\bto\s+you\b|\bto\s+your\s+(?:a\/c|acct|account|wallet|upi|vpa)\b|\b(?:sent|paid)\s+you\b/i;
+
 const CREDIT_VERBS = /\b(?:credited|received|added|refunded|deposited)\b/i;
 
 // ---------------------------------------------------------------------------
@@ -173,6 +197,20 @@ const STOP = String.raw`(?=\s+(?:on|via|using|from|ref|upi|txn|dated|at\s+\d)\b|
 
 // Order matters: the first match wins, so the most specific phrasings come
 // first and the greedy catch-alls come last.
+/**
+ * Only consulted when the message says the money arrived with the user.
+ *
+ * A payment app names the sender first and the recipient last — "Piggy 🐷
+ * sent ₹230 to you" — which is the reverse of every bank format below, and
+ * matching it unconditionally reads "You paid Rs.220 to swiggy@ybl" as a
+ * payment from someone called You. The run of non-alphanumerics is for the
+ * emoji people put in display names: NAME cannot hold one, so without it the
+ * name stops at the emoji.
+ */
+const INBOUND_MERCHANT_PATTERNS: RegExp[] = [
+  new RegExp(String.raw`^(${NAME})\s*[^A-Za-z0-9]*\s*(?:sent|paid)\s+`, 'i'),
+];
+
 const MERCHANT_PATTERNS: RegExp[] = [
   // "...spent at OLIVE CAFE on 08-09-26"
   new RegExp(String.raw`\bspent\s+at\s+(${NAME})${STOP}`, 'i'),
@@ -198,7 +236,12 @@ const MERCHANT_PATTERNS: RegExp[] = [
   // "credited to your account XX1234 from Priya Sharma" otherwise gets read
   // as paying "your account" instead of reaching the "from Priya Sharma"
   // that actually names who sent it.
-  new RegExp(String.raw`\bto(?:wards)?\s+(?!your\b|my\b|the\s+account\b)(${NAME})${STOP}`, 'i'),
+  // "you" is guarded as well as "your": "sent ₹230 to you" was being read as
+  // a payment to a merchant named You.
+  new RegExp(
+    String.raw`\bto(?:wards)?\s+(?!your\b|you\b|my\b|the\s+account\b)(${NAME})${STOP}`,
+    'i'
+  ),
   // "from RAHUL" (credits)
   new RegExp(String.raw`\bfrom\s+(${NAME})${STOP}`, 'i'),
   // "by RAHUL"
@@ -326,8 +369,12 @@ export function parseMessage(
   const amount = amountRaw ? parseAmount(amountRaw) : null;
   if (amount === null) return null;
 
-  const isDebit = DEBIT_VERBS.test(text);
-  const isCredit = CREDIT_VERBS.test(text);
+  // A directional verb only reads as a debit when nothing says the money
+  // arrived with the user. Strong verbs are not up for discussion.
+  const inbound = INBOUND_MARKERS.test(text);
+  const isDebit =
+    DEBIT_VERBS_STRONG.test(text) || (DEBIT_VERBS_DIRECTIONAL.test(text) && !inbound);
+  const isCredit = CREDIT_VERBS.test(text) || inbound;
   if (!refund && !isDebit && !isCredit) return null;
 
   // "debited ... ; MERCHANT credited" names both verbs. The account is the
@@ -336,7 +383,10 @@ export function parseMessage(
   // "Rs 250 debited ... has been reversed" names a debit and is a credit.
   const direction: ParsedDirection = refund ? 'CREDIT' : isDebit ? 'DEBIT' : 'CREDIT';
 
-  const rawName = extractFirst(text, MERCHANT_PATTERNS);
+  const rawName = extractFirst(
+    text,
+    inbound ? [...INBOUND_MERCHANT_PATTERNS, ...MERCHANT_PATTERNS] : MERCHANT_PATTERNS
+  );
   const counterparty = rawName ? prettify(cleanName(rawName)) : null;
   const reference = extractFirst(text, REFERENCE_PATTERNS);
   const accountHint = extractFirst(text, ACCOUNT_PATTERNS);
