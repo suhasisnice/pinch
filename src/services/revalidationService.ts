@@ -3,6 +3,7 @@ import { TransactionRow } from '../db/types';
 import { parseMessage } from './parserService';
 import { markDetectedTransfers } from './transferService';
 import { backfillCategories, classifyStoredTransactions } from './classificationService';
+import { backfillSettlements } from './settlementService';
 
 const REVALIDATION_KEY = 'pinch.revalidatedRules';
 
@@ -25,8 +26,12 @@ const REVALIDATION_KEY = 'pinch.revalidatedRules';
  *     incoming payment as spending of the same amount. Stored rows pointing
  *     the wrong way are turned back round here, since a direction cannot be
  *     corrected by hand from the edit sheet.
+ * 8 — an incoming payment is checked against open debts before it is left
+ *     as plain income. Only ran going forward from the moment it shipped,
+ *     so a repayment credited before then is still sitting there as income
+ *     until it is re-checked here.
  */
-export const PARSER_RULES_VERSION = 7;
+export const PARSER_RULES_VERSION = 8;
 
 export interface RevalidationResult {
   /** Transactions examined: captured, and still carrying their original text. */
@@ -49,6 +54,10 @@ export interface RevalidationResult {
   categorised: number;
   /** Distinct merchants the classifier still could not place. */
   merchantsUnrecognised: number;
+  /** Credits that turned out to be closing a debt rather than fresh income. */
+  settled: number;
+  /** How much of that was debt repayment, not income. */
+  settledAmount: number;
 }
 
 /**
@@ -77,6 +86,8 @@ export async function findStaleCaptures(): Promise<RevalidationResult> {
     directionsCorrected: 0,
     categorised: 0,
     merchantsUnrecognised: 0,
+    settled: 0,
+    settledAmount: 0,
   };
 
   for (const row of all) {
@@ -150,6 +161,15 @@ export async function revalidateHistory(): Promise<RevalidationResult> {
   // pointing the wrong way cannot find its partner.
   result.directionsCorrected = await correctStoredDirections();
 
+  // Also before transfer detection: once a credit is confirmed to be
+  // closing a real, tracked debt its kind becomes SETTLE_IN, which the
+  // round-trip detector already treats as decided and leaves alone. In the
+  // other order, a payment that settles a real debt could get mistaken for
+  // an untracked wash instead.
+  const settlements = await backfillSettlements();
+  result.settled = settlements.settled;
+  result.settledAmount = settlements.amount;
+
   // Run transfer detection after the junk has gone, so a promotional message
   // can never be paired with a real credit and hide a genuine expense.
   const transfers = await markDetectedTransfers();
@@ -193,6 +213,7 @@ export async function revalidateIfRulesChanged(): Promise<RevalidationResult | n
     result.transfersFound > 0 ||
     result.reclassified > 0 ||
     result.directionsCorrected > 0 ||
-    result.categorised > 0;
+    result.categorised > 0 ||
+    result.settled > 0;
   return changed ? result : null;
 }
