@@ -2,7 +2,7 @@
   "expo": {
     "name": "Pinch",
     "slug": "pinch",
-    "version": "0.9.0",
+    "version": "0.9.1",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "assetBundlePatterns": [
@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "com.suhasisnice.pinch",
-      "versionCode": 15,
+      "versionCode": 16,
       "permissions": [
         "RECEIVE_SMS",
         "READ_SMS",
