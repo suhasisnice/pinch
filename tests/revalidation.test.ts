@@ -123,3 +123,58 @@ describe('revalidating imported history', () => {
     expect(await db.getGrossSpendBetween('2000-01-01', '2100-01-01')).toBe(500);
   });
 });
+
+describe('correcting a direction stored the wrong way round', () => {
+  it('turns an incoming payment booked as spending back into income', async () => {
+    // Exactly what the bare-"sent" parser produced: money received, stored
+    // as money spent, which is an error of twice the amount in the totals.
+    const id = await db.addTransaction({
+      amount: 230,
+      direction: 'DEBIT',
+      kind: 'SPEND',
+      merchant: 'You',
+      source: 'NOTIFICATION',
+      rawText: 'Piggy sent ₹230 to you.',
+      occurredAt: new Date().toISOString(),
+    });
+
+    const result = await revalidateHistory();
+
+    expect(result.directionsCorrected).toBe(1);
+    const row = await db.getTransactionById(id);
+    expect(row?.direction).toBe('CREDIT');
+    expect(row?.kind).toBe('INCOME');
+  });
+
+  it('leaves a genuine outgoing payment alone', async () => {
+    const id = await db.addTransaction({
+      amount: 500,
+      direction: 'DEBIT',
+      kind: 'SPEND',
+      merchant: 'Zomato',
+      source: 'SMS',
+      rawText: 'Sent Rs.500.00 From HDFC Bank A/C x1234 To ZOMATO On 08/09/25 Ref 123456789012',
+      occurredAt: new Date().toISOString(),
+    });
+
+    const result = await revalidateHistory();
+
+    expect(result.directionsCorrected).toBe(0);
+    expect((await db.getTransactionById(id))?.direction).toBe('DEBIT');
+  });
+
+  it('never rewrites a row the user typed themselves', async () => {
+    const id = await db.addTransaction({
+      amount: 230,
+      direction: 'DEBIT',
+      kind: 'SPEND',
+      merchant: 'Piggy',
+      source: 'MANUAL',
+      occurredAt: new Date().toISOString(),
+    });
+
+    await revalidateHistory();
+
+    expect((await db.getTransactionById(id))?.direction).toBe('DEBIT');
+  });
+});

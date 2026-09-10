@@ -69,6 +69,13 @@ export default function App() {
                 )}.`
               );
             }
+            if (result.directionsCorrected > 0) {
+              lines.push(
+                `${result.directionsCorrected} payment${
+                  result.directionsCorrected === 1 ? ' was' : 's were'
+                } recorded going the wrong way — money you received counted as money you spent. Turned back round.`
+              );
+            }
             if (result.categorised > 0) {
               lines.push(
                 `${result.categorised} older transaction${
