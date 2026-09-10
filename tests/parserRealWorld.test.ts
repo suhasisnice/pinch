@@ -93,3 +93,75 @@ describe('parseMessage against real bank/UPI phrasings', () => {
     expect(parsed?.counterparty).toBe('Priya Sharma');
   });
 });
+
+/**
+ * Money arriving, phrased as a sentence about the sender.
+ *
+ * These exist because loosening the debit verb from "sent to" to a bare
+ * "sent" — done to catch HDFC's "Sent Rs.500 From A/C x1234 To ZOMATO" —
+ * also swallowed every incoming payment, which uses the same word for the
+ * opposite direction. A received ₹230 was booked as ₹230 spent, and the
+ * counterparty came out as "You".
+ */
+describe('payment-app notifications for money received', () => {
+  const inbound: Array<{ label: string; text: string; amount: number; counterparty?: string }> = [
+    {
+      label: 'sender named first, with an emoji in the display name',
+      text: 'Piggy 🐷 sent ₹230 to you.',
+      amount: 230,
+      counterparty: 'Piggy',
+    },
+    {
+      label: 'plain sender, no emoji',
+      text: 'Rahul sent ₹500 to you',
+      amount: 500,
+      counterparty: 'Rahul',
+    },
+    {
+      label: 'paid you, rather than sent to you',
+      text: 'Priya Sharma paid you ₹1,200',
+      amount: 1200,
+      counterparty: 'Priya Sharma',
+    },
+    {
+      label: 'arriving in your account rather than to you',
+      text: 'Amit sent ₹340 to your account',
+      amount: 340,
+      counterparty: 'Amit',
+    },
+  ];
+
+  it.each(inbound)('$label reads as money in', ({ text, amount, counterparty }) => {
+    const parsed = parseMessage(text, null, { source: 'NOTIFICATION' });
+    expect(parsed).not.toBeNull();
+    expect(parsed?.direction).toBe('CREDIT');
+    expect(parsed?.amount).toBe(amount);
+    if (counterparty) expect(parsed?.counterparty).toBe(counterparty);
+  });
+
+  it('never reads the recipient as a merchant called You', () => {
+    const parsed = parseMessage('Piggy sent ₹230 to you.', null, { source: 'NOTIFICATION' });
+    expect(parsed?.counterparty).not.toBe('You');
+  });
+
+  it('still reads an outgoing payment worded with the same verb as money out', () => {
+    // The case the bare "sent" was loosened for in the first place.
+    const parsed = parseMessage(
+      'Sent Rs.500.00 From HDFC Bank A/C x1234 To ZOMATO On 08/09/25 Ref 123456789012',
+      'VM-HDFCBK',
+      { source: 'SMS' }
+    );
+    expect(parsed?.direction).toBe('DEBIT');
+    expect(parsed?.counterparty).toBe('Zomato');
+  });
+
+  it('still reads "You paid X" as money out, not a sender called You', () => {
+    const parsed = parseMessage(
+      'You paid Rs.220 to swiggy@ybl from A/c XX1234 on 08 Sep. UPI Ref 112233445566',
+      'VM-HDFCBK',
+      { source: 'SMS' }
+    );
+    expect(parsed?.direction).toBe('DEBIT');
+    expect(parsed?.counterparty).toBe('Swiggy');
+  });
+});
