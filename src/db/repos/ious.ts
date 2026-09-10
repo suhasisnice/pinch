@@ -243,6 +243,18 @@ export async function getContactBalances(): Promise<ContactBalance[]> {
 // Contacts
 // ---------------------------------------------------------------------------
 
+/**
+ * Reduces a phone number to the last 10 digits, so "+91 98765 43210",
+ * "098765 43210" and "9876543210" all resolve to the same contact. Indian
+ * mobile numbers are 10 digits; a country code or leading 0 is routing
+ * detail, not part of the identity.
+ */
+function normalisePhone(phone: string | null | undefined): string | null {
+  const digits = (phone ?? '').replace(/\D/g, '');
+  if (digits.length < 10) return null;
+  return digits.slice(-10);
+}
+
 export async function addContact(
   name: string,
   isGhost = false,
@@ -251,7 +263,7 @@ export async function addContact(
   const db = getAdapter();
   const result = await db.runAsync(
     `INSERT INTO Contacts (name, is_ghost, phone, created_at) VALUES (?, ?, ?, ?);`,
-    [name.trim(), isGhost ? 1 : 0, phone?.trim() || null, new Date().toISOString()]
+    [name.trim(), isGhost ? 1 : 0, normalisePhone(phone), new Date().toISOString()]
   );
   return result.lastInsertRowId;
 }
@@ -259,6 +271,11 @@ export async function addContact(
 export async function getContacts(): Promise<ContactRow[]> {
   const db = getAdapter();
   return db.getAllAsync<ContactRow>(`SELECT * FROM Contacts ORDER BY name COLLATE NOCASE ASC;`);
+}
+
+export async function getContactById(id: number): Promise<ContactRow | null> {
+  const db = getAdapter();
+  return db.getFirstAsync<ContactRow>(`SELECT * FROM Contacts WHERE id = ?;`, [id]);
 }
 
 export async function updateContact(
@@ -275,7 +292,7 @@ export async function updateContact(
   }
   if (fields.phone !== undefined) {
     sets.push('phone = ?');
-    params.push(fields.phone?.trim() || null);
+    params.push(normalisePhone(fields.phone));
   }
   if (fields.isGhost !== undefined) {
     sets.push('is_ghost = ?');
@@ -297,6 +314,13 @@ export async function findOrCreateContactByName(name: string): Promise<number> {
  * from the phone's contacts should mean the WhatsApp nudge works, and an
  * existing contact that was typed by hand earlier gets its number filled in
  * rather than being duplicated.
+ *
+ * Phone is checked first, before name. A name alone drifts across capture
+ * paths — "Dad" from an SMS, a different display name from a notification
+ * for the same person — and matching on it alone silently forks one
+ * person's debts across two Contacts rows that never settle each other.
+ * The phone number does not drift, so when one is known it is the more
+ * trustworthy signal and wins.
  */
 export async function findOrCreateContact(input: {
   name: string;
@@ -304,7 +328,14 @@ export async function findOrCreateContact(input: {
 }): Promise<number> {
   const db = getAdapter();
   const trimmed = input.name.trim();
-  const phone = input.phone?.trim() || null;
+  const phone = normalisePhone(input.phone);
+
+  if (phone) {
+    const byPhone = await db.getFirstAsync<ContactRow>(`SELECT * FROM Contacts WHERE phone = ?;`, [
+      phone,
+    ]);
+    if (byPhone) return byPhone.id;
+  }
 
   const existing = await db.getFirstAsync<ContactRow>(
     `SELECT * FROM Contacts WHERE lower(name) = lower(?);`,
@@ -317,6 +348,30 @@ export async function findOrCreateContact(input: {
     await updateContact(existing.id, { phone });
   }
   return existing.id;
+}
+
+/**
+ * Folds one contact into another — same person, recorded twice because a
+ * capture path worded their name differently before phone matching existed,
+ * or because they were typed by hand more than once. Every IOU moves to the
+ * kept contact so open and settled debts stop being split across two
+ * balances that never talk to each other; the merged-away contact is then
+ * gone for good.
+ */
+export async function mergeContacts(keepId: number, mergeId: number): Promise<void> {
+  if (keepId === mergeId) return;
+  const db = getAdapter();
+
+  const [kept, merging] = await Promise.all([getContactById(keepId), getContactById(mergeId)]);
+  if (!kept || !merging) return;
+
+  await db.runAsync(`UPDATE IOUs SET contact_id = ? WHERE contact_id = ?;`, [keepId, mergeId]);
+
+  if (!kept.phone && merging.phone) {
+    await updateContact(keepId, { phone: merging.phone });
+  }
+
+  await db.runAsync(`DELETE FROM Contacts WHERE id = ?;`, [mergeId]);
 }
 
 /** Total still owed to you across everyone. Feeds Safe-to-Spend. */
