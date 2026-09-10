@@ -404,11 +404,22 @@ export async function getDailySpend(
  * second source. The UNIQUE dedup_key catches anything carrying a bank
  * reference number; this is the fuzzy backstop for messages that carry none,
  * where SMS and the notification listener word the merchant differently.
+ *
+ * Direction matters as much as amount: sending someone ₹200 and having them
+ * send ₹200 straight back is two real, opposite-facing payments, not one
+ * message reported twice. Matching on amount alone read the second leg of
+ * that as a duplicate of the first and silently dropped it.
+ *
+ * The window is wide (6 minutes) because a bank's own SMS for a UPI payment
+ * routinely lags the paying app's push notification by minutes, not seconds
+ * — the two reports of the same payment are rarely close enough to catch at
+ * a tighter window.
  */
 export async function findProbableDuplicate(
   amount: number,
+  direction: Direction,
   occurredAtIso: string,
-  windowSeconds = 90
+  windowSeconds = 360
 ): Promise<TransactionRow | null> {
   const db = getAdapter();
   const at = new Date(occurredAtIso).getTime();
@@ -417,9 +428,9 @@ export async function findProbableDuplicate(
 
   return db.getFirstAsync<TransactionRow>(
     `SELECT * FROM Transactions
-     WHERE abs(amount - ?) < 0.01 AND occurred_at >= ? AND occurred_at <= ?
+     WHERE abs(amount - ?) < 0.01 AND direction = ? AND occurred_at >= ? AND occurred_at <= ?
      ORDER BY occurred_at DESC LIMIT 1;`,
-    [amount, from, to]
+    [amount, direction, from, to]
   );
 }
 
