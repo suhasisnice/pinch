@@ -82,6 +82,22 @@ try {
     Start-Sleep -Milliseconds 1500
   }
 
+  # Every build gets its own filename (see above), so nothing here ever
+  # overwrites a build in progress — but that also means every past build
+  # just sits in Downloads forever unless it is cleaned up explicitly.
+  # Best-effort: MTP deletes are unreliable, so a leftover old APK is a
+  # cosmetic annoyance, never a correctness problem the way a silently
+  # failed overwrite of the current name would be.
+  $stalePrefix = "Pinch-"
+  $stale = $destinationFolder.Items() | Where-Object {
+    $_.Name -like "$stalePrefix*.apk" -and $_.Name -ne $TargetName
+  }
+  foreach ($old in $stale) {
+    Warn "Removing old build $($old.Name) from the phone."
+    try { $old.InvokeVerb("delete") } catch { Warn "Could not delete $($old.Name); leaving it." }
+  }
+  if ($stale) { Start-Sleep -Milliseconds 1000 }
+
   Warn "Copying $TargetName ($([math]::Round($expectedSize / 1MB, 1)) MB) to $DeviceName\$StorageName\$FolderName ..."
   # 16 answers "Yes to All" to any overwrite prompt, so this stays headless.
   $destinationFolder.CopyHere($staged, 16)
