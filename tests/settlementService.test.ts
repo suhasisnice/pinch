@@ -56,6 +56,34 @@ describe('checkForSettlement', () => {
     expect((await db.getIOUById(today))?.openAmount).toBe(0);
   });
 
+  it('splits a payment bigger than the debt into settlement plus leftover income', async () => {
+    const contactId = await db.addContact('Dad');
+    await db.createIOU({ contactId, amount: 200, direction: 'THEY_OWE_ME', reason: 'Cab fare' });
+
+    const txId = await db.addTransaction({
+      amount: 500,
+      direction: 'CREDIT',
+      kind: 'INCOME',
+      merchant: 'Dad',
+    });
+
+    const result = await checkForSettlement(txId);
+    expect(result?.applied).toBe(200);
+
+    const settled = await db.getTransactionById(txId);
+    expect(settled?.kind).toBe('SETTLE_IN');
+    expect(settled?.amount).toBe(200);
+
+    const all = await db.getAllTransactions();
+    const leftover = all.find((row) => row.id !== txId && row.merchant === 'Dad');
+    expect(leftover?.kind).toBe('INCOME');
+    expect(leftover?.amount).toBe(300);
+    expect(leftover?.direction).toBe('CREDIT');
+
+    const balance = (await db.getContactBalances()).find((b) => b.contactId === contactId);
+    expect(balance?.netAmount).toBe(0);
+  });
+
   it('leaves a credit from someone with no open debt as plain income', async () => {
     await db.addContact('Dad');
     const txId = await db.addTransaction({
