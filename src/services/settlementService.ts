@@ -25,6 +25,14 @@ export interface AutoSettleResult {
  * is left alone — and only when the sender is already a known contact.
  * A stranger sending money for the first time creates no contact and
  * settles nothing; there is no debt to find.
+ *
+ * A payment can be bigger than what was owed — someone rounds up, or pays
+ * back an old debt plus a bit extra. settleContactBalance only ever applies
+ * as much as the open IOUs actually total, so relabelling the *whole*
+ * transaction as SETTLE_IN would silently drop the genuinely-new remainder
+ * out of income. Instead this transaction shrinks to exactly what it
+ * settled, and the leftover is filed as its own INCOME row so it keeps
+ * counting as real money coming in.
  */
 export async function checkForSettlement(transactionId: number): Promise<AutoSettleResult | null> {
   const row = await db.getTransactionById(transactionId);
@@ -40,7 +48,21 @@ export async function checkForSettlement(transactionId: number): Promise<AutoSet
   const result = await db.settleContactBalance(contactId, row.amount, transactionId);
   if (result.applied <= 0) return null;
 
-  await db.updateTransaction(transactionId, { kind: 'SETTLE_IN' });
+  const leftover = row.amount - result.applied;
+  if (leftover > 0.009) {
+    await db.addTransaction({
+      amount: leftover,
+      direction: 'CREDIT',
+      kind: 'INCOME',
+      merchant: row.merchant,
+      category: row.category,
+      occurredAt: row.occurred_at,
+      source: row.source,
+      note: row.note,
+    });
+  }
+
+  await db.updateTransaction(transactionId, { kind: 'SETTLE_IN', amount: result.applied });
   return result;
 }
 
