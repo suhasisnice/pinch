@@ -1,13 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import * as db from '../db/dbService';
-import { TransactionRow } from '../db/types';
+import { PaymentMethod, TransactionRow } from '../db/types';
 import { CATEGORIES } from '../db/schema';
 import { learnFromCategoryCorrection, propagateCategoryCorrection } from '../services/classificationService';
-import { formatMoney, formatRelative } from '../utils/format';
+import { formatMoney, formatRelative, transactionSubtitle } from '../utils/format';
 import { palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Chip, Field, Sheet } from './ui';
 import Icon from './Icon';
+
+/** Left off UNKNOWN and CASH: UNKNOWN is the absence of a choice, not one on
+ * the list, and CASH has no SMS signal to detect but is still worth being
+ * able to pick by hand for a manual entry. */
+const PAYMENT_METHOD_OPTIONS: PaymentMethod[] = [
+  'UPI',
+  'CARD',
+  'NETBANKING',
+  'IMPS',
+  'NEFT',
+  'RTGS',
+  'ATM',
+  'CASH',
+];
 
 /**
  * View, edit, split, or get rid of a single transaction.
@@ -44,6 +58,8 @@ export default function TransactionDetailSheet({
   const [amount, setAmount] = useState('');
   const [merchant, setMerchant] = useState('');
   const [category, setCategory] = useState<string | null>(null);
+  const [subcategory, setSubcategory] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -52,6 +68,8 @@ export default function TransactionDetailSheet({
     setAmount(String(transaction.amount));
     setMerchant(transaction.merchant);
     setCategory(transaction.category);
+    setSubcategory(transaction.subcategory ?? '');
+    setPaymentMethod(transaction.payment_method);
     setEditing(false);
   }, [transaction]);
 
@@ -67,10 +85,19 @@ export default function TransactionDetailSheet({
     try {
       const trimmedMerchant = merchant.trim();
       const categoryChanged = category !== transaction!.category;
+      const trimmedSubcategory = subcategory.trim() || null;
       await db.updateTransaction(transaction!.id, {
         amount: parsedAmount,
         merchant: trimmedMerchant,
         category,
+        subcategory: trimmedSubcategory,
+        paymentMethod,
+        // The one place category_source ever becomes USER — a person looking
+        // at this exact transaction and choosing, which outranks any guess.
+        // Left alone when the category itself did not change, so re-saving
+        // amount/merchant/payment-method edits does not silently reclassify
+        // an AUTO row as USER-confirmed.
+        categorySource: categoryChanged ? 'USER' : undefined,
       });
       if (categoryChanged) {
         // A category set by hand is the strongest signal the app ever gets —
@@ -194,6 +221,27 @@ export default function TransactionDetailSheet({
               ))}
             </View>
           </View>
+          {category ? (
+            <Field
+              label="Subcategory (optional)"
+              value={subcategory}
+              onChangeText={setSubcategory}
+              placeholder="e.g. Food Delivery"
+            />
+          ) : null}
+          <View style={styles.group}>
+            <Text style={styles.groupLabel}>Payment method</Text>
+            <View style={styles.chipWrap}>
+              {PAYMENT_METHOD_OPTIONS.map((option) => (
+                <Chip
+                  key={option}
+                  label={option}
+                  selected={paymentMethod === option}
+                  onPress={() => setPaymentMethod(paymentMethod === option ? null : option)}
+                />
+              ))}
+            </View>
+          </View>
           <Button label={busy ? 'Saving…' : 'Save changes'} onPress={saveEdits} disabled={!canSave || busy} />
           <Button label="Cancel" variant="ghost" onPress={() => setEditing(false)} />
         </>
@@ -211,8 +259,16 @@ export default function TransactionDetailSheet({
               {formatMoney(transaction.amount)}
             </Text>
             <Text style={styles.meta}>
-              {transaction.category ?? 'Uncategorised'} · {formatRelative(transaction.occurred_at)}
+              {transactionSubtitle(transaction, formatRelative(transaction.occurred_at))}
             </Text>
+            {transaction.status === 'FAILED' ? (
+              <View style={styles.sourceBadge}>
+                <Icon name="warning" size={12} color={palette.danger} />
+                <Text style={[styles.sourceText, { color: palette.danger }]}>
+                  Payment failed — not counted as spending
+                </Text>
+              </View>
+            ) : null}
             <View style={styles.sourceBadge}>
               <Icon
                 name={

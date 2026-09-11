@@ -7,7 +7,7 @@ import { ingestPending } from '../services/captureService';
 import { getMonthlyAllowance } from '../settings/settingsStore';
 import { canIAfford, daysUntilBroke } from '../math/budget';
 import { TransactionRow } from '../db/types';
-import { formatMoney, formatRelative } from '../utils/format';
+import { formatMoney, formatRelative, transactionSubtitle } from '../utils/format';
 import { accentForState, categoryColor, layer, palette, radii, spacing, typography } from '../theme/theme';
 import {
   BlurOrb,
@@ -256,7 +256,7 @@ export default function TodayScreen() {
               key={tx.id}
               left={<Dot color={categoryColor(tx.category)} />}
               title={tx.merchant}
-              subtitle={`${tx.category ?? 'Uncategorised'} · ${formatRelative(tx.occurred_at)}`}
+              subtitle={transactionSubtitle(tx, formatRelative(tx.occurred_at))}
               onPress={() => setDetailFor(tx)}
               right={
                 <Text style={[styles.txAmount, tx.direction === 'CREDIT' && { color: palette.mint }]}>

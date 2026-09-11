@@ -179,6 +179,10 @@ export const categoryColors: Record<string, string> = {
   Academics: '#FBBF24',
   Health: '#4ADE80',
   Cash: '#D0BCFF',
+  Groceries: '#84CC16',
+  'Bills & Utilities': '#38BDF8',
+  Travel: '#2DD4BF',
+  Finance: '#EAB308',
   Other: '#94A3B8',
   Uncategorised: '#64748B',
 };
