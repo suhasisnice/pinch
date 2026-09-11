@@ -1,4 +1,9 @@
+import { CASH_WITHDRAWAL } from '../math/classification';
+import { PaymentMethod } from '../db/types';
+
 export type ParsedDirection = 'DEBIT' | 'CREDIT';
+
+export type ParsedStatus = 'COMPLETED' | 'FAILED';
 
 export interface ParsedMessage {
   amount: number;
@@ -17,6 +22,11 @@ export interface ParsedMessage {
    * because it undoes a purchase rather than funding a new one.
    */
   isRefund: boolean;
+  /**
+   * Whether the money actually moved. FAILED never counts toward spending or
+   * income, but the message is still worth keeping — see isFailedPayment.
+   */
+  status: ParsedStatus;
 }
 
 /**
@@ -140,6 +150,24 @@ export function isReversalCredit(text: string): boolean {
   return REVERSAL_MARKERS.test(text) && ARRIVED_MARKERS.test(text);
 }
 
+/**
+ * A payment that never went through — declined, failed, or otherwise did not
+ * complete. Deliberately narrower than the bare `/\b(?:failed|declined|...)\b/`
+ * REJECT_PATTERNS uses to throw out marketing text: that word alone is not
+ * enough here, because "declined"/"failed" also show up in loan and
+ * credit-card spam that has nothing to do with a real transaction. Requiring
+ * a transaction word within a short distance of the failure word is what lets
+ * this fire only for an actual failure alert.
+ */
+// The gap allows a period only when it's a decimal point (followed by a
+// digit, as in "Rs.700"), so a real sentence break still stops the match.
+const FAILED_MARKERS =
+  /\b(?:payment|transaction|txn|transfer|debit)\b(?:[^.]|\.(?=\d)){0,60}\b(?:has\s+been\s+|has\s+)?(?:failed|declined|unsuccessful|did\s+not\s+go\s+through|could\s+not\s+be\s+completed)\b/i;
+
+export function isFailedPayment(text: string): boolean {
+  return FAILED_MARKERS.test(text);
+}
+
 /** Sender IDs are shaped like VM-HDFCBK, AD-ICICIB, JD-SBIINB. */
 const BANK_SENDER = /^[A-Z]{2}-?([A-Z]{4,8})(?:-?[A-Z])?$/i;
 const KNOWN_BANK_TOKENS = [
@@ -193,7 +221,12 @@ const CREDIT_VERBS = /\b(?:credited|received|added|refunded|deposited)\b/i;
 const NAME = String.raw`[A-Za-z][A-Za-z0-9 &'.\-_@]{1,48}?`;
 // "from" belongs here alongside the others: "paid to Chai Point from Paytm
 // A/c..." names the wallet the payment left from, not more of the payee.
-const STOP = String.raw`(?=\s+(?:on|via|using|from|ref|upi|txn|dated|at\s+\d)\b|[.,;!]|$)`;
+// The failure-clause alternatives (has failed/declined/unsuccessful) stop a
+// failed-payment message's merchant capture from swallowing "OLIVE CAFE has
+// failed" whole — none of the earlier alternatives end a sentence like that.
+const STOP =
+  String.raw`(?=\s+(?:on|via|using|from|ref|upi|txn|dated|at\s+\d` +
+  String.raw`|has\s+failed|declined|unsuccessful|failed)\b|[.,;!]|$)`;
 
 // Order matters: the first match wins, so the most specific phrasings come
 // first and the greedy catch-alls come last.
@@ -275,7 +308,8 @@ const ACCOUNT_PATTERNS: RegExp[] = [
 ];
 
 // Noise that survives merchant capture and should be trimmed off the end.
-const MERCHANT_NOISE = /\b(?:on|via|using|ref|refno|upi|txn|dated|a\/c|acct|account)\b.*$/i;
+const MERCHANT_NOISE =
+  /\b(?:on|via|using|ref|refno|upi|txn|dated|a\/c|acct|account|declined|unsuccessful|failed)\b.*$/i;
 
 function parseAmount(raw: string): number | null {
   const value = parseFloat(raw.replace(/,/g, ''));
@@ -358,9 +392,11 @@ export function parseMessage(
   if (!text || text.trim().length < 6) return null;
 
   // Checked before the reject list, which would otherwise throw away the very
-  // message that undoes a debit already on the books.
+  // message that undoes a debit already on the books — or, for `failed`, the
+  // message that a payment never went through at all.
   const refund = isReversalCredit(text);
-  if (!refund && isRejected(text)) return null;
+  const failed = !refund && isFailedPayment(text);
+  if (!refund && !failed && isRejected(text)) return null;
 
   const amountRaw =
     text.match(new RegExp(AMOUNT, 'i'))?.[1] ??
@@ -373,15 +409,23 @@ export function parseMessage(
   // arrived with the user. Strong verbs are not up for discussion.
   const inbound = INBOUND_MARKERS.test(text);
   const isDebit =
-    DEBIT_VERBS_STRONG.test(text) || (DEBIT_VERBS_DIRECTIONAL.test(text) && !inbound);
+    DEBIT_VERBS_STRONG.test(text) || (DEBIT_VERBS_DIRECTIONAL.test(text) && !inbound) || failed;
   const isCredit = CREDIT_VERBS.test(text) || inbound;
-  if (!refund && !isDebit && !isCredit) return null;
+  if (!refund && !failed && !isDebit && !isCredit) return null;
 
   // "debited ... ; MERCHANT credited" names both verbs. The account is the
   // subject of the sentence, so a debit reading wins.
   // A reversal is money arriving, whatever verbs the sentence also contains —
   // "Rs 250 debited ... has been reversed" names a debit and is a credit.
-  const direction: ParsedDirection = refund ? 'CREDIT' : isDebit ? 'DEBIT' : 'CREDIT';
+  // A failed payment never had a direction of its own — it is read as the
+  // debit it was attempting to be, unless something says the money arrived.
+  const direction: ParsedDirection = refund
+    ? 'CREDIT'
+    : failed && !inbound
+      ? 'DEBIT'
+      : isDebit
+        ? 'DEBIT'
+        : 'CREDIT';
 
   const rawName = extractFirst(
     text,
@@ -427,6 +471,7 @@ export function parseMessage(
     accountHint,
     confidence: Math.min(1, Number(confidence.toFixed(2))),
     isRefund: refund,
+    status: failed ? 'FAILED' : 'COMPLETED',
   };
 }
 
@@ -447,6 +492,39 @@ export function buildDedupKey(
   if (parsed.reference) return `ref:${parsed.reference.toUpperCase()}`;
   const bucket = Math.floor(occurredAt.getTime() / (bucketSeconds * 1000));
   return `amt:${parsed.direction}:${parsed.amount.toFixed(2)}:${bucket}`;
+}
+
+const RAIL_MARKER = /\b(imps|neft|rtgs)\b/i;
+const UPI_MARKERS = /\bupi\b|\bvpa\b|UPI\/(?:P2M|P2A)\//i;
+const CARD_MARKERS = /\bcard\b|\bcard\s*ending\b|\bpos\b/i;
+const NETBANKING_MARKERS = /\bnet\s*banking\b|\binternet\s*banking\b/i;
+
+/**
+ * How the money moved, read straight from the message text. Order matters:
+ * a rail name (IMPS/NEFT/RTGS) is the most specific signal and checked
+ * first; ATM reuses the same withdrawal pattern classifyNonSpend already
+ * relies on, rather than a second copy of it. CARD is checked last among the
+ * remaining markers, and deliberately after NET BANKING/UPI: the bare word
+ * "card" shows up describing what a payment was *for* just as often as how
+ * it moved ("paid via Net Banking to CREDIT CARD BILL" names Net Banking as
+ * the method), so the more specific phrases get first refusal. Anything left
+ * unmatched is UNKNOWN rather than guessed at — a payment method the message
+ * never mentions is not evidence of anything.
+ *
+ * CASH is not detected here — a message never states "you paid with cash"
+ * about itself, since cash payments generate no message at all. It exists
+ * as a value a person can choose by hand, editing a transaction.
+ */
+export function detectPaymentMethod(rawText: string | null | undefined): PaymentMethod {
+  if (!rawText) return 'UNKNOWN';
+
+  const rail = rawText.match(RAIL_MARKER);
+  if (rail) return rail[1].toUpperCase() as PaymentMethod;
+  if (CASH_WITHDRAWAL.test(rawText)) return 'ATM';
+  if (NETBANKING_MARKERS.test(rawText)) return 'NETBANKING';
+  if (UPI_MARKERS.test(rawText)) return 'UPI';
+  if (CARD_MARKERS.test(rawText)) return 'CARD';
+  return 'UNKNOWN';
 }
 
 // ---------------------------------------------------------------------------

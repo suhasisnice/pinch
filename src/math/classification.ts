@@ -34,7 +34,8 @@ const CARD_BILL =
 /** CRED exists solely to pay card bills, so its name is itself the signal. */
 const CARD_BILL_BRANDS = /\b(?:cred|billdesk\s*cc)\b/i;
 
-const CASH_WITHDRAWAL =
+/** Exported so payment-method detection (parserService.ts) doesn't duplicate this pattern. */
+export const CASH_WITHDRAWAL =
   /\b(?:atm|cash\s*w(?:it)?hdr(?:awal|awn)?|cash\s*wdl|nfs\s*atm|withdrawn\s+at)\b/i;
 
 function haystack(tx: ClassifiableTransaction): string {

@@ -37,15 +37,18 @@ describe('money that came back', () => {
     expect(parsed?.amount).toBe(250);
   });
 
-  it('still rejects a failure where nothing has come back yet', () => {
-    // "Will be refunded" is a promise, not an arrival. Booking it now would
-    // credit money the account has not received.
-    expect(
-      parseMessage(
-        'Your payment of Rs 500 from A/c XX1234 has failed. The amount will be refunded within 3 working days',
-        'VM-HDFCBK'
-      )
-    ).toBeNull();
+  it('reads a failure with a promised future refund as FAILED, not as a refund arriving now', () => {
+    // "Will be refunded" is a promise, not an arrival — crediting it now would
+    // book money the account has not received. It is not silently dropped
+    // either: a failed payment is still worth keeping, just as a debit that
+    // never completed rather than as income.
+    const parsed = parseMessage(
+      'Your payment of Rs 500 from A/c XX1234 has failed. The amount will be refunded within 3 working days',
+      'VM-HDFCBK'
+    );
+    expect(parsed?.status).toBe('FAILED');
+    expect(parsed?.direction).toBe('DEBIT');
+    expect(parsed?.isRefund).toBe(false);
   });
 
   it('does not treat an ordinary purchase as a refund', () => {
