@@ -147,6 +147,26 @@ describe('confidence', () => {
   });
 });
 
+describe('bank alert emails (Canara Bank and others email-only)', () => {
+  // Canara Bank, among others, sends transaction alerts only by email, never
+  // by SMS. These reach the parser the same way a GPay notification does —
+  // caught by the notification listener, this time off Gmail rather than a
+  // payment app — so they get the same NOTIFICATION treatment: no account
+  // number required, and the same source-trust bonus.
+  it('parses a Canara Bank debit alert email', () => {
+    const parsed = parseMessage(
+      'Canara Bank: Rs.500.00 debited from A/c XX1234 towards UPI/P2M to SWIGGY on 11-09-26. Avl Bal Rs.10,000.00',
+      null,
+      { source: 'NOTIFICATION' }
+    );
+    expect(parsed).not.toBeNull();
+    expect(parsed?.amount).toBe(500);
+    expect(parsed?.direction).toBe('DEBIT');
+    expect(parsed?.counterparty).toBe('Swiggy');
+    expect(parsed!.confidence).toBeGreaterThanOrEqual(ACCEPT_THRESHOLD);
+  });
+});
+
 describe('sender recognition', () => {
   it('recognises bank sender IDs', () => {
     expect(isLikelyBankSender('VM-HDFCBK')).toBe(true);

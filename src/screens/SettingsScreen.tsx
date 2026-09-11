@@ -297,7 +297,7 @@ export default function SettingsScreen() {
             />
             <Row
               title="Read payment notifications"
-              subtitle={listenerEnabled ? 'Granted' : 'Catches GPay, PhonePe, Paytm'}
+              subtitle={listenerEnabled ? 'Granted' : 'Catches GPay, PhonePe, Paytm, bank alert emails'}
               right={
                 listenerEnabled ? (
                   <Text style={styles.ok}>On</Text>
