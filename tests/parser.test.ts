@@ -127,6 +127,24 @@ describe('confidence', () => {
     );
     expect(parsed!.confidence).toBeLessThanOrEqual(1);
   });
+
+  it('trusts an unambiguous notification even with no account number or reference', () => {
+    // A notification never carries either — that is simply not how a
+    // payment app words its own notifications — so scoring it against
+    // SMS-shaped evidence it structurally cannot have used to cap even a
+    // perfectly clear message under the accept threshold.
+    const parsed = parseMessage('Bacchi sent 229 to you', null, { source: 'NOTIFICATION' });
+    expect(parsed!.confidence).toBeGreaterThanOrEqual(ACCEPT_THRESHOLD);
+  });
+
+  it('still holds back a vague notification with no named counterparty', () => {
+    // The fix credits a notification's package-allowlist trust — it does
+    // not blindly accept every notification regardless of how little the
+    // message itself actually says.
+    const parsed = parseMessage('credited by 229', null, { source: 'NOTIFICATION' });
+    expect(parsed).not.toBeNull();
+    expect(parsed!.confidence).toBeLessThan(ACCEPT_THRESHOLD);
+  });
 });
 
 describe('sender recognition', () => {
