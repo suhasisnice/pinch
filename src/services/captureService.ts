@@ -1,6 +1,13 @@
 import * as db from '../db/dbService';
 import { CapturedMessage, drainMessages, readRecentSms } from '../../modules/pinch-capture';
-import { ACCEPT_THRESHOLD, buildDedupKey, parseMessage } from './parserService';
+import {
+  ACCEPT_THRESHOLD,
+  buildDedupKey,
+  detectPaymentMethod,
+  isFailedPayment,
+  parseMessage,
+} from './parserService';
+import { CategorySource, TransactionStatus } from '../db/types';
 import { getBudgetSnapshot } from './budgetService';
 import { planForTransaction } from '../notifications/engine';
 import { deliverAll, loadDeliveryHistory } from '../notifications/notificationService';
@@ -116,6 +123,7 @@ export async function ingestMessage(
     // A reversal undoes a purchase; booking it as income would inflate the
     // allowance instead of cancelling the spending it reverses.
     kind: parsed.isRefund ? 'REFUND' : undefined,
+    status: parsed.status,
     silent: options.silent,
   });
 
@@ -143,6 +151,8 @@ export interface PostTransactionInput {
    * about spending that happened weeks ago.
    */
   silent?: boolean;
+  /** A payment that never completed. Defaults to COMPLETED — see TransactionStatus. */
+  status?: TransactionStatus;
 }
 
 /**
@@ -155,8 +165,31 @@ export interface PostTransactionInput {
  */
 export async function postTransaction(input: PostTransactionInput): Promise<number | null> {
   const occurredAt = input.occurredAt ?? new Date().toISOString();
-  const category =
-    input.category ?? (input.direction === 'DEBIT' ? await db.smartCategoriseMerchant(input.merchant) : null);
+  const status: TransactionStatus = input.status ?? 'COMPLETED';
+
+  // input.category is respected as given (including an explicit null, same
+  // as the `??` this replaces) — only a genuinely *omitted* category on a
+  // debit runs the classifier. A caller-supplied category never gets
+  // subcategory/confidence/reason/AUTO attached, since it was not this
+  // function's own guess; only TransactionDetailSheet ever sets USER.
+  let category: string | null = input.category ?? null;
+  let subcategory: string | null = null;
+  let confidence: number | null = null;
+  let categorizationReason: string | null = null;
+  let categorySource: CategorySource | null = null;
+
+  if (input.category === undefined && input.direction === 'DEBIT') {
+    const match = await db.categoriseMerchantWithMeta(input.merchant);
+    if (match) {
+      category = match.category;
+      subcategory = match.subcategory;
+      confidence = match.confidence;
+      categorizationReason = match.reason;
+      categorySource = 'AUTO';
+    }
+  }
+
+  const paymentMethod = detectPaymentMethod(input.rawText ?? null);
 
   let kind: 'SPEND' | 'INCOME' | 'SETTLE_IN' | 'SETTLE_OUT' | 'REFUND';
   if (input.kind) {
@@ -167,9 +200,11 @@ export async function postTransaction(input: PostTransactionInput): Promise<numb
     kind = input.settlesContactId ? 'SETTLE_IN' : 'INCOME';
   }
 
-  // Spending during an open outing belongs to it unless told otherwise.
+  // Spending during an open outing belongs to it unless told otherwise — but
+  // only real spending. A failed payment was never part of the outing's
+  // actual cost.
   let outingId = input.outingId ?? null;
-  if (outingId === null && kind === 'SPEND') {
+  if (outingId === null && kind === 'SPEND' && status !== 'FAILED') {
     const active = await db.getActiveOuting(occurredAt);
     outingId = active?.id ?? null;
   }
@@ -186,7 +221,21 @@ export async function postTransaction(input: PostTransactionInput): Promise<numb
     externalRef: input.externalRef ?? null,
     dedupKey: input.dedupKey ?? null,
     outingId,
+    paymentMethod,
+    subcategory,
+    confidence,
+    categorizationReason,
+    categorySource,
+    status,
   });
+
+  // Nothing past this point makes sense for a payment that never moved
+  // money: no debt was actually repaid or incurred, no spend to round up or
+  // notify about, no self-transfer or settlement to reconcile. The row is
+  // still classified and stored above so it stays visible.
+  if (status === 'FAILED') {
+    return transactionId;
+  }
 
   if (input.settlesContactId) {
     if (kind === 'SETTLE_IN') {
@@ -385,6 +434,10 @@ export async function acceptCapture(
     category: overrides.category,
     outingId: overrides.outingId,
     settlesContactId: overrides.settlesContactId,
+    // CaptureInbox has no status column of its own — a low-confidence parse
+    // that also failed is re-checked here rather than losing that fact the
+    // moment it is promoted from the review inbox.
+    status: overrides.status ?? (isFailedPayment(capture.raw_text) ? 'FAILED' : 'COMPLETED'),
   });
 
   await db.setCaptureStatus(captureId, 'ACCEPTED', transactionId);

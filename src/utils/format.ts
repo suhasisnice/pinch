@@ -108,3 +108,31 @@ export function endOfDayIso(date: Date = new Date()): string {
   copy.setDate(copy.getDate() + 1);
   return copy.toISOString();
 }
+
+/**
+ * The one line under a transaction's merchant name: category (or "Needs
+ * Review" when there isn't one), subcategory and payment method when known,
+ * plus whatever trailing bit the caller wants — a relative time, a capture
+ * source. Shared so TodayScreen, TransactionsScreen and TransactionDetailSheet
+ * read the same category/subcategory/payment-method line rather than each
+ * building their own slightly different version of it.
+ */
+export function transactionSubtitle(
+  tx: {
+    category: string | null;
+    subcategory?: string | null;
+    payment_method?: string | null;
+    status?: string;
+  },
+  trailing: string
+): string {
+  return [
+    tx.status === 'FAILED' ? 'Failed' : null,
+    tx.category ?? 'Needs Review',
+    tx.subcategory,
+    tx.payment_method && tx.payment_method !== 'UNKNOWN' ? tx.payment_method : null,
+    trailing,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}

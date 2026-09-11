@@ -140,7 +140,7 @@ async function getKindTotal(kind: string, startIso: string, endIso: string): Pro
   const adapter = db.getAdapter();
   const row = await adapter.getFirstAsync<{ total: number | null }>(
     `SELECT COALESCE(SUM(amount), 0) AS total FROM Transactions
-     WHERE kind = ? AND occurred_at >= ? AND occurred_at < ?;`,
+     WHERE kind = ? AND status = 'COMPLETED' AND occurred_at >= ? AND occurred_at < ?;`,
     [kind, startIso, endIso]
   );
   return row?.total ?? 0;

@@ -3,7 +3,7 @@ import { RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { TransactionRow } from '../db/types';
-import { formatMoney } from '../utils/format';
+import { formatMoney, transactionSubtitle } from '../utils/format';
 import { categoryColor, palette, spacing, typography } from '../theme/theme';
 import { Card, Chip, Dot, EmptyState, Field, Loading, Row, Screen, ScreenTitle } from '../components/ui';
 import Icon from '../components/Icon';
@@ -147,10 +147,10 @@ export default function TransactionsScreen() {
                 key={tx.id}
                 left={<Dot color={categoryColor(tx.category)} />}
                 title={tx.merchant}
-                subtitle={[
-                  tx.category ?? 'Uncategorised',
-                  tx.source === 'MANUAL' ? 'by hand' : tx.source.toLowerCase(),
-                ].join(' · ')}
+                subtitle={transactionSubtitle(
+                  tx,
+                  tx.source === 'MANUAL' ? 'by hand' : tx.source.toLowerCase()
+                )}
                 onPress={() => setDetailFor(tx)}
                 right={
                   <Text

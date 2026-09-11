@@ -139,6 +139,12 @@ export interface CategoryPropagationResult {
  * Matching is fuzzy (see sameMerchant) because the same place rarely shows
  * up written identically twice — an SMS truncates it, a notification
  * capitalises it differently, a VPA handle drops the spaces.
+ *
+ * The one row this never touches is another one a *person* already
+ * confirmed (`category_source === 'USER'`) — that transaction's category is
+ * itself a deliberate choice, not a guess sitting there waiting to be
+ * corrected, so it outranks even this, the strongest correction signal the
+ * app has for anything else.
  */
 export async function propagateCategoryCorrection(
   merchant: string,
@@ -154,6 +160,7 @@ export async function propagateCategoryCorrection(
     if (row.id === excludeTransactionId) continue;
     if (row.direction !== 'DEBIT' || row.kind !== 'SPEND') continue;
     if (row.excluded_at !== null || row.transfer_pair_id !== null) continue;
+    if (row.category_source === 'USER') continue;
     if (row.category === category) continue;
     if (!sameMerchant(row.merchant, merchant)) continue;
 
@@ -185,7 +192,12 @@ export interface CategoryBackfillResult {
  * empty.
  *
  * Only fills blanks. A category the user set by hand is never overwritten,
- * and neither is one an earlier run already worked out.
+ * and neither is one an earlier run already worked out. The `category_source
+ * !== 'USER'` check is defence in depth alongside `category === null` — every
+ * row this could reach already has category null, and a null category can
+ * never be USER-sourced (TransactionDetailSheet only sets category_source
+ * when it also sets a real category), but a second guard costs nothing and
+ * means this stays correct even if that stops being true one day.
  *
  * Grouped by merchant rather than run per row: the classifier reloads the
  * whole token table on each call, and a ledger of a thousand transactions
@@ -200,6 +212,7 @@ export async function backfillCategories(): Promise<CategoryBackfillResult> {
   const needing = all.filter(
     (row) =>
       row.category === null &&
+      row.category_source !== 'USER' &&
       row.direction === 'DEBIT' &&
       row.kind === 'SPEND' &&
       row.excluded_at === null &&
@@ -227,18 +240,24 @@ export async function backfillCategories(): Promise<CategoryBackfillResult> {
   };
 
   for (const cluster of clusters) {
-    let category: string | null = null;
+    let match: db.CategoryMatch | null = null;
     for (const name of cluster.names) {
-      category = await db.smartCategoriseMerchant(name);
-      if (category) break;
+      match = await db.categoriseMerchantWithMeta(name);
+      if (match) break;
     }
-    if (!category) {
+    if (!match) {
       result.merchantsUnrecognised += 1;
       continue;
     }
     result.merchantsRecognised += 1;
     for (const id of cluster.ids) {
-      await db.setTransactionCategory(id, category);
+      await db.setTransactionCategoryMeta(id, {
+        category: match.category,
+        subcategory: match.subcategory,
+        confidence: match.confidence,
+        reason: match.reason,
+        source: 'AUTO',
+      });
       result.categorised += 1;
     }
   }

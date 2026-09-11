@@ -1,6 +1,7 @@
 import {
   ACCEPT_THRESHOLD,
   buildDedupKey,
+  detectPaymentMethod,
   isLikelyBankSender,
   parseMessage,
 } from '../src/services/parserService';
@@ -75,8 +76,6 @@ describe('messages that must not become transactions', () => {
   const rejects = [
     ['an OTP', '723418 is your OTP for a txn of Rs.5000 at AMAZON. Do not share it with anyone.'],
     ['a scheduled debit', 'Rs.499 will be debited from your A/c on 12-09-26 for Netflix.'],
-    ['a failed payment', 'Your payment of Rs.700 to OLIVE CAFE has failed.'],
-    ['a declined card', 'Txn of Rs.2000 at CROMA declined due to insufficient balance.'],
     ['a balance enquiry', 'Available balance in A/c XX1234 is Rs.4,320.50 as on 08-09-26.'],
     ['a collect request', 'RAHUL has requested money Rs.500 via UPI. Collect request expires soon.'],
     ['a promo', 'Get cashback of Rs.500! Apply now for a personal loan. Click here.'],
@@ -100,6 +99,41 @@ describe('messages that must not become transactions', () => {
   it('rejects empty and trivial input', () => {
     expect(parseMessage('')).toBeNull();
     expect(parseMessage('hi')).toBeNull();
+  });
+});
+
+describe('failed payments — kept, not thrown away', () => {
+  // A failed or declined payment never moved money, but the message is real
+  // evidence something was attempted — unlike the marketing text that reuses
+  // the same words ("declined" pre-approval spam, "failed" cashback offers),
+  // both of these name an account, which is the same structural gate every
+  // other real transaction has to clear.
+  const failures: Array<[string, string, string]> = [
+    [
+      'a failed payment',
+      'Your payment of Rs.700 to OLIVE CAFE from A/c XX1234 has failed.',
+      'Olive Cafe',
+    ],
+    [
+      'a declined card transaction',
+      'Txn of Rs.2000 at CROMA on Card ending 5678 declined due to insufficient balance.',
+      'Croma',
+    ],
+  ];
+
+  for (const [label, text, merchant] of failures) {
+    it(`keeps ${label} with status FAILED`, () => {
+      const parsed = parseMessage(text);
+      expect(parsed).not.toBeNull();
+      expect(parsed?.status).toBe('FAILED');
+      expect(parsed?.direction).toBe('DEBIT');
+      expect(parsed?.counterparty).toBe(merchant);
+    });
+  }
+
+  it('never marks a completed transaction as failed', () => {
+    const parsed = parseMessage('Rs.340 debited from A/c XX1234 at SWIGGY. Ref 412345678901');
+    expect(parsed?.status).toBe('COMPLETED');
   });
 });
 

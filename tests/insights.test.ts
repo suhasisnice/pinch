@@ -19,6 +19,12 @@ function tx(overrides: Partial<TransactionRow>): TransactionRow {
     transfer_pair_id: null,
     non_spend_reason: null,
     excluded_at: null,
+    payment_method: null,
+    subcategory: null,
+    confidence: null,
+    categorization_reason: null,
+    category_source: null,
+    status: 'COMPLETED',
     created_at: '2026-09-08T12:00:00.000Z',
     ...overrides,
   };

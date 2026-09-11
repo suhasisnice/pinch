@@ -19,6 +19,35 @@ export type CaptureSource = 'SMS' | 'NOTIFICATION' | 'MANUAL';
 
 export type IOUDirection = 'THEY_OWE_ME' | 'I_OWE_THEM';
 
+/** How the money moved, as far as the message said. UNKNOWN is not a failure to detect — some messages simply never mention it. */
+export type PaymentMethod =
+  | 'UPI'
+  | 'CARD'
+  | 'NETBANKING'
+  | 'IMPS'
+  | 'NEFT'
+  | 'RTGS'
+  | 'ATM'
+  | 'CASH'
+  | 'UNKNOWN';
+
+/**
+ * Who decided this transaction's category.
+ *
+ * AUTO is a guess, however confident; USER is a human looking at this exact
+ * transaction and choosing. The distinction exists so an automatic pass
+ * (backfill, a correction propagating to other rows) never overwrites a
+ * choice a person actually made.
+ */
+export type CategorySource = 'AUTO' | 'USER';
+
+/**
+ * Whether the money actually moved. A FAILED transaction is not spending —
+ * it never counts toward any total — but the message is still worth keeping,
+ * the same way a bounced cheque is worth knowing about.
+ */
+export type TransactionStatus = 'COMPLETED' | 'FAILED';
+
 export interface TransactionRow {
   id: number;
   amount: number;
@@ -38,6 +67,14 @@ export interface TransactionRow {
   /** Set when this left the account but was not spent on anything. */
   non_spend_reason: string | null;
   excluded_at: string | null;
+  payment_method: PaymentMethod | null;
+  subcategory: string | null;
+  /** The classifier's own confidence in `category`, 0..1. Null when category is null. */
+  confidence: number | null;
+  /** Short human-readable explanation, e.g. "Matched merchant: swiggy". */
+  categorization_reason: string | null;
+  category_source: CategorySource | null;
+  status: TransactionStatus;
   created_at: string;
 }
 

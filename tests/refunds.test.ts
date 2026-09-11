@@ -16,12 +16,16 @@ describe('money that came back', () => {
     ],
   ];
 
-  it.each(reversals)('parses %s as a credit', (_label, body) => {
+  it.each(reversals)('parses %s as a completed credit, not a failed one', (_label, body) => {
     const parsed = parseMessage(body, 'VM-HDFCBK');
 
     expect(parsed).not.toBeNull();
     expect(parsed?.direction).toBe('CREDIT');
     expect(parsed?.isRefund).toBe(true);
+    // A refund is money that genuinely arrived, even though the messages it
+    // is built from are full of words FAILED_MARKERS also looks for
+    // ("reversed", "cancelled") — the reversal check runs first and wins.
+    expect(parsed?.status).toBe('COMPLETED');
   });
 
   it('reads "Rs 250 debited ... reversed" as money arriving, not leaving', () => {
@@ -37,15 +41,18 @@ describe('money that came back', () => {
     expect(parsed?.amount).toBe(250);
   });
 
-  it('still rejects a failure where nothing has come back yet', () => {
-    // "Will be refunded" is a promise, not an arrival. Booking it now would
-    // credit money the account has not received.
-    expect(
-      parseMessage(
-        'Your payment of Rs 500 from A/c XX1234 has failed. The amount will be refunded within 3 working days',
-        'VM-HDFCBK'
-      )
-    ).toBeNull();
+  it('reads a failure with a promised future refund as FAILED, not as a refund arriving now', () => {
+    // "Will be refunded" is a promise, not an arrival — crediting it now would
+    // book money the account has not received. It is not silently dropped
+    // either: a failed payment is still worth keeping, just as a debit that
+    // never completed rather than as income.
+    const parsed = parseMessage(
+      'Your payment of Rs 500 from A/c XX1234 has failed. The amount will be refunded within 3 working days',
+      'VM-HDFCBK'
+    );
+    expect(parsed?.status).toBe('FAILED');
+    expect(parsed?.direction).toBe('DEBIT');
+    expect(parsed?.isRefund).toBe(false);
   });
 
   it('does not treat an ordinary purchase as a refund', () => {

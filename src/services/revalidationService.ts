@@ -35,8 +35,15 @@ const REVALIDATION_KEY = 'pinch.revalidatedRules';
  *     spellings — truncated by an SMS length limit, differently capitalised
  *     by a notification — used to need every spelling recognised on its own;
  *     this re-groups what is already Uncategorised under the new rule.
+ * 10 — a failed or declined payment is no longer thrown away outright; it is
+ *      kept with status FAILED instead. Mostly a no-op on existing history —
+ *      a message rejected before this shipped was never stored anywhere, so
+ *      there is nothing to recover — but a stored row's *direction* can now
+ *      come out differently for the same reason failed payments needed a
+ *      direction fallback at all, so correctStoredDirections still re-checks
+ *      it rather than assuming nothing changed.
  */
-export const PARSER_RULES_VERSION = 9;
+export const PARSER_RULES_VERSION = 10;
 
 export interface RevalidationResult {
   /** Transactions examined: captured, and still carrying their original text. */

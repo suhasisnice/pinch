@@ -43,14 +43,25 @@ export function __resetDatabaseForTests(): void {
  * Inserts the built-in merchant->category rules once. `INSERT OR IGNORE`
  * against the UNIQUE pattern means a user's own edit to a rule is never
  * clobbered on a later launch.
+ *
+ * Subcategory needs its own pass beyond the INSERT: a pattern seeded before
+ * subcategory existed (schema v9) already has a row, so INSERT OR IGNORE
+ * skips it and its subcategory would stay NULL forever. The UPDATE reaches
+ * it too — filling in a NULL subcategory only, never touching `category`.
  */
 async function seedMerchantRules(db: DbAdapter): Promise<void> {
   const { DEFAULT_MERCHANT_RULES } = await import('./schema');
   const now = new Date().toISOString();
   for (const rule of DEFAULT_MERCHANT_RULES) {
     await db.runAsync(
-      `INSERT OR IGNORE INTO MerchantRules (pattern, category, created_at) VALUES (?, ?, ?);`,
-      [rule.pattern, rule.category, now]
+      `INSERT OR IGNORE INTO MerchantRules (pattern, category, subcategory, created_at) VALUES (?, ?, ?, ?);`,
+      [rule.pattern, rule.category, rule.subcategory ?? null, now]
     );
+    if (rule.subcategory) {
+      await db.runAsync(
+        `UPDATE MerchantRules SET subcategory = ? WHERE pattern = ? AND subcategory IS NULL;`,
+        [rule.subcategory, rule.pattern]
+      );
+    }
   }
 }

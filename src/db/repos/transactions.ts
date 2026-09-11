@@ -1,5 +1,13 @@
 import { getAdapter } from '../connection';
-import { CaptureSource, Direction, TransactionKind, TransactionRow } from '../types';
+import {
+  CaptureSource,
+  CategorySource,
+  Direction,
+  PaymentMethod,
+  TransactionKind,
+  TransactionRow,
+  TransactionStatus,
+} from '../types';
 
 export interface NewTransaction {
   amount: number;
@@ -14,6 +22,13 @@ export interface NewTransaction {
   dedupKey?: string | null;
   outingId?: number | null;
   note?: string | null;
+  paymentMethod?: PaymentMethod | null;
+  subcategory?: string | null;
+  confidence?: number | null;
+  categorizationReason?: string | null;
+  categorySource?: CategorySource | null;
+  /** A transaction that never completed — see TransactionStatus. Defaults to COMPLETED. */
+  status?: TransactionStatus;
 }
 
 /**
@@ -40,8 +55,10 @@ export async function addTransaction(input: NewTransaction): Promise<number> {
   const result = await db.runAsync(
     `INSERT INTO Transactions
        (amount, direction, kind, merchant, category, occurred_at, source,
-        raw_text, external_ref, dedup_key, outing_id, note, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        raw_text, external_ref, dedup_key, outing_id, note,
+        payment_method, subcategory, confidence, categorization_reason, category_source, status,
+        created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
     [
       Math.abs(input.amount),
       input.direction,
@@ -55,6 +72,12 @@ export async function addTransaction(input: NewTransaction): Promise<number> {
       input.dedupKey ?? null,
       input.outingId ?? null,
       input.note ?? null,
+      input.paymentMethod ?? null,
+      input.subcategory ?? null,
+      input.confidence ?? null,
+      input.categorizationReason ?? null,
+      input.categorySource ?? null,
+      input.status ?? 'COMPLETED',
       now,
     ]
   );
@@ -89,6 +112,39 @@ export async function setTransactionCategory(id: number, category: string | null
   await db.runAsync(`UPDATE Transactions SET category = ? WHERE id = ?;`, [category, id]);
 }
 
+/**
+ * Sets a category along with the metadata that came with it — subcategory,
+ * confidence, a short reason, and who decided it. Used by the classifier
+ * (backfill, live capture), never by a hand edit: TransactionDetailSheet
+ * calls updateTransaction directly, since a person choosing a category has
+ * no "confidence" or "reason" in the classifier's sense to report.
+ */
+export async function setTransactionCategoryMeta(
+  id: number,
+  fields: {
+    category: string | null;
+    subcategory?: string | null;
+    confidence?: number | null;
+    reason?: string | null;
+    source: CategorySource;
+  }
+): Promise<void> {
+  const db = getAdapter();
+  await db.runAsync(
+    `UPDATE Transactions
+     SET category = ?, subcategory = ?, confidence = ?, categorization_reason = ?, category_source = ?
+     WHERE id = ?;`,
+    [
+      fields.category,
+      fields.subcategory ?? null,
+      fields.confidence ?? null,
+      fields.reason ?? null,
+      fields.source,
+      id,
+    ]
+  );
+}
+
 export async function setTransactionOuting(id: number, outingId: number | null): Promise<void> {
   const db = getAdapter();
   await db.runAsync(`UPDATE Transactions SET outing_id = ? WHERE id = ?;`, [outingId, id]);
@@ -117,6 +173,10 @@ export async function updateTransaction(
     note?: string | null;
     direction?: Direction;
     kind?: TransactionKind;
+    paymentMethod?: PaymentMethod | null;
+    subcategory?: string | null;
+    /** Set to 'USER' from the edit sheet whenever category changes — see TransactionDetailSheet. */
+    categorySource?: CategorySource | null;
   }
 ): Promise<void> {
   const db = getAdapter();
@@ -150,6 +210,18 @@ export async function updateTransaction(
   if (fields.kind !== undefined) {
     sets.push('kind = ?');
     params.push(fields.kind);
+  }
+  if (fields.paymentMethod !== undefined) {
+    sets.push('payment_method = ?');
+    params.push(fields.paymentMethod);
+  }
+  if (fields.subcategory !== undefined) {
+    sets.push('subcategory = ?');
+    params.push(fields.subcategory);
+  }
+  if (fields.categorySource !== undefined) {
+    sets.push('category_source = ?');
+    params.push(fields.categorySource);
   }
   if (sets.length === 0) return;
 
@@ -199,7 +271,7 @@ export async function getMonthlySpend(
             COUNT(*) AS count,
             COUNT(DISTINCT substr(occurred_at, 1, 10)) AS days
      FROM Transactions
-     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL AND occurred_at >= ?
+     WHERE kind = 'SPEND' AND status = 'COMPLETED' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL AND occurred_at >= ?
      GROUP BY month
      ORDER BY month DESC;`,
     [start.toISOString()]
@@ -219,7 +291,7 @@ export async function getCategoryByMonth(
             COALESCE(category, 'Uncategorised') AS category,
             SUM(amount) AS total
      FROM Transactions
-     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL AND occurred_at >= ?
+     WHERE kind = 'SPEND' AND status = 'COMPLETED' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL AND occurred_at >= ?
      GROUP BY month, category
      ORDER BY month DESC, total DESC;`,
     [start.toISOString()]
@@ -252,7 +324,7 @@ export async function getRepeatMerchants(
             SUM(amount) AS total,
             MAX(occurred_at) AS lastAt
      FROM Transactions
-     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL AND occurred_at >= ?
+     WHERE kind = 'SPEND' AND status = 'COMPLETED' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL AND occurred_at >= ?
      GROUP BY lower(merchant)
      HAVING months >= 2
      ORDER BY total DESC;`,
@@ -316,7 +388,7 @@ export async function getGrossSpendBetween(startIso: string, endIso: string): Pr
        COALESCE(SUM(CASE WHEN kind = 'SPEND' THEN amount ELSE 0 END), 0)
        - COALESCE(SUM(CASE WHEN kind = 'REFUND' THEN amount ELSE 0 END), 0) AS total
      FROM Transactions
-     WHERE kind IN ('SPEND', 'REFUND') AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL
+     WHERE kind IN ('SPEND', 'REFUND') AND status = 'COMPLETED' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL
        AND occurred_at >= ? AND occurred_at < ?;`,
     [startIso, endIso]
   );
@@ -328,7 +400,7 @@ export async function getIncomeBetween(startIso: string, endIso: string): Promis
   const db = getAdapter();
   const row = await db.getFirstAsync<{ total: number | null }>(
     `SELECT COALESCE(SUM(amount), 0) AS total FROM Transactions
-     WHERE kind = 'INCOME' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL AND occurred_at >= ? AND occurred_at < ?;`,
+     WHERE kind = 'INCOME' AND status = 'COMPLETED' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL AND occurred_at >= ? AND occurred_at < ?;`,
     [startIso, endIso]
   );
   return row?.total ?? 0;
@@ -374,7 +446,7 @@ export async function getSpendByCategory(
             SUM(amount) AS total,
             COUNT(*) AS count
      FROM Transactions
-     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL
+     WHERE kind = 'SPEND' AND status = 'COMPLETED' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL
        AND occurred_at >= ? AND occurred_at < ?
      GROUP BY COALESCE(category, 'Uncategorised')
      ORDER BY total DESC;`,
@@ -391,7 +463,7 @@ export async function getDailySpend(
   return db.getAllAsync<{ day: string; total: number }>(
     `SELECT substr(occurred_at, 1, 10) AS day, SUM(amount) AS total
      FROM Transactions
-     WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL
+     WHERE kind = 'SPEND' AND status = 'COMPLETED' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL
        AND occurred_at >= ? AND occurred_at < ?
      GROUP BY day
      ORDER BY day ASC;`,
@@ -506,7 +578,7 @@ export async function getBorneBetween(
   }>(
     `SELECT
        (SELECT COALESCE(SUM(amount), 0) FROM Transactions
-         WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL
+         WHERE kind = 'SPEND' AND status = 'COMPLETED' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL
            AND occurred_at >= ?1 AND occurred_at < ?2) AS paid,
 
        (SELECT COALESCE(SUM(i.amount), 0) FROM IOUs i
@@ -551,6 +623,7 @@ export async function hasCardTransactions(): Promise<boolean> {
   const row = await db.getFirstAsync<{ n: number }>(
     `SELECT COUNT(*) AS n FROM Transactions
      WHERE kind = 'SPEND'
+       AND status = 'COMPLETED'
        AND excluded_at IS NULL
        AND non_spend_reason IS NULL
        AND raw_text IS NOT NULL
