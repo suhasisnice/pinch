@@ -16,12 +16,16 @@ describe('money that came back', () => {
     ],
   ];
 
-  it.each(reversals)('parses %s as a credit', (_label, body) => {
+  it.each(reversals)('parses %s as a completed credit, not a failed one', (_label, body) => {
     const parsed = parseMessage(body, 'VM-HDFCBK');
 
     expect(parsed).not.toBeNull();
     expect(parsed?.direction).toBe('CREDIT');
     expect(parsed?.isRefund).toBe(true);
+    // A refund is money that genuinely arrived, even though the messages it
+    // is built from are full of words FAILED_MARKERS also looks for
+    // ("reversed", "cancelled") — the reversal check runs first and wins.
+    expect(parsed?.status).toBe('COMPLETED');
   });
 
   it('reads "Rs 250 debited ... reversed" as money arriving, not leaving', () => {

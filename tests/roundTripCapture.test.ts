@@ -136,4 +136,58 @@ describe('payment method, category and failed status wired to live capture', () 
     const dayEnd = new Date(at + 24 * 60 * 60 * 1000).toISOString();
     expect(await db.getGrossSpendBetween(dayStart, dayEnd)).toBe(0);
   });
+
+  it('captures fuel spending with its category and card payment method', async () => {
+    const message: CapturedMessage = {
+      source: 'SMS',
+      sender: 'VM-HDFCBK',
+      body: 'Rs.1200 spent on Card ending 5678 at HPCL Petrol Pump on 08-09-26.',
+      receivedAt: Date.now(),
+    };
+    expect(await ingestMessage(message)).toBe('POSTED');
+
+    const [row] = await db.getAllTransactions();
+    expect(row).toMatchObject({
+      category: 'Transport',
+      subcategory: 'Fuel',
+      payment_method: 'CARD',
+      status: 'COMPLETED',
+    });
+  });
+
+  it('categorises a mobile recharge as Subscriptions, not a new Bills & Utilities pattern', async () => {
+    // jio/airtel were already seeded to Subscriptions before Bills &
+    // Utilities existed — deliberately left alone rather than reclassified,
+    // to avoid disturbing already-categorised rows on existing installs.
+    const message: CapturedMessage = {
+      source: 'SMS',
+      sender: 'VM-HDFCBK',
+      body: 'Rs.299 paid to JIO via UPI from A/c XX1234. Ref 612345678901',
+      receivedAt: Date.now(),
+    };
+    expect(await ingestMessage(message)).toBe('POSTED');
+
+    const [row] = await db.getAllTransactions();
+    expect(row.merchant).toBe('Jio');
+    expect(row.category).toBe('Subscriptions');
+    expect(row.subcategory).toBe('Mobile Recharge');
+    expect(row.payment_method).toBe('UPI');
+  });
+
+  it('sends money to a person without reading their name as a Food or Shopping merchant', async () => {
+    const message: CapturedMessage = {
+      source: 'SMS',
+      sender: 'VM-HDFCBK',
+      body: 'Rs 5000 transferred to Rahul via UPI from A/c XX1234. Ref 512345678901',
+      receivedAt: Date.now(),
+    };
+    expect(await ingestMessage(message)).toBe('POSTED');
+
+    const [row] = await db.getAllTransactions();
+    expect(row.direction).toBe('DEBIT');
+    expect(row.category).not.toBe('Food');
+    expect(row.category).not.toBe('Shopping');
+    expect(row.category).toBeNull();
+    expect(row.payment_method).toBe('UPI');
+  });
 });
