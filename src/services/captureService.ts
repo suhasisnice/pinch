@@ -31,6 +31,8 @@ const PACKAGE_LABELS: Record<string, string> = {
   'net.one97.paytm': 'Paytm',
   'in.org.npci.upiapp': 'BHIM',
   'com.dreamplug.androidapp': 'CRED',
+  'com.google.android.gm': 'Email',
+  'com.google.android.gm.lite': 'Email',
 };
 
 function labelFor(message: CapturedMessage): string {
