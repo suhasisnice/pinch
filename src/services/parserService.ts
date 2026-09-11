@@ -408,6 +408,16 @@ export function parseMessage(
   if (accountHint) confidence += 0.2;
   if (isLikelyBankSender(sender)) confidence += 0.15;
   if (/₹|rs\.?|inr/i.test(text)) confidence += 0.05;
+  // A notification never carries an account number and rarely carries a
+  // reference — the two biggest bonuses above — not because the message is
+  // shaky, but because that is simply not how a payment app words its own
+  // notifications. The structural gate a few lines up already treats a
+  // notification's package allowlist as equivalent evidence to an SMS
+  // naming its account; the score did not, capping even a perfectly
+  // unambiguous notification (clear amount, clear direction, a real name)
+  // several points under the accept threshold for reasons that had nothing
+  // to do with how trustworthy the message actually was.
+  if (options.source === 'NOTIFICATION') confidence += 0.25;
 
   return {
     amount,
