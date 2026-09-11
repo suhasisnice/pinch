@@ -169,20 +169,75 @@ export async function getCategoryTokenWeights(): Promise<TokenWeights> {
   return weights;
 }
 
+/** How confident an exact MerchantRules match is treated as — a human (or a
+ * past correction) named this category for this exact pattern, so it is
+ * trusted far more than the token classifier's own statistical guess. */
+const EXACT_MATCH_CONFIDENCE = 0.95;
+
+export interface CategoryMatch {
+  category: string;
+  subcategory: string | null;
+  /** 0..1 — see EXACT_MATCH_CONFIDENCE for the exact-match case. */
+  confidence: number;
+  /** Short, human-readable — e.g. "Matched merchant: swiggy". */
+  reason: string;
+}
+
 /**
- * Best category for a merchant MerchantRules has no exact pattern for.
+ * Best category for a merchant MerchantRules has no exact pattern for, along
+ * with the subcategory, confidence and a short explanation a Transaction row
+ * can now carry.
  *
  * Tries the precise, user-taught table first — a direct correction should
  * always win over a generic word guess — and only reaches for the token
- * classifier when that comes back empty.
+ * classifier when that comes back empty. `smartCategoriseMerchant` is a thin
+ * wrapper over this kept for its existing callers/tests; new callers that
+ * want the metadata should use this directly instead of re-deriving it.
  */
-export async function smartCategoriseMerchant(merchant: string): Promise<string | null> {
-  const exact = await categoriseMerchant(merchant);
-  if (exact) return exact;
+export async function categoriseMerchantWithMeta(merchant: string): Promise<CategoryMatch | null> {
+  const db = getAdapter();
+  const exact = await db.getFirstAsync<{
+    category: string;
+    subcategory: string | null;
+    pattern: string;
+  }>(
+    `SELECT category, subcategory, pattern FROM MerchantRules
+     WHERE instr(lower(?), lower(pattern)) > 0
+     ORDER BY length(pattern) DESC
+     LIMIT 1;`,
+    [merchant]
+  );
+  if (exact) {
+    return {
+      category: exact.category,
+      subcategory: exact.subcategory,
+      confidence: EXACT_MATCH_CONFIDENCE,
+      reason: `Matched merchant: ${exact.pattern}`,
+    };
+  }
 
   const weights = await getCategoryTokenWeights();
   const result = classifyTokens(tokenize(merchant), weights);
-  return result?.category ?? null;
+  if (!result) return null;
+
+  return {
+    category: result.category,
+    subcategory: null,
+    confidence: result.confidence,
+    reason: 'Matched keywords in merchant name',
+  };
+}
+
+/**
+ * Best category for a merchant MerchantRules has no exact pattern for.
+ *
+ * Kept for existing callers that only want the category string — see
+ * categoriseMerchantWithMeta for the version carrying subcategory,
+ * confidence and a reason too.
+ */
+export async function smartCategoriseMerchant(merchant: string): Promise<string | null> {
+  const match = await categoriseMerchantWithMeta(merchant);
+  return match?.category ?? null;
 }
 
 /**

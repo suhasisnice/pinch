@@ -29,6 +29,30 @@ describe('backfillCategories', () => {
     expect((await db.getTransactionById(uber))?.category).toBe('Transport');
   });
 
+  it('also fills subcategory, confidence and a reason, tagged as AUTO', async () => {
+    const zomato = await spend('Zomato');
+
+    await backfillCategories();
+
+    const row = await db.getTransactionById(zomato);
+    expect(row?.subcategory).toBe('Food Delivery');
+    expect(row?.confidence).toBeGreaterThan(0);
+    expect(row?.categorization_reason).toMatch(/zomato/i);
+    expect(row?.category_source).toBe('AUTO');
+  });
+
+  it('skips a row a person already confirmed, even if its category is somehow null', async () => {
+    // Contrived — TransactionDetailSheet never sets category_source without
+    // also setting a real category — but the guard should hold regardless.
+    const id = await spend('Zomato');
+    await db.updateTransaction(id, { category: null, categorySource: 'USER' });
+
+    const result = await backfillCategories();
+
+    expect(result.categorised).toBe(0);
+    expect((await db.getTransactionById(id))?.category).toBeNull();
+  });
+
   it('never overwrites a category the user set by hand', async () => {
     const id = await spend('Zomato');
     // Seed data would call this Food; the user said otherwise.
@@ -158,5 +182,15 @@ describe('propagateCategoryCorrection', () => {
     const result = await propagateCategoryCorrection('Corner House', 'Food', undefined);
 
     expect(result.updated).toBe(0);
+  });
+
+  it('never overwrites a row a person already confirmed, even for the same merchant', async () => {
+    const confirmed = await spend('CORNER HOU');
+    await db.updateTransaction(confirmed, { category: 'Shopping', categorySource: 'USER' });
+
+    const result = await propagateCategoryCorrection('Corner House', 'Food', undefined);
+
+    expect(result.updated).toBe(0);
+    expect((await db.getTransactionById(confirmed))?.category).toBe('Shopping');
   });
 });

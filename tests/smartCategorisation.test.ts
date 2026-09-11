@@ -30,6 +30,42 @@ describe('smartCategoriseMerchant, on a fresh database', () => {
   });
 });
 
+describe('categoriseMerchantWithMeta', () => {
+  it('trusts an exact merchant match with high confidence and a matched-pattern reason', async () => {
+    const match = await db.categoriseMerchantWithMeta('SWIGGY BANGALORE');
+    expect(match).toMatchObject({
+      category: 'Food',
+      subcategory: 'Food Delivery',
+      reason: 'Matched merchant: swiggy',
+    });
+    expect(match!.confidence).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it('falls back to the token classifier for a merchant with no exact pattern, with no subcategory', async () => {
+    // "dhaba"/"restaurant" are only in the seeded token vocabulary, not exact
+    // MerchantRules patterns (unlike "cafe"/"swiggy"/etc.), so this exercises
+    // the classifyTokens fallback rather than the exact-match table. Two
+    // informative tokens, matching the strength of the correction-boosted
+    // examples elsewhere in this file — a single weight-3 seed token alone
+    // does not reliably clear CLASSIFY_THRESHOLD against this many categories.
+    const match = await db.categoriseMerchantWithMeta('Punjabi Dhaba Restaurant');
+    expect(match).toMatchObject({ category: 'Food', subcategory: null });
+    expect(match!.reason).toMatch(/keyword/i);
+    expect(match!.confidence).toBeGreaterThan(0);
+    expect(match!.confidence).toBeLessThan(1);
+  });
+
+  it('returns null, not a throw, for a merchant with no recognisable word at all', async () => {
+    await expect(db.categoriseMerchantWithMeta('XYZ9182 Holdings')).resolves.toBeNull();
+  });
+
+  it('an exact correction wins even though it has no subcategory of its own', async () => {
+    await db.learnMerchantRule('Study Cafe', 'Academics');
+    const match = await db.categoriseMerchantWithMeta('Study Cafe');
+    expect(match).toMatchObject({ category: 'Academics', subcategory: null });
+  });
+});
+
 describe('the token vocabulary learning from a correction', () => {
   it('generalises a correction to a merchant it has never seen', async () => {
     // "Bhukkad" is not in the seed data and matches nothing on its own.
