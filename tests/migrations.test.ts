@@ -190,6 +190,56 @@ describe('migrations', () => {
     ).rejects.toThrow();
   });
 
+  it('v9 adds enriched-categorisation columns without disturbing existing rows', async () => {
+    const db = await createSqlJsAdapter();
+    await migrateTo(db, 8);
+    const now = new Date().toISOString();
+    await db.runAsync(
+      `INSERT INTO Transactions (amount, direction, kind, merchant, category, occurred_at, created_at)
+       VALUES (450, 'DEBIT', 'SPEND', 'Swiggy', 'Food', ?, ?);`,
+      [now, now]
+    );
+
+    await runMigrations(db);
+
+    const columns = await columnNames(db, 'Transactions');
+    expect(columns).toEqual(
+      expect.arrayContaining([
+        'payment_method',
+        'subcategory',
+        'confidence',
+        'categorization_reason',
+        'category_source',
+        'status',
+      ])
+    );
+    expect(await columnNames(db, 'MerchantRules')).toContain('subcategory');
+
+    const row = await db.getFirstAsync<{
+      amount: number;
+      category: string;
+      status: string;
+      payment_method: string | null;
+      subcategory: string | null;
+      confidence: number | null;
+      categorization_reason: string | null;
+      category_source: string | null;
+    }>(`SELECT * FROM Transactions WHERE merchant = 'Swiggy';`);
+    // A row that existed before v9 genuinely did complete — it defaults to
+    // COMPLETED rather than staying ambiguous — but nothing else about it is
+    // known, so every new metadata column is null.
+    expect(row).toMatchObject({
+      amount: 450,
+      category: 'Food',
+      status: 'COMPLETED',
+      payment_method: null,
+      subcategory: null,
+      confidence: null,
+      categorization_reason: null,
+      category_source: null,
+    });
+  });
+
   it('lets an IOU exist with no transaction of your own behind it', async () => {
     const db = await createSqlJsAdapter();
     await runMigrations(db);

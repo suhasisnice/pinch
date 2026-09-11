@@ -446,6 +446,36 @@ const V8_CATEGORY_TOKENS: Migration = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// v9 — payment method, subcategory, why the classifier picked what it picked,
+// whether a person or a guess picked it, and a message that never became
+// money.
+//
+// No CHECK constraints here, matching every other nullable column this
+// database has added by ALTER TABLE (non_spend_reason, transfer_pair_id):
+// SQLite cannot add a CHECK to an existing table without rebuilding it, and
+// the enum discipline already lives in TypeScript (PaymentMethod,
+// CategorySource, TransactionStatus in db/types.ts).
+//
+// status is NOT NULL DEFAULT 'COMPLETED' rather than nullable, because every
+// transaction that already exists genuinely did complete — there is no
+// migration-time ambiguity to preserve by leaving it null.
+// ---------------------------------------------------------------------------
+const V9_ENRICHED_TRANSACTIONS: Migration = {
+  version: 9,
+  name: 'enriched_categorisation',
+  statements: [
+    `ALTER TABLE Transactions ADD COLUMN payment_method TEXT;`,
+    `ALTER TABLE Transactions ADD COLUMN subcategory TEXT;`,
+    `ALTER TABLE Transactions ADD COLUMN confidence REAL;`,
+    `ALTER TABLE Transactions ADD COLUMN categorization_reason TEXT;`,
+    `ALTER TABLE Transactions ADD COLUMN category_source TEXT;`,
+    `ALTER TABLE Transactions ADD COLUMN status TEXT NOT NULL DEFAULT 'COMPLETED';`,
+    `CREATE INDEX IF NOT EXISTS idx_txn_status ON Transactions(status);`,
+    `ALTER TABLE MerchantRules ADD COLUMN subcategory TEXT;`,
+  ],
+};
+
 export const MIGRATIONS: Migration[] = [
   V1_INITIAL,
   V2_CONTACT_PHONE,
@@ -455,6 +485,7 @@ export const MIGRATIONS: Migration[] = [
   V6_NON_SPEND,
   V7_BALANCE,
   V8_CATEGORY_TOKENS,
+  V9_ENRICHED_TRANSACTIONS,
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
