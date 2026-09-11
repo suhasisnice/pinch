@@ -79,3 +79,61 @@ describe('round-trip detection wired to live capture', () => {
     expect(all.every((row) => row.transfer_pair_id === null)).toBe(true);
   });
 });
+
+describe('payment method, category and failed status wired to live capture', () => {
+  it('captures a card purchase with its category, subcategory and payment method', async () => {
+    const message: CapturedMessage = {
+      source: 'SMS',
+      sender: 'VM-HDFCBK',
+      body: 'Rs.1299.00 spent on HDFC Bank Card x1234 at AMAZON on 08-09-26. Not you? Call 18002586161',
+      receivedAt: Date.now(),
+    };
+    expect(await ingestMessage(message)).toBe('POSTED');
+
+    const [row] = await db.getAllTransactions();
+    expect(row).toMatchObject({
+      merchant: 'Amazon',
+      category: 'Shopping',
+      subcategory: 'Online Shopping',
+      payment_method: 'CARD',
+      category_source: 'AUTO',
+      status: 'COMPLETED',
+    });
+    expect(row.confidence).toBeGreaterThan(0);
+  });
+
+  it('captures salary as plain income, not a debt settlement, with its rail as payment method', async () => {
+    const message: CapturedMessage = {
+      source: 'SMS',
+      sender: 'VM-HDFCBK',
+      body: 'Rs 45,000 credited to A/c XX1234 via NEFT from EMPLOYER PVT LTD on 01-09-26. Ref 712345678901',
+      receivedAt: Date.now(),
+    };
+    expect(await ingestMessage(message)).toBe('POSTED');
+
+    const [row] = await db.getAllTransactions();
+    expect(row.kind).toBe('INCOME');
+    expect(row.direction).toBe('CREDIT');
+    expect(row.payment_method).toBe('NEFT');
+    expect(row.status).toBe('COMPLETED');
+  });
+
+  it('keeps a failed payment out of spend totals while still posting it', async () => {
+    const at = Date.now();
+    const message: CapturedMessage = {
+      source: 'SMS',
+      sender: 'VM-HDFCBK',
+      body: 'Your payment of Rs.700 to OLIVE CAFE from A/c XX1234 has failed.',
+      receivedAt: at,
+    };
+    expect(await ingestMessage(message)).toBe('POSTED');
+
+    const [row] = await db.getAllTransactions();
+    expect(row.status).toBe('FAILED');
+    expect(row.direction).toBe('DEBIT');
+
+    const dayStart = new Date(at - 24 * 60 * 60 * 1000).toISOString();
+    const dayEnd = new Date(at + 24 * 60 * 60 * 1000).toISOString();
+    expect(await db.getGrossSpendBetween(dayStart, dayEnd)).toBe(0);
+  });
+});
