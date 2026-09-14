@@ -1,6 +1,7 @@
 import {
   ACCEPT_THRESHOLD,
   buildDedupKey,
+  explainRejection,
   isLikelyBankSender,
   parseMessage,
 } from '../src/services/parserService';
@@ -68,6 +69,106 @@ describe('real bank SMS formats', () => {
   it('handles a trailing currency token', () => {
     const parsed = parseMessage('Your account XX9012 is debited 450 INR at BIG BAZAAR');
     expect(parsed?.amount).toBe(450);
+  });
+});
+
+describe('card alerts with a fraud-report link', () => {
+  // SBI Card, among others, appends "Trxn. not done by you? Report at
+  // https://..." to every real purchase alert. A blanket "any link means
+  // marketing" reject rule used to discard these outright, so every SBI
+  // Card transaction vanished before its amount was ever read.
+  it('parses an SBI Credit Card purchase despite the dispute-report link', () => {
+    const parsed = parseMessage(
+      'Rs.369.00 spent on your SBI Credit Card ending 9124 at AmazonSellerServices on 11/09/26. ' +
+        'Trxn. not done by you? Report at https://sbicard.com/Dispute'
+    );
+    expect(parsed).not.toBeNull();
+    expect(parsed?.amount).toBe(369);
+    expect(parsed?.direction).toBe('DEBIT');
+    expect(parsed?.counterparty).toBe('AmazonSellerServices');
+    expect(parsed?.accountHint).toBe('9124');
+    expect(parsed!.confidence).toBeGreaterThanOrEqual(ACCEPT_THRESHOLD);
+  });
+
+  it('still rejects an actual promotional link (a shortener)', () => {
+    expect(
+      parseMessage('Rs.500 cashback waiting! Claim now at https://bit.ly/abc123')
+    ).toBeNull();
+  });
+});
+
+describe('two-tier rejection', () => {
+  // Marketing smells only count against a message that names no account: a
+  // promo blast never does, so one that does is already about real money.
+  it('keeps a real debit whose footer says "click here"', () => {
+    const parsed = parseMessage(
+      'Rs.200 debited from A/c XX1234 at SWIGGY on 11-09-26. Not you? Click here to report.'
+    );
+    expect(parsed?.amount).toBe(200);
+    expect(parsed?.direction).toBe('DEBIT');
+  });
+
+  it('keeps an EMI that was actually debited, loan wording and all', () => {
+    const parsed = parseMessage('EMI of Rs.2,450 debited from A/c XX1234 towards your personal loan');
+    expect(parsed?.amount).toBe(2450);
+    expect(parsed?.direction).toBe('DEBIT');
+  });
+
+  it('keeps a bonus that was credited', () => {
+    const parsed = parseMessage(
+      'Rs.5,000 credited to A/c XX1234 from ACME CORP towards Diwali bonus'
+    );
+    expect(parsed?.amount).toBe(5000);
+    expect(parsed?.direction).toBe('CREDIT');
+  });
+
+  // "call us" / "toll free" / "unsubscribe" / T&C footers used to sit in
+  // HARD_REJECT_PATTERNS, so they rejected a real, account-naming alert
+  // unconditionally instead of only when no account was named — the same
+  // bug the dispute-report-link case above was fixed for, just missed here.
+  it('keeps a real debit whose footer has a customer-care toll-free line', () => {
+    const parsed = parseMessage(
+      'Rs.500.00 debited from A/c XX1234 at SWIGGY on 11-09-26. ' +
+        'For assistance call us at 1800-425-3800 (toll free).'
+    );
+    expect(parsed).not.toBeNull();
+    expect(parsed?.amount).toBe(500);
+    expect(parsed?.direction).toBe('DEBIT');
+  });
+
+  it('keeps a real debit whose footer says "unsubscribe" / T&C apply', () => {
+    const parsed = parseMessage(
+      'Rs.500.00 debited from A/c XX1234 at SWIGGY on 11-09-26. T&C apply. To opt-out, reply STOP or unsubscribe.'
+    );
+    expect(parsed).not.toBeNull();
+    expect(parsed?.amount).toBe(500);
+    expect(parsed?.direction).toBe('DEBIT');
+  });
+
+  it('still rejects a promotional blast with the same footer wording and no account', () => {
+    expect(
+      parseMessage('Flat 40% off this weekend! Call us on toll free 1800123456 to know more.')
+    ).toBeNull();
+  });
+
+  it('still rejects an EMI reminder even though it names the account', () => {
+    expect(parseMessage('Your EMI is due on 15-09-26. Rs.2,450 from A/c XX1234')).toBeNull();
+  });
+
+  it('still rejects an OTP even though it names the account', () => {
+    expect(parseMessage('OTP 482913 for Rs.500 debit from A/c XX1234. Do not share.')).toBeNull();
+  });
+});
+
+describe('account digits that are really a date', () => {
+  it('does not accept a date as the account an SMS has to name', () => {
+    // Without the guard, "account 2025" satisfied the structural gate.
+    expect(parseMessage('Rs.500 debited from account 2025-09-11 at SWIGGY')).toBeNull();
+  });
+
+  it('still reads real account digits that sit before a date', () => {
+    const parsed = parseMessage('Rs.500 debited from A/c 4521 on 11-09-2026 at SWIGGY');
+    expect(parsed?.accountHint).toBe('4521');
   });
 });
 
@@ -220,5 +321,50 @@ describe('dedup keys', () => {
     const debit = buildDedupKey({ amount: 340, reference: null, direction: 'DEBIT' }, at);
     const credit = buildDedupKey({ amount: 340, reference: null, direction: 'CREDIT' }, at);
     expect(debit).not.toBe(credit);
+  });
+});
+
+describe('explainRejection', () => {
+  it('is null for anything parseMessage would actually accept', () => {
+    const sms = 'Rs.200 debited from A/c XX1234 at SWIGGY on 11-09-26.';
+    expect(parseMessage(sms)).not.toBeNull();
+    expect(explainRejection(sms)).toBeNull();
+  });
+
+  it('names the hard-reject pattern for an OTP', () => {
+    const reason = explainRejection('OTP 482913 for Rs.500 debit from A/c XX1234. Do not share.');
+    expect(reason).toContain('hard reject');
+  });
+
+  it('names the soft-reject pattern for a promo blast with no account', () => {
+    const reason = explainRejection('Flat 40% off this weekend! Call us on toll free 1800123456.');
+    expect(reason).toContain('soft reject');
+  });
+
+  it('reports too short before anything else', () => {
+    expect(explainRejection('hi')).toBe('too short to be a transaction');
+  });
+
+  it('reports a missing amount', () => {
+    expect(explainRejection('Your account was debited at SWIGGY from A/c XX1234.')).toBe(
+      'no amount found'
+    );
+  });
+
+  it('reports a missing debit/credit verb', () => {
+    expect(explainRejection('Rs.200 at SWIGGY from A/c XX1234 on 11-09-26.')).toBe(
+      'no debit or credit verb found'
+    );
+  });
+
+  it('reports the structural gate for an SMS naming no account', () => {
+    expect(explainRejection('Rs.200 debited at SWIGGY on 11-09-26.')).toBe(
+      'no account or card number named (and not a notification)'
+    );
+  });
+
+  it('does not apply the structural-gate reason to a notification', () => {
+    const reason = explainRejection('Rs.200 sent to SWIGGY', null, { source: 'NOTIFICATION' });
+    expect(reason).not.toBe('no account or card number named (and not a notification)');
   });
 });

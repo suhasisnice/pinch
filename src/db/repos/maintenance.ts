@@ -1,7 +1,7 @@
 import { getAdapter } from '../connection';
 
 export interface ResetOptions {
-  /** Transactions, IOUs, settlements, the capture inbox and the nudge log. */
+  /** Transactions, IOUs, settlements, the capture inbox, the nudge log, and every raw/parsed capture event behind them. */
   ledger?: boolean;
   /** People and what they owe. */
   contacts?: boolean;
@@ -37,7 +37,10 @@ export async function resetData(options: ResetOptions): Promise<void> {
       `DELETE FROM GoalContributions;`,
       `DELETE FROM NotificationLog;`,
       `DELETE FROM CaptureInbox;`,
-      `DELETE FROM Transactions;`
+      `DELETE FROM Transactions;`,
+      // ParsedEvents.raw_event_id cascades, so this also clears every
+      // recorded parse attempt behind the ledger being cleared.
+      `DELETE FROM RawEvents;`
     );
   }
 

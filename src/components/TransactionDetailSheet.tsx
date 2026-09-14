@@ -26,6 +26,31 @@ import Icon from './Icon';
  * only path that offers to block the sender, mirroring the review inbox's
  * own reject flow.
  */
+
+/**
+ * What this row actually is, for the meta line — Phase 2's "type/status"
+ * requirement. An ordinary SPEND keeps showing its category, unchanged;
+ * everything else (a transfer leg, a repayment, a refund, a manual
+ * correction) gets a label that says so instead of "Uncategorised", since
+ * none of those are meant to carry a spend category at all.
+ */
+function kindLabel(t: TransactionRow): string {
+  if (t.transfer_pair_id !== null) return 'Transfer';
+  if (t.is_adjustment) return 'Adjustment';
+  switch (t.kind) {
+    case 'INCOME':
+      return 'Income';
+    case 'REFUND':
+      return 'Refund';
+    case 'SETTLE_IN':
+      return 'Repayment received';
+    case 'SETTLE_OUT':
+      return 'Repayment made';
+    default:
+      return t.category ?? 'Uncategorised';
+  }
+}
+
 export default function TransactionDetailSheet({
   transaction,
   onClose,
@@ -204,14 +229,14 @@ export default function TransactionDetailSheet({
             <Text
               style={[
                 styles.amount,
-                transaction.direction === 'CREDIT' && { color: palette.mint },
+                transaction.direction === 'CREDIT' && { color: palette.accent },
               ]}
             >
               {transaction.direction === 'CREDIT' ? '+' : '−'}
               {formatMoney(transaction.amount)}
             </Text>
             <Text style={styles.meta}>
-              {transaction.category ?? 'Uncategorised'} · {formatRelative(transaction.occurred_at)}
+              {kindLabel(transaction)} · {formatRelative(transaction.occurred_at)}
             </Text>
             <View style={styles.sourceBadge}>
               <Icon
@@ -240,7 +265,7 @@ export default function TransactionDetailSheet({
 
           <View style={styles.actions}>
             <Button label="Edit" variant="secondary" onPress={() => setEditing(true)} style={styles.flex} />
-            {transaction.kind === 'SPEND' ? (
+            {transaction.kind === 'SPEND' && transaction.transfer_pair_id === null ? (
               <Button
                 label="Split"
                 variant="secondary"
@@ -250,16 +275,23 @@ export default function TransactionDetailSheet({
             ) : null}
           </View>
 
-          <Button
-            label={transaction.direction === 'DEBIT' ? 'I lent this' : 'I borrowed this'}
-            variant="secondary"
-            onPress={() => onMarkLoan(transaction)}
-          />
-          <Text style={styles.loanHint}>
-            {transaction.direction === 'DEBIT'
-              ? 'Records who owes it back, so it stops counting as money spent on yourself.'
-              : 'Records that you owe it, so it is not treated as allowance to spend.'}
-          </Text>
+          {/* Lending or borrowing your own transfer between accounts is not a
+              real debt — hidden for a transfer leg rather than reachable and
+              meaningless. */}
+          {transaction.transfer_pair_id === null ? (
+            <>
+              <Button
+                label={transaction.direction === 'DEBIT' ? 'I lent this' : 'I borrowed this'}
+                variant="secondary"
+                onPress={() => onMarkLoan(transaction)}
+              />
+              <Text style={styles.loanHint}>
+                {transaction.direction === 'DEBIT'
+                  ? 'Records who owes it back, so it stops counting as money spent on yourself.'
+                  : 'Records that you owe it, so it is not treated as allowance to spend.'}
+              </Text>
+            </>
+          ) : null}
 
           {isCaptured ? (
             <View style={styles.excludeBlock}>
@@ -289,7 +321,7 @@ const styles = StyleSheet.create({
   sourceText: { ...typography.micro, color: palette.textMuted },
 
   rawBox: {
-    backgroundColor: palette.surfaceContainerHigh,
+    backgroundColor: palette.surfaceElevated,
     borderRadius: radii.md,
     padding: spacing.sm,
   },

@@ -13,7 +13,8 @@ import {
   requestContactsPermission,
   requestSmsPermission,
 } from '../../modules/pinch-capture';
-import { backfillFromInbox } from '../services/captureService';
+import { backfillFromInbox, reprocessUnresolvedRawEvents } from '../services/captureService';
+import { countUnresolvedRawEvents } from '../db/dbService';
 import { revalidateHistory } from '../services/revalidationService';
 import {
   getMonthlyAllowance,
@@ -234,6 +235,33 @@ export default function SettingsScreen() {
     }
   }
 
+  /**
+   * Every message that never became a transaction or a review item is kept
+   * as a `RawEvent` from the moment it arrives (Phase 7) — this re-tries
+   * every one of them under the current parser, which is what actually
+   * recovers a payment a since-fixed rule once dropped, rather than just
+   * explaining why it happened.
+   */
+  async function recoverMissed() {
+    setBusy(true);
+    try {
+      const before = await countUnresolvedRawEvents();
+      if (before === 0) {
+        Alert.alert('Nothing to recover', 'Every message on file already became a transaction or a review item.');
+        return;
+      }
+      const result = await reprocessUnresolvedRawEvents();
+      await load();
+      Alert.alert(
+        result.posted + result.queued === 0 ? 'Nothing recovered' : 'Recovery complete',
+        `Checked ${result.checked} message${result.checked === 1 ? '' : 's'} that never became a transaction. ` +
+          `${result.posted} added, ${result.queued} sent to Review, ${result.stillSkipped} still don't look like real transactions.`
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Screen>
       <ScreenTitle title="Settings" />
@@ -319,6 +347,12 @@ export default function SettingsScreen() {
                 style={{ marginTop: spacing.sm }}
               />
             ) : null}
+            <Button
+              label={busy ? 'Checking…' : 'Recover missed messages'}
+              variant="ghost"
+              onPress={recoverMissed}
+              disabled={busy}
+            />
             <Text style={styles.note}>
               Messages are parsed on your phone and never leave it. Anything Pinch isn't sure about
               waits for you in Review instead of being logged.
@@ -535,7 +569,7 @@ function Toggle({
       <Switch
         value={value}
         onValueChange={onChange}
-        trackColor={{ false: palette.surfaceContainerHighest, true: palette.primary }}
+        trackColor={{ false: palette.surfaceElevated, true: palette.accent }}
         thumbColor={palette.textPrimary}
       />
     </View>
@@ -551,8 +585,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   note: { ...typography.caption, color: palette.textMuted, lineHeight: 18, marginTop: spacing.sm },
-  ok: { ...typography.bodyBold, color: palette.primary },
-  undo: { ...typography.caption, color: palette.primary, fontWeight: '700' },
+  ok: { ...typography.bodyBold, color: palette.accent },
+  undo: { ...typography.caption, color: palette.accent, fontWeight: '700' },
   groupLabel: {
     ...typography.micro,
     color: palette.textSecondary,

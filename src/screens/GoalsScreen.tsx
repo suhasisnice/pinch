@@ -4,7 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { GoalProgress } from '../db/repos/goals';
 import { getRoundUpGoalId, setRoundUpGoalId } from '../settings/settingsStore';
-import { goalReserve } from '../math/budget';
+import { estimatedCompletionDate, goalReserve, goalTrackingStatus } from '../math/budget';
 import { getBudgetSnapshot } from '../services/budgetService';
 import { getMonthlyAllowance } from '../settings/settingsStore';
 import { formatMoney } from '../utils/format';
@@ -15,6 +15,10 @@ import { LabelIconBadge } from '../components/LabelIcon';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+function monthYear(date: Date): string {
+  return date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+}
+
 export default function GoalsScreen() {
   const [goals, setGoals] = useState<GoalProgress[] | null>(null);
   const [daysRemaining, setDaysRemaining] = useState(30);
@@ -23,17 +27,20 @@ export default function GoalsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [createVisible, setCreateVisible] = useState(false);
   const [contributeTo, setContributeTo] = useState<GoalProgress | null>(null);
+  const [totalInvested, setTotalInvested] = useState(0);
 
   const load = useCallback(async () => {
-    const [nextGoals, roundUp, snapshot] = await Promise.all([
+    const [nextGoals, roundUp, snapshot, invested] = await Promise.all([
       db.getActiveGoals(),
       getRoundUpGoalId(),
       getMonthlyAllowance().then(getBudgetSnapshot),
+      db.getTotalInvested(),
     ]);
     setGoals(nextGoals);
     setRoundUpGoal(roundUp);
     setDaysRemaining(snapshot.daysRemaining);
     setReserveCapped(snapshot.goalReserveCapped);
+    setTotalInvested(invested);
   }, []);
 
   useFocusEffect(
@@ -72,7 +79,7 @@ export default function GoalsScreen() {
 
   return (
     <Screen refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.textSecondary} />}>
-      <ScreenTitle title="Goals" subtitle="Saving happens first, spending is what's left" />
+      <ScreenTitle title="Savings" subtitle="Saving happens first, spending is what's left" />
 
       {goals.length > 0 ? (
         <Card>
@@ -88,6 +95,20 @@ export default function GoalsScreen() {
               longer deadline, or delete one to change that.
             </Text>
           ) : null}
+        </Card>
+      ) : null}
+
+      {totalInvested > 0.009 ? (
+        <Card>
+          <Text style={styles.reserveLabel}>Invested so far</Text>
+          <Text style={[styles.reserveAmount, { color: palette.accent }]}>
+            {formatMoney(totalInvested)}
+          </Text>
+          <Text style={styles.reserveNote}>
+            Contributions minus withdrawals across every platform. Pinch has no market data, so
+            this is what you've put in — not what it's worth today. Add one from + Add ›
+            Invest.
+          </Text>
         </Card>
       ) : null}
 
@@ -159,10 +180,18 @@ function GoalCard({
     daysLeft && daysLeft > 0 ? goal.remainingAmount / daysLeft : goal.remainingAmount / 30;
   const overdue = daysLeft !== null && daysLeft < 0 && !goal.isComplete;
 
+  const status = goal.isComplete
+    ? null
+    : goalTrackingStatus(goal.savedAmount, goal.targetAmount, goal.createdAt, goal.deadline);
+  const projectedCompletion =
+    !goal.deadline && !goal.isComplete
+      ? estimatedCompletionDate(goal.savedAmount, goal.targetAmount, goal.createdAt)
+      : null;
+
   return (
     <Card onPress={onOpen}>
       <View style={styles.goalHead}>
-        <LabelIconBadge label={goal.emoji} color={palette.violet} />
+        <LabelIconBadge label={goal.emoji} color={palette.info} />
         <View style={styles.goalHeadText}>
           <Text style={styles.goalName}>{goal.name}</Text>
           <Text style={styles.goalMeta}>
@@ -174,14 +203,20 @@ function GoalCard({
               : ''}
           </Text>
         </View>
-        <Text style={[styles.goalPercent, goal.isComplete && { color: palette.neonGreen }]}>
+        <Text style={[styles.goalPercent, goal.isComplete && { color: palette.accent }]}>
           {Math.round(goal.fraction * 100)}%
         </Text>
       </View>
 
+      {status ? (
+        <Text style={[styles.statusLabel, status === 'BEHIND' && { color: palette.warning }]}>
+          {status === 'ON_TRACK' ? 'ON TRACK' : 'BEHIND SCHEDULE'}
+        </Text>
+      ) : null}
+
       <ProgressBar
         fraction={goal.fraction}
-        color={goal.isComplete ? palette.neonGreen : overdue ? palette.warningAmber : palette.violet}
+        color={goal.isComplete ? palette.accent : overdue ? palette.warning : palette.info}
         height={10}
       />
 
@@ -190,6 +225,7 @@ function GoalCard({
       ) : (
         <Text style={styles.goalPace}>
           {formatMoney(perDay)}/day to finish{daysLeft !== null ? ' on time' : ''}
+          {projectedCompletion ? ` · about ${monthYear(projectedCompletion)} at this rate` : ''}
         </Text>
       )}
 
@@ -199,7 +235,7 @@ function GoalCard({
           label={isRoundUp ? 'Round-ups on' : 'Round-ups'}
           selected={isRoundUp}
           onPress={onToggleRoundUp}
-          color={palette.violet}
+          color={palette.info}
         />
       </View>
     </Card>
@@ -279,11 +315,14 @@ function IconPicker({ value, onChange }: { value: string; onChange: (next: strin
             value === choice && styles.iconChoiceOn,
             pressed && { opacity: 0.7 },
           ]}
+          accessibilityRole="button"
+          accessibilityLabel={choice}
+          accessibilityState={{ selected: value === choice }}
         >
           <Icon
             name={choice}
             size={20}
-            color={value === choice ? palette.violet : palette.textMuted}
+            color={value === choice ? palette.info : palette.textMuted}
           />
         </Pressable>
       ))}
@@ -473,11 +512,11 @@ function ManageGoalSheet({
 
 const styles = StyleSheet.create({
   reserveLabel: { ...typography.micro, color: palette.textSecondary, textTransform: 'uppercase', letterSpacing: 1 },
-  reserveAmount: { ...typography.heroCompact, color: palette.violet, marginTop: 4 },
+  reserveAmount: { ...typography.heroCompact, color: palette.info, marginTop: 4 },
   reserveNote: { ...typography.caption, color: palette.textMuted, marginTop: spacing.xs, lineHeight: 17 },
   reserveCapped: {
     ...typography.caption,
-    color: palette.warningAmber,
+    color: palette.warning,
     marginTop: spacing.sm,
     lineHeight: 17,
   },
@@ -486,9 +525,16 @@ const styles = StyleSheet.create({
   goalHeadText: { flex: 1 },
   goalName: { ...typography.cardTitle, color: palette.textPrimary },
   goalMeta: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
-  goalPercent: { ...typography.bodyBold, fontSize: 17, color: palette.violet },
+  goalPercent: { ...typography.bodyBold, fontSize: 17, color: palette.info },
+  statusLabel: {
+    ...typography.micro,
+    color: palette.accent,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: spacing.sm,
+  },
   goalPace: { ...typography.caption, color: palette.textSecondary, marginTop: spacing.sm },
-  goalDone: { ...typography.caption, color: palette.neonGreen, marginTop: spacing.sm },
+  goalDone: { ...typography.caption, color: palette.accent, marginTop: spacing.sm },
   goalActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md },
   flex: { flex: 1 },
 
@@ -499,11 +545,11 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.surfaceContainerHigh,
+    backgroundColor: palette.surfaceElevated,
     borderWidth: 1,
     borderColor: palette.border,
   },
-  iconChoiceOn: { borderColor: palette.violet, backgroundColor: layer(palette.violet, 0.14) },
+  iconChoiceOn: { borderColor: palette.info, backgroundColor: layer(palette.info, 0.14) },
   dangerNote: { ...typography.micro, color: palette.textMuted, textAlign: 'center' },
   contributeMeta: { ...typography.body, color: palette.textSecondary, textAlign: 'center' },
 });

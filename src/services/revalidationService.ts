@@ -35,8 +35,20 @@ const REVALIDATION_KEY = 'pinch.revalidatedRules';
  *     spellings — truncated by an SMS length limit, differently capitalised
  *     by a notification — used to need every spelling recognised on its own;
  *     this re-groups what is already Uncategorised under the new rule.
+ * 10 — account digits that are really the start of a date no longer count as
+ *     a named account, and Bills and Rent exist as categories. Re-checking
+ *     drops any SMS that only got in on a misread date, and gives past
+ *     electricity, water and rent payments the category they never had.
+ * 11 — "call us"/toll-free/unsubscribe/T&C footers no longer reject a
+ *     message unconditionally — only when it also names no account, same
+ *     as every other marketing-smell pattern. These used to sit in
+ *     HARD_REJECT_PATTERNS by mistake, so a real card alert ending in a
+ *     customer-care line was silently dropped. Nothing to re-check on
+ *     stored rows (a rejected message never became one), but the version
+ *     bump is here for the record, and it is what Phase 7's `RawEvents`
+ *     sweep (`reprocessUnresolvedRawEvents`) uses to know a fix shipped.
  */
-export const PARSER_RULES_VERSION = 9;
+export const PARSER_RULES_VERSION = 11;
 
 export interface RevalidationResult {
   /** Transactions examined: captured, and still carrying their original text. */

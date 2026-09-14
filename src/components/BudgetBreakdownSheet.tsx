@@ -68,9 +68,15 @@ export default function BudgetBreakdownSheet({
         : 'all active goals',
       positive: false,
     },
+    {
+      label: 'Set aside for outings',
+      amount: b.outingReserve ?? 0,
+      window: 'all open outings',
+      positive: false,
+    },
   ].filter((line) => Math.abs(line.amount) > 0.009);
 
-  const carriedOver = b.expectedRecovery - b.openPayables - b.goalReserve;
+  const carriedOver = b.expectedRecovery - b.openPayables - b.protectedMoney;
 
   return (
     <Sheet visible={visible} onClose={onClose} title="Where this number comes from">
@@ -92,7 +98,7 @@ export default function BudgetBreakdownSheet({
             <Text
               style={[
                 styles.rowAmount,
-                { color: line.positive ? palette.mint : palette.textPrimary },
+                { color: line.positive ? palette.accent : palette.textPrimary },
               ]}
             >
               {line.positive ? '+' : '−'}
@@ -107,7 +113,7 @@ export default function BudgetBreakdownSheet({
         <Text
           style={[
             styles.totalAmount,
-            { color: b.spendablePool < 0 ? palette.danger : palette.neonGreen },
+            { color: b.spendablePool < 0 ? palette.danger : palette.accent },
           ]}
         >
           {formatMoney(b.spendablePool)}
@@ -116,11 +122,11 @@ export default function BudgetBreakdownSheet({
 
       {Math.abs(carriedOver) > 0.009 ? (
         <View style={styles.noteBox}>
-          <Icon name="info" size={15} color={palette.warningAmber} />
+          <Icon name="info" size={15} color={palette.warning} />
           <Text style={styles.noteText}>
-            {formatMoney(Math.abs(carriedOver))} of this comes from debts and goals rather than
-            this period. Those are running balances — starting a fresh budget clears your
-            spending, but it does not clear what you owe or what you have set aside.
+            {formatMoney(Math.abs(carriedOver))} of this comes from debts, goals and outings
+            rather than this period. Those are running balances — starting a fresh budget clears
+            your spending, but it does not clear what you owe or what you have set aside.
           </Text>
         </View>
       ) : null}
@@ -138,7 +144,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: palette.surfaceContainerHigh,
+    backgroundColor: palette.surfaceElevated,
     borderRadius: radii.md,
     padding: spacing.sm,
   },
@@ -170,13 +176,13 @@ const styles = StyleSheet.create({
   noteBox: {
     flexDirection: 'row',
     gap: spacing.sm,
-    backgroundColor: layer(palette.warningAmber, 0.1),
+    backgroundColor: layer(palette.warning, 0.1),
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: palette.warningAmber,
+    borderColor: palette.warning,
     padding: spacing.sm,
   },
-  noteText: { ...typography.caption, color: palette.warningAmber, flex: 1, lineHeight: 17 },
+  noteText: { ...typography.caption, color: palette.warning, flex: 1, lineHeight: 17 },
 
   footnote: { ...typography.micro, color: palette.textMuted, lineHeight: 15 },
 });

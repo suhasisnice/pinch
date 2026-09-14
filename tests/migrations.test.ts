@@ -213,3 +213,28 @@ describe('migrations', () => {
     expect(row).toEqual({ direction: 'I_OWE_THEM', transaction_id: null });
   });
 });
+
+describe('a shipped migration is never edited', () => {
+  // v8 shipped generating a plain INSERT for CategoryTokenWeights. A later
+  // change generalized the seed-insert helper for v9 and switched it to
+  // INSERT OR IGNORE, and briefly took v8 along for the ride by routing it
+  // through the same, now-changed function — meaning a fresh install and an
+  // install that had already run v8 would silently disagree on what v8's
+  // own SQL was. v8 must keep generating exactly what it always did,
+  // independent of whatever v9+ needs the shared helper to do.
+  it("v8's CategoryTokenWeights seed is a plain INSERT, not OR IGNORE", () => {
+    const v8 = MIGRATIONS.find((m) => m.version === 8);
+    const seedStatement = v8?.statements.find((s) => s.includes('CategoryTokenWeights') && s.includes('VALUES'));
+
+    expect(seedStatement).toBeDefined();
+    expect(seedStatement).toMatch(/^INSERT INTO CategoryTokenWeights/);
+    expect(seedStatement).not.toMatch(/OR IGNORE/);
+  });
+
+  it("v9's seed insert does use OR IGNORE (only v8 is frozen)", () => {
+    const v9 = MIGRATIONS.find((m) => m.version === 9);
+    const seedStatement = v9?.statements.find((s) => s.includes('CategoryTokenWeights'));
+
+    expect(seedStatement).toMatch(/^INSERT OR IGNORE INTO CategoryTokenWeights/);
+  });
+});

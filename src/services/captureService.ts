@@ -1,6 +1,7 @@
 import * as db from '../db/dbService';
 import { CapturedMessage, drainMessages, readRecentSms } from '../../modules/pinch-capture';
-import { ACCEPT_THRESHOLD, buildDedupKey, parseMessage } from './parserService';
+import { ACCEPT_THRESHOLD, buildDedupKey, explainRejection, parseMessage } from './parserService';
+import { PARSER_RULES_VERSION } from './revalidationService';
 import { getBudgetSnapshot } from './budgetService';
 import { planForTransaction } from '../notifications/engine';
 import { deliverAll, loadDeliveryHistory } from '../notifications/notificationService';
@@ -40,27 +41,54 @@ function labelFor(message: CapturedMessage): string {
 }
 
 /**
- * Runs one captured message through parse -> dedup -> post or queue.
- *
- * A message that parses confidently becomes a transaction immediately; a
- * shakier one is filed in the review inbox instead. The threshold matters:
- * silently logging a wrong transaction costs far more trust than asking.
+ * Runs one already-recorded message through parse -> dedup -> post or
+ * queue, and writes exactly one `ParsedEvent` naming the outcome. Shared by
+ * `ingestMessage` (a message arriving live, which records the `RawEvent`
+ * itself first) and `reprocessRawEvent` (a message already on file from a
+ * previous attempt) — the two differ only in where `rawEventId` and
+ * `message` come from, not in how a message is judged.
  */
-export async function ingestMessage(
+async function processMessage(
+  rawEventId: number,
   message: CapturedMessage,
   options: { silent?: boolean } = {}
 ): Promise<'POSTED' | 'QUEUED' | 'SKIPPED'> {
+  async function skip(
+    reason: 'SKIPPED_BLOCKED' | 'SKIPPED_NO_PARSE' | 'SKIPPED_DUPLICATE' | 'SKIPPED_ADD_FAILED',
+    fields: {
+      rejectReason?: string | null;
+      amount?: number | null;
+      direction?: 'DEBIT' | 'CREDIT' | null;
+      merchant?: string | null;
+      confidence?: number | null;
+    } = {}
+  ): Promise<'SKIPPED'> {
+    await db.recordParsedEvent({
+      rawEventId,
+      parserVersion: PARSER_RULES_VERSION,
+      outcome: reason,
+      ...fields,
+    });
+    return 'SKIPPED';
+  }
+
   // Checked before the parser even runs: a sender the user has already
   // blocked (a rummy app, a "CTC" marketing shortcode) never gets to become
   // a review-inbox item again, let alone a transaction. Parsing runs on the
   // body too, since the same promotional blast is often resent from a
   // different-looking sender.
-  if (await db.isBlocked(message.sender, message.body)) return 'SKIPPED';
+  if (await db.isBlocked(message.sender, message.body)) return skip('SKIPPED_BLOCKED');
 
   const parsed = parseMessage(message.body, message.source === 'SMS' ? message.sender : null, {
     source: message.source,
   });
-  if (!parsed) return 'SKIPPED';
+  if (!parsed) {
+    return skip('SKIPPED_NO_PARSE', {
+      rejectReason: explainRejection(message.body, message.source === 'SMS' ? message.sender : null, {
+        source: message.source,
+      }),
+    });
+  }
 
   const occurredAt = new Date(message.receivedAt || Date.now());
   const dedupKey = buildDedupKey(parsed, occurredAt);
@@ -68,7 +96,14 @@ export async function ingestMessage(
   const merchant =
     parsed.counterparty ?? (message.source === 'NOTIFICATION' ? labelFor(message) : 'Unknown');
 
-  if (await db.isBlocked(merchant)) return 'SKIPPED';
+  const parsedFields = {
+    amount: parsed.amount,
+    direction: parsed.direction,
+    merchant,
+    confidence: parsed.confidence,
+  };
+
+  if (await db.isBlocked(merchant)) return skip('SKIPPED_BLOCKED', parsedFields);
 
   // Second line of defence behind the UNIQUE dedup key: the same payment
   // reported by SMS and by a notification, worded differently and carrying
@@ -84,12 +119,31 @@ export async function ingestMessage(
   // parse. A capture heading for the review inbox never reaches
   // addTransaction at all, so relying on that downstream idempotency here
   // would let a low-confidence echo of an already-posted payment through.
-  const existing = await db.findProbableDuplicate(parsed.amount, parsed.direction, occurredAt.toISOString());
+  const existing = await db.findProbableDuplicate(
+    parsed.amount,
+    parsed.direction,
+    occurredAt.toISOString(),
+    undefined,
+    { merchant, reference: parsed.reference }
+  );
   if (existing) {
-    return 'SKIPPED';
+    return skip('SKIPPED_DUPLICATE', { ...parsedFields, rejectReason: `matched transaction #${existing.id}` });
   }
 
-  if (parsed.confidence < ACCEPT_THRESHOLD) {
+  // Nothing above could confirm this is the same payment, but the shape of
+  // it — same amount and direction, seconds apart, reported on a different
+  // channel — is the shape of one event seen twice under two different
+  // names for the sender. It is also the shape of two people settling a
+  // shared bill at the same moment. Neither is safe to assume, so it goes
+  // to review as a question instead of being merged or double-counted.
+  const unconfirmed = await db.findUnconfirmedDuplicate(
+    parsed.amount,
+    parsed.direction,
+    occurredAt.toISOString(),
+    message.source
+  );
+
+  if (unconfirmed || parsed.confidence < ACCEPT_THRESHOLD) {
     const id = await db.recordCapture({
       rawText: message.body,
       source: message.source,
@@ -100,8 +154,20 @@ export async function ingestMessage(
       parsedDirection: parsed.direction,
       confidence: parsed.confidence,
       dedupKey,
+      possibleDuplicateOf: unconfirmed?.id ?? null,
     });
-    return id === null ? 'SKIPPED' : 'QUEUED';
+    if (id === null) {
+      return skip('SKIPPED_DUPLICATE', { ...parsedFields, rejectReason: 'already in the review inbox' });
+    }
+    await db.recordParsedEvent({
+      rawEventId,
+      parserVersion: PARSER_RULES_VERSION,
+      outcome: 'QUEUED',
+      ...parsedFields,
+      captureId: id,
+      rejectReason: unconfirmed ? `might duplicate transaction #${unconfirmed.id}` : null,
+    });
+    return 'QUEUED';
   }
 
   const posted = await postTransaction({
@@ -119,7 +185,93 @@ export async function ingestMessage(
     silent: options.silent,
   });
 
-  return posted ? 'POSTED' : 'SKIPPED';
+  if (posted === null) {
+    return skip('SKIPPED_ADD_FAILED', parsedFields);
+  }
+
+  await db.recordParsedEvent({
+    rawEventId,
+    parserVersion: PARSER_RULES_VERSION,
+    outcome: 'POSTED',
+    ...parsedFields,
+    transactionId: posted,
+  });
+  return 'POSTED';
+}
+
+/**
+ * Records a message as a `RawEvent` unconditionally, then runs it through
+ * `processMessage`. This is the only place a message enters the pipeline
+ * live — every gate downstream can say no, but nothing downstream can make
+ * the message itself disappear without a trace.
+ */
+export async function ingestMessage(
+  message: CapturedMessage,
+  options: { silent?: boolean } = {}
+): Promise<'POSTED' | 'QUEUED' | 'SKIPPED'> {
+  const rawEventId = await db.recordRawEvent({
+    source: message.source,
+    sender: message.sender,
+    body: message.body,
+    receivedAt: new Date(message.receivedAt || Date.now()).toISOString(),
+  });
+  return processMessage(rawEventId, message, options);
+}
+
+/**
+ * Re-runs one already-recorded message through the current parser, without
+ * creating a second `RawEvent` for it. This is what actually gives
+ * `RawEvents` its recovery value, not just its diagnostic one: from Phase 7
+ * onward, a message dropped by a parser rule that later gets loosened (or
+ * caught by a duplicate match that later gets more precise) can be
+ * reprocessed and recovered, instead of being gone the way every dropped
+ * message was before this table existed. Never touches `ParsedEvents` rows
+ * from earlier attempts — a new attempt is a new row.
+ */
+export async function reprocessRawEvent(
+  rawEventId: number,
+  options: { silent?: boolean } = {}
+): Promise<'POSTED' | 'QUEUED' | 'SKIPPED' | null> {
+  const raw = await db.getRawEventById(rawEventId);
+  if (!raw) return null;
+  return processMessage(
+    rawEventId,
+    { source: raw.source, sender: raw.sender ?? '', body: raw.body, receivedAt: Date.parse(raw.receivedAt) },
+    options
+  );
+}
+
+export interface ReprocessResult {
+  checked: number;
+  posted: number;
+  queued: number;
+  stillSkipped: number;
+}
+
+/**
+ * Sweeps every message that has never once produced a transaction or a
+ * review item, and tries again under the current parser. Meant to be run
+ * after a parser fix ships — the equivalent, for messages that were
+ * dropped outright, of what `revalidateHistory` already does for messages
+ * that made it onto the books but were classified wrong.
+ */
+export async function reprocessUnresolvedRawEvents(limit = 200): Promise<ReprocessResult> {
+  const unresolved = await db.getUnresolvedRawEvents(limit);
+  const result: ReprocessResult = { checked: 0, posted: 0, queued: 0, stillSkipped: 0 };
+
+  for (const raw of unresolved) {
+    result.checked += 1;
+    const outcome = await processMessage(
+      raw.id,
+      { source: raw.source, sender: raw.sender ?? '', body: raw.body, receivedAt: Date.parse(raw.receivedAt) },
+      { silent: true }
+    );
+    if (outcome === 'POSTED') result.posted += 1;
+    else if (outcome === 'QUEUED') result.queued += 1;
+    else result.stillSkipped += 1;
+  }
+
+  return result;
 }
 
 export interface PostTransactionInput {
@@ -143,6 +295,8 @@ export interface PostTransactionInput {
    * about spending that happened weeks ago.
    */
   silent?: boolean;
+  /** A manual ledger correction rather than an ordinary purchase/allowance. See TransactionRow.is_adjustment. */
+  isAdjustment?: boolean;
 }
 
 /**
@@ -186,6 +340,7 @@ export async function postTransaction(input: PostTransactionInput): Promise<numb
     externalRef: input.externalRef ?? null,
     dedupKey: input.dedupKey ?? null,
     outingId,
+    isAdjustment: input.isAdjustment,
   });
 
   if (input.settlesContactId) {
@@ -237,6 +392,155 @@ export async function postTransaction(input: PostTransactionInput): Promise<numb
     // wrote successfully — the next full sweep still catches it later.
   }
 
+  return transactionId;
+}
+
+// ---------------------------------------------------------------------------
+// Manual transfer — Phase 2.
+// ---------------------------------------------------------------------------
+
+export interface PostTransferInput {
+  amount: number;
+  /** Free-text account label money left, e.g. "HDFC Savings". */
+  fromLabel: string;
+  /** Free-text account label money arrived in, e.g. "SBI FD". */
+  toLabel: string;
+  occurredAt?: string;
+  note?: string | null;
+}
+
+/**
+ * Records money moved between the user's own accounts as one action.
+ *
+ * Deliberately does not go through `postTransaction`: that pipeline runs
+ * categorisation, round-up savings, and a spend/income notification, none of
+ * which make sense for a transfer (there is nothing to categorise about
+ * "HDFC Savings", and a self-transfer earning a "you spent ₹1,000" nudge or
+ * silently feeding a round-up goal would both be wrong). Two ordinary rows
+ * are written directly and linked with the same `markTransferPair` an
+ * auto-detected transfer uses, so every spend/income/category/insights query
+ * — which already filters `transfer_pair_id IS NULL` — excludes both legs
+ * exactly as it would for one the parser found on its own.
+ */
+export async function postTransfer(input: PostTransferInput): Promise<{ debitId: number; creditId: number }> {
+  const occurredAt = input.occurredAt ?? new Date().toISOString();
+
+  const debitId = await db.addTransaction({
+    amount: input.amount,
+    direction: 'DEBIT',
+    kind: 'SPEND',
+    merchant: input.toLabel.trim(),
+    occurredAt,
+    source: 'MANUAL',
+    note: input.note ?? null,
+  });
+  const creditId = await db.addTransaction({
+    amount: input.amount,
+    direction: 'CREDIT',
+    kind: 'INCOME',
+    merchant: input.fromLabel.trim(),
+    occurredAt,
+    source: 'MANUAL',
+    note: input.note ?? null,
+  });
+
+  await db.markTransferPair(debitId, creditId);
+  return { debitId, creditId };
+}
+
+// ---------------------------------------------------------------------------
+// Manual loan — Phase 2.
+// ---------------------------------------------------------------------------
+
+export interface PostLoanInput {
+  amount: number;
+  /** LENT: you lent it, they owe you. BORROWED: you borrowed it, you owe them. */
+  direction: 'LENT' | 'BORROWED';
+  counterpartyName: string;
+  counterpartyPhone?: string | null;
+  reason?: string | null;
+  occurredAt?: string;
+}
+
+/**
+ * Creates a loan as one guided step: the transaction, then the debt against
+ * it. The same two calls `MarkAsLoanSheet` makes on a row that already
+ * exists — lending is still ordinary cash leaving the account and borrowing
+ * is still cash arriving, so both go through `postTransaction` for the same
+ * categorisation/notification treatment any other expense or income gets,
+ * and the resulting IOU is what keeps it from counting as a full personal
+ * expense or windfall income (see `expectedRecovery`/`openPayables` in
+ * `math/budget.ts`).
+ */
+export async function postLoan(input: PostLoanInput): Promise<{ transactionId: number; iouId: number } | null> {
+  const lending = input.direction === 'LENT';
+  const transactionId = await postTransaction({
+    amount: input.amount,
+    direction: lending ? 'DEBIT' : 'CREDIT',
+    merchant: input.counterpartyName.trim(),
+    occurredAt: input.occurredAt,
+  });
+  if (transactionId === null) return null;
+
+  const contactId = await db.findOrCreateContact({
+    name: input.counterpartyName.trim(),
+    phone: input.counterpartyPhone,
+  });
+  const iouId = await db.createIOU({
+    contactId,
+    amount: input.amount,
+    direction: lending ? 'THEY_OWE_ME' : 'I_OWE_THEM',
+    transactionId,
+    reason: input.reason?.trim() || input.counterpartyName.trim(),
+  });
+
+  return { transactionId, iouId };
+}
+
+// ---------------------------------------------------------------------------
+// Manual investment contribution/withdrawal — Phase 9.
+//
+// No dedicated Investments screen or tab: PRODUCT_SPEC.md §2 fixes exactly
+// five bottom-navigation destinations (Today/Outings/Savings/Split/Insights)
+// and names none of them Investments, while §14's required-documents list
+// still asks for a PHASE_9_INVESTMENTS.md. Followed the higher document —
+// "Investment contribution" (§1.3's own transaction-type list) is a
+// recognised transaction concept, not a sixth screen. See
+// docs/phases/PHASE_9_INVESTMENTS.md for the conflict as reported.
+// ---------------------------------------------------------------------------
+
+export interface PostInvestmentInput {
+  amount: number;
+  /** CONTRIBUTION: money left the bank for the investment. WITHDRAWAL: it came back. */
+  direction: 'CONTRIBUTION' | 'WITHDRAWAL';
+  /** The platform/fund/broker — "Zerodha", "Groww SIP", "PPF". */
+  label: string;
+  occurredAt?: string;
+}
+
+/**
+ * Records money moving into or out of an investment, tagged
+ * `non_spend_reason: 'INVESTMENT'` on whichever direction applies so it
+ * never counts as spending (a contribution) or income (a withdrawal) — see
+ * `math/classification.ts`.
+ *
+ * Deliberately bypasses `postTransaction`: that pipeline's `SPEND` path runs
+ * round-up saving and a spend notification, and its categoriser would try
+ * to guess a spend category for "Zerodha" — none of which make sense for
+ * money moving into a fund the app cannot see the value of, same reasoning
+ * `postTransfer` already bypasses it for a self-transfer's two legs.
+ */
+export async function postInvestment(input: PostInvestmentInput): Promise<number> {
+  const contribution = input.direction === 'CONTRIBUTION';
+  const transactionId = await db.addTransaction({
+    amount: input.amount,
+    direction: contribution ? 'DEBIT' : 'CREDIT',
+    kind: contribution ? 'SPEND' : 'INCOME',
+    merchant: input.label.trim(),
+    occurredAt: input.occurredAt,
+    source: 'MANUAL',
+  });
+  await db.setNonSpendReason(transactionId, 'INVESTMENT');
   return transactionId;
 }
 

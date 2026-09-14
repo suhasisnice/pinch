@@ -70,6 +70,8 @@ describe('buildFindings', () => {
     expect(top?.headline).toContain('₹300 a day');
     expect(top?.detail).toContain('75%');
     expect(top?.tone).toBe('WARNING');
+    // Names which category it's about, so the screen can offer a drill-down link.
+    expect(top?.category).toBe('Food');
   });
 
   it('ignores a top category that is not actually dominant', () => {
@@ -103,6 +105,7 @@ describe('buildFindings', () => {
     const mover = found.find((f) => f.id === 'biggest-mover');
     expect(mover?.headline).toContain('Outing');
     expect(mover?.headline).toContain('150% up');
+    expect(mover?.category).toBe('Outing');
   });
 
   it('flags when the average is being pulled by a few big days', () => {

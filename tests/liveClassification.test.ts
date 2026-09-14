@@ -67,6 +67,39 @@ describe('classifyNewTransaction', () => {
   it('returns null for a transaction id that does not exist', async () => {
     await expect(classifyNewTransaction(999999)).resolves.toBeNull();
   });
+
+  // Phase 9: INVESTMENT is set by hand (postTransaction + setNonSpendReason),
+  // never by classifyNonSpend. Without a guard, running this on such a row
+  // would see classifyNonSpend return null (it recognises no investment
+  // platform) and — following the same logic that correctly clears a stale
+  // WALLET_TOPUP/CARD_BILL tag — wipe the manual INVESTMENT tag right back
+  // out the next time this runs, which happens on every PARSER_RULES_VERSION
+  // bump and every "Recheck history" tap in Settings.
+  it('never clears a manually-set INVESTMENT tag, on either direction', async () => {
+    const contributionId = await db.addTransaction({
+      amount: 5000,
+      direction: 'DEBIT',
+      kind: 'SPEND',
+      merchant: 'Zerodha',
+      occurredAt: new Date().toISOString(),
+    });
+    await db.setNonSpendReason(contributionId, 'INVESTMENT');
+
+    const withdrawalId = await db.addTransaction({
+      amount: 2000,
+      direction: 'CREDIT',
+      kind: 'INCOME',
+      merchant: 'Zerodha',
+      occurredAt: new Date().toISOString(),
+    });
+    await db.setNonSpendReason(withdrawalId, 'INVESTMENT');
+
+    expect(await classifyNewTransaction(contributionId)).toBeNull();
+    expect(await classifyNewTransaction(withdrawalId)).toBeNull();
+
+    expect((await db.getTransactionById(contributionId))?.non_spend_reason).toBe('INVESTMENT');
+    expect((await db.getTransactionById(withdrawalId))?.non_spend_reason).toBe('INVESTMENT');
+  });
 });
 
 describe('checkForTransferMatch', () => {

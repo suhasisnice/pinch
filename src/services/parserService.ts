@@ -30,11 +30,17 @@ export const ACCEPT_THRESHOLD = 0.8;
 // ---------------------------------------------------------------------------
 // Rejection: messages that mention money but are not a transaction.
 //
-// Checked first and hard-stopped, because several of these (notably "will be
-// debited" reminders and failed-payment notices) otherwise parse perfectly and
-// would silently invent spending that never happened.
+// Two tiers. HARD patterns describe something that is never a completed
+// payment whatever else the message says — an OTP, a future-tense reminder, a
+// failed attempt — so they stop a message outright. SOFT patterns are
+// marketing smells, and only apply when the message names no account or card.
+// A promotional blast never names one (the same reasoning as the structural
+// gate in parseMessage), so a message that does has already proved it is
+// about real money, and a stray "click here to report" or "bonus credited"
+// in it is incidental wording, not a sign of spam. Treating every smell as
+// fatal is what once discarded every SBI Card purchase over a dispute link.
 // ---------------------------------------------------------------------------
-const REJECT_PATTERNS: RegExp[] = [
+const HARD_REJECT_PATTERNS: RegExp[] = [
   // -- Not a payment at all ------------------------------------------------
   /\botp\b/i,
   /one[\s-]?time\s+password/i,
@@ -48,8 +54,44 @@ const REJECT_PATTERNS: RegExp[] = [
   /\bcollect request\b/i,
   /\bmin(?:imum)? (?:amount )?due\b/i,
   /\bstatement\b/i,
-  /\bemi\s+(?:of|due|starts)\b/i,
+  // "EMI of Rs.2,450 debited" is a completed payment; only the reminder
+  // wordings are rejected.
+  /\bemi\s+(?:is\s+)?(?:due|starts)\b/i,
 
+  // -- Gambling and "win money" spam ---------------------------------------
+  // Rummy, fantasy cricket and betting apps are relentless SMS advertisers in
+  // India and every message is built around a rupee figure.
+  /\bwin\b/i,
+  /\bwon\b/i,
+  /\bjackpot\b/i,
+  /\blottery\b/i,
+  /\blucky\s+draw\b/i,
+  /\brummy\b/i,
+  /\bteen\s*patti\b/i,
+  /\bpoker\b/i,
+  /\bcasino\b/i,
+  /\bbetting\b/i,
+  /\bfantasy\b/i,
+  /\bdream\s*11\b/i,
+  /\bplay\s+(?:now|and\s+win)\b/i,
+  /\bdeposit\s+(?:now|and)\b/i,
+
+  // -- Structural tells of bulk marketing ----------------------------------
+  // Only the link-shortener check stays HARD: a bank never needs bit.ly for
+  // its own site, so this one holds "whatever else the message says," same
+  // as every other pattern in this list. Everything else that used to live
+  // here — unsubscribe, T&C, opt-out, reply-stop, "call us"/toll-free — is
+  // SOFT-only below. A real transactional SMS routinely ends with a
+  // customer-care line or a "T&C apply" footer (a fraud-report footer like
+  // "Trxn. not done by you? Report at https://sbicard.com/Dispute", or a
+  // card alert's own toll-free number), so treating those as fatal
+  // regardless of context was silently dropping genuine, account-naming
+  // payments — the same class of bug the SOFT list's own comment describes
+  // fixing for bare links, just missed for these.
+  /\b(?:bit\.ly|tinyurl|cutt\.ly|rb\.gy|t\.co)\b/i,
+];
+
+const SOFT_REJECT_PATTERNS: RegExp[] = [
   // -- Promotional: vouchers, coupons, cashback bait ------------------------
   // These quote a rupee amount in a sentence shaped almost exactly like a
   // real debit alert, so they parse cleanly and become invented spending.
@@ -71,25 +113,9 @@ const REJECT_PATTERNS: RegExp[] = [
   /\bhurry\b/i,
   /\bdeal\b/i,
   /\bfree\b/i,
-
-  // -- Gambling and "win money" spam ---------------------------------------
-  // Rummy, fantasy cricket and betting apps are relentless SMS advertisers in
-  // India and every message is built around a rupee figure.
-  /\bwin\b/i,
-  /\bwon\b/i,
-  /\bjackpot\b/i,
-  /\blottery\b/i,
-  /\blucky\s+draw\b/i,
-  /\brummy\b/i,
-  /\bteen\s*patti\b/i,
-  /\bpoker\b/i,
-  /\bcasino\b/i,
-  /\bbetting\b/i,
-  /\bfantasy\b/i,
-  /\bdream\s*11\b/i,
-  /\bplay\s+(?:now|and\s+win)\b/i,
+  // Soft rather than grouped with the gambling words: "Diwali bonus of
+  // Rs.5,000 credited to A/c XX1234" is real income.
   /\bbonus\b/i,
-  /\bdeposit\s+(?:now|and)\b/i,
 
   // -- App-install / referral marketing ------------------------------------
   /\bapply now\b/i,
@@ -108,11 +134,15 @@ const REJECT_PATTERNS: RegExp[] = [
   /\beligible for\b/i,
 
   // -- Structural tells of bulk marketing ----------------------------------
-  // A bank's transaction alert never carries a link, an unsubscribe line or a
-  // terms-and-conditions notice. Any of these is close to proof.
-  /https?:\/\//i,
-  /\bwww\.[a-z0-9-]+\.[a-z]{2,}/i,
-  /\b(?:bit\.ly|tinyurl|cutt\.ly|rb\.gy|t\.co)\b/i,
+  // An unsubscribe line or a terms-and-conditions notice is close to proof
+  // of marketing when nothing else in the message names an account — but a
+  // real card alert routinely ends with a customer-care line, a toll-free
+  // number, or a "T&C apply" footer, so these are fatal only in the
+  // account-naming exception's absence, not unconditionally. (Bare links
+  // used to be rejected outright by a blanket https?:// check — every SBI
+  // Card purchase, silently discarded before the amount was ever read — and
+  // link-shortener domains specifically are still reliable enough to live in
+  // HARD_REJECT_PATTERNS instead, above.)
   /\bt\s*&\s*c\b/i,
   /\bterms\s+(?:and|&)\s+conditions\b/i,
   /\bunsubscribe\b/i,
@@ -155,6 +185,11 @@ const AMOUNT_TRAILING = String.raw`([\d,]+(?:\.\d{1,2})?)\s*(?:rs\.?|inr|₹)`;
 // bare number elsewhere in the message — a date, a phone number — is never
 // mistaken for the amount.
 const AMOUNT_VERB_ADJACENT = String.raw`\b(?:debited|credited|paid|sent|received|withdrawn|deducted|deposited)\s+(?:by|of|for)?\s*([\d,]+(?:\.\d{1,2})?)\b`;
+
+// Compiled once at load, in priority order, rather than on every parse.
+const AMOUNT_PATTERNS: RegExp[] = [AMOUNT, AMOUNT_TRAILING, AMOUNT_VERB_ADJACENT].map(
+  (source) => new RegExp(source, 'i')
+);
 
 /**
  * Verbs that can only mean money leaving. Nothing else in the sentence can
@@ -319,6 +354,26 @@ function extractFirst(text: string, patterns: RegExp[]): string | null {
   return null;
 }
 
+// Every ACCOUNT_PATTERNS match ends on its captured digits, so what follows
+// the match is what follows the digits.
+const CONTINUES_AS_DATE = /^[/.-]\d{1,2}(?:[/.-]\d{2,4})?\b/;
+
+/**
+ * The account or card digits, skipping a candidate that is really the start
+ * of a date ("account 2025-09-11"). The structural gate and the soft reject
+ * tier both treat a named account as proof the message is about real money,
+ * so a date misread as one would wave through exactly what they exist to stop.
+ */
+function extractAccountHint(text: string): string | null {
+  for (const pattern of ACCOUNT_PATTERNS) {
+    const match = text.match(pattern);
+    if (!match?.[1] || match.index === undefined) continue;
+    if (CONTINUES_AS_DATE.test(text.slice(match.index + match[0].length))) continue;
+    return match[1];
+  }
+  return null;
+}
+
 export function isLikelyBankSender(sender: string | null | undefined): boolean {
   if (!sender) return false;
   const upper = sender.toUpperCase();
@@ -327,8 +382,25 @@ export function isLikelyBankSender(sender: string | null | undefined): boolean {
   return KNOWN_BANK_TOKENS.some((known) => token.includes(known) || upper.includes(known));
 }
 
-export function isRejected(text: string): boolean {
-  return REJECT_PATTERNS.some((pattern) => pattern.test(text));
+export function isRejected(text: string, namesAccount = false): boolean {
+  if (HARD_REJECT_PATTERNS.some((pattern) => pattern.test(text))) return true;
+  return !namesAccount && SOFT_REJECT_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+/**
+ * Which specific pattern rejected a message, for `RawEvents`/`ParsedEvents`
+ * diagnostics — "why did my payment not show up" needs an actual answer,
+ * not just the fact that it didn't. Kept separate from `isRejected` itself:
+ * that function is on the hot path for every parse and only ever needs a
+ * boolean, so it stays a plain `.some()` rather than building a reason
+ * string on every call just for the rare one a human will actually read.
+ */
+export function rejectionReason(text: string, namesAccount = false): string | null {
+  const hard = HARD_REJECT_PATTERNS.find((pattern) => pattern.test(text));
+  if (hard) return `hard reject: ${hard.source}`;
+  if (namesAccount) return null;
+  const soft = SOFT_REJECT_PATTERNS.find((pattern) => pattern.test(text));
+  return soft ? `soft reject: ${soft.source}` : null;
 }
 
 /**
@@ -360,12 +432,10 @@ export function parseMessage(
   // Checked before the reject list, which would otherwise throw away the very
   // message that undoes a debit already on the books.
   const refund = isReversalCredit(text);
-  if (!refund && isRejected(text)) return null;
+  const accountHint = extractAccountHint(text);
+  if (!refund && isRejected(text, accountHint !== null)) return null;
 
-  const amountRaw =
-    text.match(new RegExp(AMOUNT, 'i'))?.[1] ??
-    text.match(new RegExp(AMOUNT_TRAILING, 'i'))?.[1] ??
-    text.match(new RegExp(AMOUNT_VERB_ADJACENT, 'i'))?.[1];
+  const amountRaw = extractFirst(text, AMOUNT_PATTERNS);
   const amount = amountRaw ? parseAmount(amountRaw) : null;
   if (amount === null) return null;
 
@@ -389,7 +459,6 @@ export function parseMessage(
   );
   const counterparty = rawName ? prettify(cleanName(rawName)) : null;
   const reference = extractFirst(text, REFERENCE_PATTERNS);
-  const accountHint = extractFirst(text, ACCOUNT_PATTERNS);
 
   // The structural gate. An SMS that quotes an amount and a verb but never
   // says which account it came out of is describing someone else's money —
@@ -428,6 +497,51 @@ export function parseMessage(
     confidence: Math.min(1, Number(confidence.toFixed(2))),
     isRefund: refund,
   };
+}
+
+/**
+ * Walks the exact same gates `parseMessage` returns `null` from, in the same
+ * order, and names the one that fired — the permanent version of the
+ * throwaway diagnostic harness this project used once, by hand, to work out
+ * why one real SMS never became a transaction. `RawEvents`/`ParsedEvents`
+ * (Phase 7) call this whenever `parseMessage` returns `null`, so "why did my
+ * payment not show up" is a stored fact from the moment it happens, not
+ * something that has to be reconstructed later from a message that, before
+ * this phase, was not even kept.
+ *
+ * Returns null when `parseMessage` would not actually reject the text —
+ * callers should not need to duplicate `parseMessage`'s own logic to find
+ * that out.
+ */
+export function explainRejection(
+  text: string,
+  sender?: string | null,
+  options: ParseOptions = {}
+): string | null {
+  if (!text || text.trim().length < 6) return 'too short to be a transaction';
+
+  const refund = isReversalCredit(text);
+  const accountHint = extractAccountHint(text);
+  if (!refund) {
+    const reason = rejectionReason(text, accountHint !== null);
+    if (reason) return reason;
+  }
+
+  const amountRaw = extractFirst(text, AMOUNT_PATTERNS);
+  const amount = amountRaw ? parseAmount(amountRaw) : null;
+  if (amount === null) return 'no amount found';
+
+  const inbound = INBOUND_MARKERS.test(text);
+  const isDebit =
+    DEBIT_VERBS_STRONG.test(text) || (DEBIT_VERBS_DIRECTIONAL.test(text) && !inbound);
+  const isCredit = CREDIT_VERBS.test(text) || inbound;
+  if (!refund && !isDebit && !isCredit) return 'no debit or credit verb found';
+
+  if (options.source !== 'NOTIFICATION' && !accountHint) {
+    return 'no account or card number named (and not a notification)';
+  }
+
+  return null;
 }
 
 /**

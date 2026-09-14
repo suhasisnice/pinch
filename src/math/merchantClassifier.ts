@@ -115,6 +115,18 @@ export interface ClassifyResult {
 export const CLASSIFY_THRESHOLD = 0.55;
 
 /**
+ * Lidstone smoothing, not add-one. Under add-one, a category that had never
+ * seen a word still scored 1 against a seed word's 3 + 1, so a merchant whose
+ * only recognised word was a single seed word topped out near 0.42 — under
+ * the threshold — and the seed vocabulary only ever classified a name when
+ * two of its words happened to appear together. Every added category diluted
+ * that further. A small alpha still keeps one unseen word from zeroing a
+ * category out, while letting a lone unambiguous word ("chaayos", "bescom")
+ * decide the way it would for a person reading the statement.
+ */
+const SMOOTHING = 0.1;
+
+/**
  * Scores a tokenised merchant name against every category's learned
  * vocabulary and returns the most likely one, or null when there is no
  * signal to go on at all.
@@ -170,12 +182,14 @@ export function classifyTokens(tokens: string[], weights: TokenWeights): Classif
   for (const category of categories) {
     // Prior: how much of everything ever seen belongs to this category.
     let score = Math.log(totalPerCategory[category] / grandTotal);
-    // Likelihood: Laplace-smoothed so a token this category hasn't seen
-    // (but some other category has) costs something small rather than
-    // zeroing the category out on one miss.
+    // Likelihood: smoothed so a token this category hasn't seen (but some
+    // other category has) costs something rather than zeroing the category
+    // out on one miss.
     for (const token of informativeTokens) {
       const count = weights[category][token] ?? 0;
-      score += Math.log(count + 1) - Math.log(totalPerCategory[category] + vocabSize);
+      score +=
+        Math.log(count + SMOOTHING) -
+        Math.log(totalPerCategory[category] + SMOOTHING * vocabSize);
     }
     logScores[category] = score;
   }

@@ -1,36 +1,47 @@
 /**
- * Three ways to split a bill, because one is never enough.
+ * Four ways to split a bill, because one is never enough.
  *
- * EQUAL   - down the middle. The default, and right most of the time.
- * SHARES  - weighted. Someone who ordered two drinks pays for two drinks;
- *           four people in a cab where one gets out halfway.
- * EXACT   - typed amounts per person. The only honest option when the bill
- *           itemises and the shares bear no relation to each other.
+ * EQUAL      - down the middle. The default, and right most of the time.
+ * SHARES     - weighted. Someone who ordered two drinks pays for two drinks;
+ *              four people in a cab where one gets out halfway.
+ * EXACT      - typed amounts per person. The only honest option when the
+ *              bill itemises and the shares bear no relation to each other.
+ * PERCENTAGE - typed percentages per person, e.g. splitting a shared flat's
+ *              rent 40/30/30. Behaves like EXACT (see below), not like
+ *              SHARES: SHARES weights are relative and always renormalise to
+ *              the whole bill, so 30+30 silently becomes 50/50 either way,
+ *              which is exactly wrong for a percentage someone typed
+ *              expecting it to mean what it says.
  *
- * All three produce the same SplitShare[] so nothing downstream needs to know
+ * All four produce the same SplitShare[] so nothing downstream needs to know
  * which was used. EQUAL and SHARES always sum to the total exactly; EXACT
- * reports what is left over instead of quietly rescaling numbers the user
- * typed.
+ * and PERCENTAGE report what is left over instead of quietly rescaling
+ * numbers the user typed — percentages that don't add up to 100 just mean
+ * the payer covers the rest, the same as EXACT amounts that don't add up to
+ * the total; percentages over 100 are flagged as overAssigned, same as
+ * EXACT.
  *
  * The payer is not implicit. Callers that want the payer to carry a share
  * pass them in as a participant with PAYER_ID - which is what the split UI
  * does, so a 1,200 bill across you and two friends is 400 each rather than
  * 600 each with you recovering the whole bill.
  */
-export type SplitMode = 'EQUAL' | 'SHARES' | 'EXACT';
+export type SplitMode = 'EQUAL' | 'SHARES' | 'EXACT' | 'PERCENTAGE';
 
-export const SPLIT_MODES: SplitMode[] = ['EQUAL', 'SHARES', 'EXACT'];
+export const SPLIT_MODES: SplitMode[] = ['EQUAL', 'SHARES', 'EXACT', 'PERCENTAGE'];
 
 export const SPLIT_MODE_LABELS: Record<SplitMode, string> = {
   EQUAL: 'Equally',
   SHARES: 'By shares',
   EXACT: 'Exact',
+  PERCENTAGE: 'By %',
 };
 
 export const SPLIT_MODE_HINTS: Record<SplitMode, string> = {
   EQUAL: 'Everyone pays the same',
   SHARES: 'Weight people 1x, 2x, 3x',
   EXACT: 'Type what each person owes',
+  PERCENTAGE: 'Type what % each person owes',
 };
 
 /**
@@ -48,8 +59,10 @@ export interface SplitParticipant {
    * every ratio left alone is identical to an EQUAL one.
    */
   ratio?: number;
-  /** What this person owes under EXACT. Ignored by the other two modes. */
+  /** What this person owes under EXACT. Ignored by the other modes. */
   exactAmount?: number;
+  /** What % of the bill this person owes under PERCENTAGE, e.g. 40 for 40%. Ignored by the other modes. */
+  percentage?: number;
 }
 
 export interface SplitShare {
@@ -63,7 +76,7 @@ export interface SplitResult {
   assigned: number;
   /** total - assigned. What the payer is left carrying. */
   yourShare: number;
-  /** EXACT only: the typed amounts add up to more than the bill. */
+  /** EXACT/PERCENTAGE only: the typed amounts (or %s) add up to more than the bill. */
   overAssigned: boolean;
 }
 
@@ -131,6 +144,26 @@ export function computeSplit(
     const shares = participants.map((p) => ({
       contactId: p.contactId,
       amount: p.included ? Math.max(0, toCents(p.exactAmount ?? 0)) / 100 : 0,
+    }));
+    const assignedCents = assignedFrom(shares);
+
+    return {
+      shares,
+      assigned: assignedCents / 100,
+      yourShare: (totalCents - assignedCents) / 100,
+      overAssigned: assignedCents > totalCents,
+    };
+  }
+
+  if (mode === 'PERCENTAGE') {
+    // Same "taken as given, never rescaled" rule as EXACT — a typed 40%
+    // means 40% of the bill, not 40% of whatever the other percentages
+    // happen to add up to.
+    const shares = participants.map((p) => ({
+      contactId: p.contactId,
+      amount: p.included
+        ? Math.round((totalCents * Math.max(0, p.percentage ?? 0)) / 100) / 100
+        : 0,
     }));
     const assignedCents = assignedFrom(shares);
 

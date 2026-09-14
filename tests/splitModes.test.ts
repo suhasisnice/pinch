@@ -110,3 +110,56 @@ describe('EXACT', () => {
     expect(suggested.get(PAYER_ID)).toBe(300);
   });
 });
+
+describe('PERCENTAGE', () => {
+  it('takes typed percentages as given, not as relative weights', () => {
+    // 40% and 30% do NOT get renormalised against each other the way SHARES
+    // ratios would — each is literally its own share of the bill.
+    const participants: SplitParticipant[] = [
+      { contactId: 1, included: true, percentage: 40 },
+      { contactId: 2, included: true, percentage: 30 },
+    ];
+
+    const result = computeSplit(1000, participants, 'PERCENTAGE');
+    expect(result.shares.find((s) => s.contactId === 1)?.amount).toBe(400);
+    expect(result.shares.find((s) => s.contactId === 2)?.amount).toBe(300);
+    expect(result.assigned).toBe(700);
+    expect(result.yourShare).toBe(300);
+    expect(result.overAssigned).toBe(false);
+  });
+
+  it('leaves nothing for the payer when percentages sum to exactly 100', () => {
+    const participants: SplitParticipant[] = [
+      { contactId: 1, included: true, percentage: 40 },
+      { contactId: 2, included: true, percentage: 30 },
+      { contactId: 3, included: true, percentage: 30 },
+    ];
+
+    const result = computeSplit(1000, participants, 'PERCENTAGE');
+    expect(result.yourShare).toBe(0);
+    expect(sum(result.shares)).toBe(1000);
+  });
+
+  it('flags percentages that add up to more than 100 rather than rescaling', () => {
+    const participants: SplitParticipant[] = [
+      { contactId: 1, included: true, percentage: 70 },
+      { contactId: 2, included: true, percentage: 70 },
+    ];
+
+    const result = computeSplit(1000, participants, 'PERCENTAGE');
+    expect(result.shares.map((s) => s.amount)).toEqual([700, 700]);
+    expect(result.overAssigned).toBe(true);
+    expect(result.yourShare).toBe(-400);
+  });
+
+  it('treats a missing percentage as zero and an excluded person as out', () => {
+    const participants: SplitParticipant[] = [
+      { contactId: 1, included: true },
+      { contactId: 2, included: false, percentage: 99 },
+    ];
+
+    const result = computeSplit(500, participants, 'PERCENTAGE');
+    expect(result.assigned).toBe(0);
+    expect(result.shares.find((s) => s.contactId === 2)?.amount).toBe(0);
+  });
+});

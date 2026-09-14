@@ -99,6 +99,8 @@ const GLYPHS = {
   Subscriptions: feather('repeat'),
   Academics: material('school-outline'),
   Health: feather('heart'),
+  Bills: material('flash-outline'),
+  Rent: material('home-outline'),
   Other: material('dots-horizontal'),
   Uncategorised: feather('help-circle'),
 } satisfies Record<string, Glyph>;

@@ -19,7 +19,8 @@ export type RootStackParamList = {
   Tabs: undefined;
   Settings: undefined;
   Review: undefined;
-  Transactions: undefined;
+  /** `category` pre-filters the list — Insights' drill-down ("View food spending →") lands here. */
+  Transactions: { category?: string } | undefined;
 };
 
 export type TabParamList = {
@@ -38,10 +39,10 @@ const pinchTheme: Theme = {
   colors: {
     ...DarkTheme.colors,
     background: palette.background,
-    card: palette.surfaceContainer,
+    card: palette.surface,
     text: palette.textPrimary,
     border: palette.border,
-    primary: palette.primary,
+    primary: palette.accent,
   },
 };
 
@@ -64,7 +65,7 @@ function Tabs() {
         tabBarActiveTintColor: palette.textPrimary,
         tabBarInactiveTintColor: palette.textMuted,
         tabBarStyle: {
-          backgroundColor: palette.surfaceContainer,
+          backgroundColor: palette.surface,
           borderTopWidth: 0,
           height: 72,
           paddingBottom: 10,
@@ -81,7 +82,7 @@ function Tabs() {
             <Icon
               name={TAB_ICONS[route.name as keyof TabParamList]}
               size={20}
-              color={focused ? palette.onSecondaryContainer : palette.textMuted}
+              color={focused ? palette.accent : palette.textMuted}
             />
           </View>
         ),
@@ -89,8 +90,12 @@ function Tabs() {
     >
       <Tab.Screen name="Today" component={TodayScreen} />
       <Tab.Screen name="Outings" component={OutingsScreen} />
-      <Tab.Screen name="Goals" component={GoalsScreen} />
-      <Tab.Screen name="Squad" component={SquadScreen} />
+      {/* Route name stays "Goals"/"Squad" (internal, used by TabParamList and
+          IconName lookups elsewhere) — only the label the user sees changes,
+          to PRODUCT_SPEC.md §2's "Savings"/"Split". Renaming the route itself
+          is a bigger, unrelated refactor for no user-visible benefit. */}
+      <Tab.Screen name="Goals" component={GoalsScreen} options={{ tabBarLabel: 'Savings' }} />
+      <Tab.Screen name="Squad" component={SquadScreen} options={{ tabBarLabel: 'Split' }} />
       <Tab.Screen name="Insights" component={InsightsScreen} />
     </Tab.Navigator>
   );
@@ -128,5 +133,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tabIconActive: { backgroundColor: palette.secondaryContainer },
+  tabIconActive: { backgroundColor: palette.accentMuted },
 });

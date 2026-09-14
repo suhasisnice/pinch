@@ -109,7 +109,7 @@ export default function FreshStartSheet({
   return (
     <Sheet visible={visible} onClose={onClose} title="Start fresh">
       <View style={styles.intro}>
-        <Icon name="wallet" size={22} color={palette.primary} />
+        <Icon name="wallet" size={22} color={palette.accent} />
         <Text style={styles.introText}>
           Forget what happened before. Tell Pinch what you have now, and today becomes day one.
         </Text>
@@ -163,7 +163,7 @@ export default function FreshStartSheet({
         <Switch
           value={forgetHistory}
           onValueChange={setForgetHistory}
-          trackColor={{ false: palette.surfaceContainerHighest, true: palette.danger }}
+          trackColor={{ false: palette.surfaceElevated, true: palette.danger }}
           thumbColor={palette.textPrimary}
         />
       </View>
@@ -188,11 +188,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 2,
     paddingVertical: spacing.md,
-    backgroundColor: palette.surfaceContainerHigh,
+    backgroundColor: palette.surfaceElevated,
     borderRadius: radii.md,
   },
   previewLabel: { ...typography.micro, color: palette.textSecondary, textTransform: 'uppercase', letterSpacing: 1 },
-  previewAmount: { ...typography.display, color: palette.primary },
+  previewAmount: { ...typography.display, color: palette.accent },
   previewSub: { ...typography.caption, color: palette.textMuted },
 
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

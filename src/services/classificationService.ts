@@ -31,6 +31,15 @@ async function applyNonSpendClassification(
 ): Promise<{ reason: NonSpendReason; removedFromSpending: number } | null> {
   if (row.excluded_at !== null || row.transfer_pair_id !== null) return null;
 
+  // INVESTMENT is never auto-detected (see classifyNonSpend) — it is only
+  // ever set by hand, on either direction (a contribution is a debit, a
+  // withdrawal is a credit). Left alone here rather than falling into the
+  // generic "reason === null -> clear it" branch below, which would
+  // otherwise silently undo a manual tag the moment this sweep next runs
+  // (a PARSER_RULES_VERSION bump, a Settings recheck) simply because
+  // classifyNonSpend has no pattern that could ever agree with it.
+  if (row.non_spend_reason === 'INVESTMENT') return null;
+
   const reason = classifyNonSpend({
     direction: row.direction,
     merchant: row.merchant,

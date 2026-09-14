@@ -59,16 +59,16 @@ export default function SquadScreen() {
 
   return (
     <Screen refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.textSecondary} />}>
-      <ScreenTitle title="Squad" subtitle="Who owes who, netted out" />
+      <ScreenTitle title="Split" subtitle="Who owes who, netted out" />
 
       <View style={styles.totals}>
         <Card style={styles.totalCard}>
           <Text style={styles.totalLabel}>Owed to you</Text>
-          <Text style={[styles.totalAmount, { color: palette.mint }]}>{formatMoney(totalIn)}</Text>
+          <Text style={[styles.totalAmount, { color: palette.accent }]}>{formatMoney(totalIn)}</Text>
         </Card>
         <Card style={styles.totalCard}>
           <Text style={styles.totalLabel}>You owe</Text>
-          <Text style={[styles.totalAmount, { color: palette.warningAmber }]}>
+          <Text style={[styles.totalAmount, { color: palette.warning }]}>
             {formatMoney(totalOut)}
           </Text>
         </Card>
@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
   totalAmount: { ...typography.heroCompact, fontSize: 28 },
 
   balanceAmount: { ...typography.bodyBold, fontSize: 16 },
-  aging: { ...typography.micro, color: palette.warningAmber },
+  aging: { ...typography.micro, color: palette.warning },
 
   detailHead: { alignItems: 'center', gap: 4 },
   detailAmount: { ...typography.hero, fontSize: 46 },

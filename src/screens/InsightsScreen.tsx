@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
-import { RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { getBudgetSnapshot, BudgetSnapshot } from '../services/budgetService';
 import { getMonthlyAllowance } from '../settings/settingsStore';
@@ -49,6 +49,7 @@ function monthLabel(month: string): string {
 }
 
 export default function InsightsScreen() {
+  const navigation = useNavigation<any>();
   const [snapshot, setSnapshot] = useState<BudgetSnapshot | null>(null);
   const [slices, setSlices] = useState<CategorySlice[]>([]);
   const [daily, setDaily] = useState<Array<{ day: string; total: number }>>([]);
@@ -224,6 +225,15 @@ export default function InsightsScreen() {
                     {finding.headline}
                   </Text>
                   <Text style={styles.findingDetail}>{finding.detail}</Text>
+                  {finding.category ? (
+                    <Text
+                      style={styles.findingLink}
+                      onPress={() => navigation.navigate('Transactions', { category: finding.category })}
+                      suppressHighlighting
+                    >
+                      View {finding.category} spending →
+                    </Text>
+                  ) : null}
                 </View>
               </View>
             ))}
@@ -259,9 +269,9 @@ export default function InsightsScreen() {
             {
               color:
                 comparison.direction === 'UP'
-                  ? palette.warningAmber
+                  ? palette.warning
                   : comparison.direction === 'DOWN'
-                    ? palette.mint
+                    ? palette.accent
                     : palette.textSecondary,
             },
           ]}
@@ -298,7 +308,7 @@ export default function InsightsScreen() {
                     styles.bar,
                     {
                       height,
-                      backgroundColor: overLimit ? palette.warningAmber : palette.neonGreen,
+                      backgroundColor: overLimit ? palette.warning : palette.accent,
                     },
                   ]}
                 />
@@ -327,7 +337,13 @@ export default function InsightsScreen() {
           <Text style={styles.muted}>No categorised spending yet.</Text>
         ) : (
           slices.map((slice) => (
-            <View key={slice.category} style={styles.sliceRow}>
+            <Pressable
+              key={slice.category}
+              style={({ pressed }) => [styles.sliceRow, pressed && { opacity: 0.7 }]}
+              onPress={() => navigation.navigate('Transactions', { category: slice.category })}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${slice.category} spending`}
+            >
               <View style={styles.sliceHead}>
                 <Dot color={categoryColor(slice.category)} />
                 <Text style={styles.sliceName}>{slice.category}</Text>
@@ -335,7 +351,7 @@ export default function InsightsScreen() {
                 <Text style={styles.sliceAmount}>{formatMoney(slice.total)}</Text>
               </View>
               <ProgressBar fraction={slice.fraction} color={categoryColor(slice.category)} height={6} />
-            </View>
+            </Pressable>
           ))
         )}
       </Card>
@@ -380,7 +396,7 @@ export default function InsightsScreen() {
           {borne.splitAway > 0 ? (
             <View style={styles.borneRow}>
               <Text style={styles.borneLabel}>Charged to other people</Text>
-              <Text style={[styles.borneValue, { color: palette.mint }]}>
+              <Text style={[styles.borneValue, { color: palette.accent }]}>
                 −{formatMoney(borne.splitAway)}
               </Text>
             </View>
@@ -425,9 +441,9 @@ export default function InsightsScreen() {
                     size={13}
                     color={
                       monthly.direction === 'UP'
-                        ? palette.warningAmber
+                        ? palette.warning
                         : monthly.direction === 'DOWN'
-                          ? palette.mint
+                          ? palette.accent
                           : palette.textSecondary
                     }
                   />
@@ -437,9 +453,9 @@ export default function InsightsScreen() {
                       {
                         color:
                           monthly.direction === 'UP'
-                            ? palette.warningAmber
+                            ? palette.warning
                             : monthly.direction === 'DOWN'
-                              ? palette.mint
+                              ? palette.accent
                               : palette.textSecondary,
                       },
                     ]}
@@ -464,7 +480,7 @@ export default function InsightsScreen() {
                       styles.monthBar,
                       {
                         height: Math.max(6, (month.total / maxMonth) * 88),
-                        backgroundColor: isCurrent ? palette.primary : palette.surfaceContainerHighest,
+                        backgroundColor: isCurrent ? palette.accent : palette.surfaceElevated,
                       },
                     ]}
                   />
@@ -514,12 +530,12 @@ export default function InsightsScreen() {
                       <Icon
                         name={up ? 'trendUp' : 'trendDown'}
                         size={12}
-                        color={up ? palette.warningAmber : palette.mint}
+                        color={up ? palette.warning : palette.accent}
                       />
                       <Text
                         style={[
                           styles.trendPillText,
-                          { color: up ? palette.warningAmber : palette.mint },
+                          { color: up ? palette.warning : palette.accent },
                         ]}
                       >
                         {formatMoneyCompact(Math.abs(shift.currentTotal - shift.typicalTotal))}
@@ -544,7 +560,7 @@ export default function InsightsScreen() {
           {recurring.slice(0, 6).map((charge) => (
             <Row
               key={charge.merchant}
-              left={<Icon name="Subscriptions" size={16} color={palette.mint} />}
+              left={<Icon name="Subscriptions" size={16} color={palette.accent} />}
               title={charge.merchant}
               subtitle={`${charge.months} months · about ${formatMoney(charge.annualised)} a year`}
               right={<Text style={styles.habitValue}>{formatMoney(charge.typicalAmount)}</Text>}
@@ -564,7 +580,7 @@ export default function InsightsScreen() {
               </View>
               <ProgressBar
                 fraction={day.average / (heaviestDay.average || 1)}
-                color={day.weekday === heaviestDay.weekday ? palette.violet : palette.surfaceContainerHighest}
+                color={day.weekday === heaviestDay.weekday ? palette.info : palette.surfaceElevated}
                 height={6}
               />
             </View>
@@ -576,7 +592,7 @@ export default function InsightsScreen() {
         </Card>
       ) : null}
 
-      <Card style={brokeIn !== null && brokeIn < snapshot.daysRemaining ? { backgroundColor: layer(palette.warningAmber, 0.12) } : undefined}>
+      <Card style={brokeIn !== null && brokeIn < snapshot.daysRemaining ? { backgroundColor: layer(palette.warning, 0.12) } : undefined}>
         <CardTitle>Projection</CardTitle>
         <Text style={styles.projection}>
           {brokeIn === null
@@ -603,17 +619,18 @@ export default function InsightsScreen() {
 const styles = StyleSheet.create({
   findings: { gap: 0, paddingVertical: spacing.sm },
   finding: { flexDirection: 'row', gap: spacing.sm, paddingVertical: spacing.sm },
-  findingDivided: { borderTopWidth: 1, borderTopColor: palette.outlineVariant },
+  findingDivided: { borderTopWidth: 1, borderTopColor: palette.border },
   // A tone-coloured rule down the side, so urgency is legible before a word
   // of it is read.
   findingMark: { width: 3, borderRadius: 2, alignSelf: 'stretch' },
   findingBody: { flex: 1, gap: 3 },
   findingHeadline: { ...typography.cardTitle },
   findingDetail: { ...typography.caption, color: palette.textSecondary, lineHeight: 18 },
+  findingLink: { ...typography.micro, color: palette.accent, marginTop: 4 },
 
   personality: { alignItems: 'center', gap: 2 },
   personalityLabel: { ...typography.heroLabel, color: palette.textSecondary },
-  personalityName: { ...typography.display, color: palette.violet },
+  personalityName: { ...typography.display, color: palette.info },
   personalityBlurb: { ...typography.caption, color: palette.textSecondary, textAlign: 'center' },
 
   weekRow: { flexDirection: 'row', gap: spacing.md },
@@ -660,7 +677,7 @@ const styles = StyleSheet.create({
   },
   monthSlot: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 4 },
   monthBar: { width: '100%', borderRadius: 4 },
-  monthAmount: { ...typography.micro, color: palette.textSecondary, fontSize: 9 },
+  monthAmount: { ...typography.micro, color: palette.textSecondary },
   monthLabel: { ...typography.micro, color: palette.textMuted },
 
   borneRow: {
@@ -681,7 +698,7 @@ const styles = StyleSheet.create({
     borderTopColor: palette.border,
   },
   borneTotalLabel: { ...typography.cardTitle, color: palette.textPrimary },
-  borneTotalValue: { ...typography.bodyBold, fontSize: 22, color: palette.neonGreen },
+  borneTotalValue: { ...typography.bodyBold, fontSize: 22, color: palette.accent },
 
   trendPill: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   trendPillText: { ...typography.micro, fontWeight: '700' },
@@ -696,9 +713,9 @@ function toneColor(tone: FindingTone): string {
     case 'CRITICAL':
       return palette.danger;
     case 'WARNING':
-      return palette.warningAmber;
+      return palette.warning;
     case 'GOOD':
-      return palette.mint;
+      return palette.accent;
     default:
       return palette.textPrimary;
   }

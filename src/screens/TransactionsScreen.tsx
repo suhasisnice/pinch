@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { RouteProp, useFocusEffect, useRoute } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { TransactionRow } from '../db/types';
 import { formatMoney } from '../utils/format';
@@ -10,6 +10,7 @@ import Icon from '../components/Icon';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
 import MarkAsLoanSheet from '../components/MarkAsLoanSheet';
 import SplitModal from '../components/SplitModal';
+import { RootStackParamList } from '../navigation/RootNavigator';
 
 type Filter = 'ALL' | 'OUT' | 'IN' | 'IGNORED';
 
@@ -28,6 +29,7 @@ const FILTERS: Array<{ key: Filter; label: string }> = [
  * it is the same distinction the parser now enforces on the way in.
  */
 export default function TransactionsScreen() {
+  const route = useRoute<RouteProp<RootStackParamList, 'Transactions'>>();
   const [rows, setRows] = useState<TransactionRow[] | null>(null);
   const [ignored, setIgnored] = useState<TransactionRow[]>([]);
   const [filter, setFilter] = useState<Filter>('ALL');
@@ -36,6 +38,10 @@ export default function TransactionsScreen() {
   const [detailFor, setDetailFor] = useState<TransactionRow | null>(null);
   const [loanFor, setLoanFor] = useState<TransactionRow | null>(null);
   const [splitFor, setSplitFor] = useState<TransactionRow | null>(null);
+  // Insights' drill-down ("View food spending →") arrives with a category
+  // already chosen; kept clearable rather than baked into `filter` so the
+  // existing ALL/OUT/IN/IGNORED chips stay independent of it.
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(route.params?.category ?? null);
 
   const load = useCallback(async () => {
     const [all, excluded] = await Promise.all([
@@ -68,10 +74,11 @@ export default function TransactionsScreen() {
     return source.filter((tx) => {
       if (filter === 'OUT' && tx.direction !== 'DEBIT') return false;
       if (filter === 'IN' && tx.direction !== 'CREDIT') return false;
+      if (categoryFilter && tx.category !== categoryFilter) return false;
       if (needle && !tx.merchant.toLowerCase().includes(needle)) return false;
       return true;
     });
-  }, [rows, ignored, filter, query]);
+  }, [rows, ignored, filter, query, categoryFilter]);
 
   const grouped = useMemo(() => {
     const byDay = new Map<string, TransactionRow[]>();
@@ -113,10 +120,16 @@ export default function TransactionsScreen() {
             label={option.label}
             selected={filter === option.key}
             onPress={() => setFilter(option.key)}
-            color={option.key === 'IGNORED' ? palette.warningAmber : palette.primary}
+            color={option.key === 'IGNORED' ? palette.warning : palette.accent}
           />
         ))}
       </View>
+
+      {categoryFilter ? (
+        <View style={styles.filterRow}>
+          <Chip label={`${categoryFilter} ✕`} selected color={palette.info} onPress={() => setCategoryFilter(null)} />
+        </View>
+      ) : null}
 
       <Field label="Search" value={query} onChangeText={setQuery} placeholder="Merchant name" />
 
@@ -154,7 +167,7 @@ export default function TransactionsScreen() {
                 onPress={() => setDetailFor(tx)}
                 right={
                   <Text
-                    style={[styles.amount, tx.direction === 'CREDIT' && { color: palette.mint }]}
+                    style={[styles.amount, tx.direction === 'CREDIT' && { color: palette.accent }]}
                   >
                     {tx.direction === 'CREDIT' ? '+' : '−'}
                     {formatMoney(tx.amount)}

@@ -101,6 +101,24 @@ describe('classifyTokens', () => {
     expect(result?.category).toBe('Shopping');
   });
 
+  it('lets one unambiguous seed-weight word decide, however many categories exist', () => {
+    // Shaped like the real seed: every category a list of words at weight 3.
+    // Under add-one smoothing a lone seed word scored about 0.33 here and
+    // could never clear the threshold.
+    const seeded: TokenWeights = {};
+    for (const category of [
+      'Food', 'Transport', 'Shopping', 'Subscriptions', 'Academics',
+      'Health', 'Outing', 'Bills', 'Rent',
+    ]) {
+      seeded[category] = Object.fromEntries(
+        Array.from({ length: 20 }, (_, i) => [`${category.toLowerCase()}${i}`, 3])
+      );
+    }
+    const result = classifyTokens(['bills7'], seeded);
+    expect(result?.category).toBe('Bills');
+    expect(result?.confidence).toBeGreaterThan(0.55);
+  });
+
   it('is case-insensitive and ignores punctuation noise', () => {
     const a = classifyTokens(tokenize('UBER *TRIP 8817'), WEIGHTS);
     const b = classifyTokens(tokenize('uber trip 8817'), WEIGHTS);

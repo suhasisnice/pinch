@@ -4,8 +4,11 @@ import {
   computeBudget,
   computeToday,
   daysUntilBroke,
+  estimatedCompletionDate,
   expectedRecovery,
   goalReserve,
+  goalTrackingStatus,
+  outingAffordability,
   receivableConfidence,
   roundUpAmount,
   totalGoalReserve,
@@ -303,5 +306,82 @@ describe('projection helpers', () => {
     expect(roundUpAmount(340)).toBe(0);
     expect(roundUpAmount(342)).toBe(8);
     expect(roundUpAmount(340.5)).toBe(9.5);
+  });
+});
+
+describe('goalTrackingStatus', () => {
+  const created = new Date(2026, 0, 1).toISOString();
+  const deadline = new Date(2026, 11, 31).toISOString(); // ~365 days out
+
+  it('is null with no deadline', () => {
+    expect(goalTrackingStatus(1000, 10000, created, null, new Date(2026, 5, 1))).toBeNull();
+  });
+
+  it('is ON_TRACK when saved share matches or beats elapsed time share', () => {
+    // Halfway through the year, half saved.
+    const now = new Date(2026, 5, 30);
+    expect(goalTrackingStatus(5000, 10000, created, deadline, now)).toBe('ON_TRACK');
+  });
+
+  it('is BEHIND when saved share lags well behind elapsed time share', () => {
+    const now = new Date(2026, 5, 30);
+    expect(goalTrackingStatus(500, 10000, created, deadline, now)).toBe('BEHIND');
+  });
+
+  it('gives a little slack rather than flipping BEHIND immediately', () => {
+    // Halfway through the year, saved 47% instead of 50% — a lump-sum saver
+    // between allowance days, not actually falling behind.
+    const now = new Date(2026, 5, 30);
+    expect(goalTrackingStatus(4700, 10000, created, deadline, now)).toBe('ON_TRACK');
+  });
+});
+
+describe('estimatedCompletionDate', () => {
+  const created = new Date(2026, 0, 1).toISOString();
+
+  it('is null with nothing saved yet', () => {
+    expect(estimatedCompletionDate(0, 10000, created, new Date(2026, 1, 1))).toBeNull();
+  });
+
+  it('is now once the target is already met', () => {
+    const now = new Date(2026, 1, 1);
+    expect(estimatedCompletionDate(10000, 10000, created, now)).toEqual(now);
+  });
+
+  it('projects forward from the saving rate so far', () => {
+    // 1000 saved in 10 days = 100/day. 9000 left needs 90 more days.
+    const now = new Date(2026, 0, 11);
+    const projected = estimatedCompletionDate(1000, 10000, created, now);
+    const expectedDays = Math.round(
+      (projected!.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)
+    );
+    expect(expectedDays).toBe(90);
+  });
+});
+
+describe('outingAffordability', () => {
+  it('is COMFORTABLE with no target set', () => {
+    expect(outingAffordability(0, 5000, 20)).toBe('COMFORTABLE');
+  });
+
+  it('is COMFORTABLE when the daily limit barely moves', () => {
+    // 30000 available over 30 days = 1000/day. A 500 target over the whole
+    // period barely dents that.
+    expect(outingAffordability(500, 30000, 30)).toBe('COMFORTABLE');
+  });
+
+  it('is TIGHT when it roughly halves the daily limit', () => {
+    // 3000 available over 30 days = 100/day. Reserving 1600 drops the daily
+    // limit to (3000-1600)/30 = 46.67, under half of 100.
+    expect(outingAffordability(1600, 3000, 30)).toBe('TIGHT');
+  });
+
+  it('is DISRUPTIVE when it overdraws the available budget entirely', () => {
+    expect(outingAffordability(5000, 3000, 30)).toBe('DISRUPTIVE');
+  });
+
+  it('never blocks — it only classifies, per PRODUCT_SPEC', () => {
+    // A target far beyond what exists still returns a verdict, not a throw.
+    expect(() => outingAffordability(1_000_000, 100, 30)).not.toThrow();
   });
 });
