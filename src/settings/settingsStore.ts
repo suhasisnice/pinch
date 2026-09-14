@@ -47,6 +47,31 @@ export async function setOnboarded(value: boolean): Promise<void> {
   await AsyncStorage.setItem(ONBOARDED_KEY, String(value));
 }
 
+const DISMISSED_GAP_KEY = 'pinch.dismissedDiscrepancy';
+
+/**
+ * The unaccounted-balance gap the user has already said to leave alone.
+ *
+ * Stored as an amount rather than a flag so the reminder comes back when
+ * the gap actually changes — dismissing "₹300 unaccounted" should not also
+ * silence "₹4,000 unaccounted" next week, which is a different and much
+ * more worrying fact.
+ */
+export async function getDismissedDiscrepancy(): Promise<number | null> {
+  const stored = await AsyncStorage.getItem(DISMISSED_GAP_KEY);
+  if (stored === null) return null;
+  const parsed = Number(stored);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export async function setDismissedDiscrepancy(amount: number | null): Promise<void> {
+  if (amount === null) {
+    await AsyncStorage.removeItem(DISMISSED_GAP_KEY);
+    return;
+  }
+  await AsyncStorage.setItem(DISMISSED_GAP_KEY, String(Math.round(amount)));
+}
+
 /** Goal that spare change from round-ups flows into, if the user picked one. */
 export async function getRoundUpGoalId(): Promise<number | null> {
   const stored = await AsyncStorage.getItem(ROUNDUP_KEY);

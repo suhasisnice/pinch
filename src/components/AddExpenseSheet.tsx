@@ -22,7 +22,7 @@ import { isCaptureAvailable } from '../../modules/pinch-capture';
  * withdrawal (Phase 9) is `non_spend_reason: 'INVESTMENT'` on whichever
  * direction applies — see `docs/phases/PHASE_9_INVESTMENTS.md`.
  */
-type TxnType =
+export type TxnType =
   | 'EXPENSE'
   | 'INCOME'
   | 'TRANSFER'
@@ -63,6 +63,9 @@ export default function AddExpenseSheet({
   defaultOutingId = null,
   saveLabel = 'Save',
   title = 'Add expense',
+  defaultType = 'EXPENSE',
+  defaultAmount = '',
+  defaultDirection,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -71,6 +74,11 @@ export default function AddExpenseSheet({
   defaultOutingId?: number | null;
   saveLabel?: string;
   title?: string;
+  /** Opens on a particular type — the reconcile flow arrives asking for an Adjustment. */
+  defaultType?: TxnType;
+  defaultAmount?: string;
+  /** Only meaningful for ADJUSTMENT, which is the one type that can go either way. */
+  defaultDirection?: 'DEBIT' | 'CREDIT';
 }) {
   const [type, setType] = useState<TxnType>('EXPENSE');
   const [amount, setAmount] = useState('');
@@ -102,8 +110,8 @@ export default function AddExpenseSheet({
 
   useEffect(() => {
     if (!visible) return;
-    setType('EXPENSE');
-    setAmount('');
+    setType(defaultType);
+    setAmount(defaultAmount);
     setMerchant('');
     setCategory(null);
     setOutingId(defaultOutingId);
@@ -112,9 +120,9 @@ export default function AddExpenseSheet({
     setCounterparty('');
     setCounterpartyPhone(null);
     setReason('');
-    setAdjustmentDirection('DEBIT');
+    setAdjustmentDirection(defaultDirection ?? 'DEBIT');
     db.getOutings(false).then(setOutings).catch(() => setOutings([]));
-  }, [visible, defaultOutingId]);
+  }, [visible, defaultOutingId, defaultType, defaultAmount, defaultDirection]);
 
   const parsedAmount = Number(amount.replace(/[^\d.]/g, ''));
   const amountValid = Number.isFinite(parsedAmount) && parsedAmount > 0;

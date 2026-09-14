@@ -4,8 +4,12 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { BudgetSnapshot, getBudgetSnapshot } from '../services/budgetService';
 import { ingestPending } from '../services/captureService';
-import { getMonthlyAllowance } from '../settings/settingsStore';
-import { canIAfford, daysUntilBroke } from '../math/budget';
+import {
+  getDismissedDiscrepancy,
+  getMonthlyAllowance,
+  setDismissedDiscrepancy,
+} from '../settings/settingsStore';
+import { canIAfford, daysUntilBroke, shouldRaiseDiscrepancy } from '../math/budget';
 import { TransactionRow } from '../db/types';
 import { formatMoney, formatRelative } from '../utils/format';
 import { accentForState, categoryColor, layer, palette, radii, spacing, typography } from '../theme/theme';
@@ -28,6 +32,7 @@ import TransactionDetailSheet from '../components/TransactionDetailSheet';
 import MarkAsLoanSheet from '../components/MarkAsLoanSheet';
 import FreshStartSheet from '../components/FreshStartSheet';
 import BudgetBreakdownSheet from '../components/BudgetBreakdownSheet';
+import ReconcileSheet from '../components/ReconcileSheet';
 import BalanceCard from '../components/BalanceCard';
 import { AnimatedMoney, FadeSlideIn } from '../components/motion';
 import Icon from '../components/Icon';
@@ -46,6 +51,12 @@ export default function TodayScreen() {
   const [freshVisible, setFreshVisible] = useState(false);
   const [breakdownVisible, setBreakdownVisible] = useState(false);
   const [testAmount, setTestAmount] = useState('');
+  const [reconcileVisible, setReconcileVisible] = useState(false);
+  const [showDiscrepancy, setShowDiscrepancy] = useState(false);
+  const [adjustmentPrefill, setAdjustmentPrefill] = useState<{
+    amount: string;
+    direction: 'DEBIT' | 'CREDIT';
+  } | null>(null);
 
   const load = useCallback(async () => {
     // Collect anything the native listeners buffered while the app was closed
@@ -62,6 +73,14 @@ export default function TodayScreen() {
     setSnapshot(next);
     setBalance(await db.getBalanceState());
     setToday(await db.getTransactionsBetween(start.toISOString(), end.toISOString()));
+
+    // Dismissing one gap should not silence a different, larger one later.
+    const dismissed = await getDismissedDiscrepancy();
+    setShowDiscrepancy(
+      next.balanceConsistency
+        ? shouldRaiseDiscrepancy(next.balanceConsistency.discrepancy, dismissed)
+        : false
+    );
   }, []);
 
   useFocusEffect(
@@ -171,15 +190,20 @@ export default function TodayScreen() {
             height={6}
           />
         </View>
-        {snapshot.balanceConsistency && !snapshot.balanceConsistency.isConsistent ? (
-          <View style={styles.consistencyNote}>
+        {showDiscrepancy && snapshot.balanceConsistency ? (
+          <Pressable
+            style={styles.consistencyNote}
+            onPress={() => setReconcileVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Account for the missing money"
+          >
             <Icon name="info" size={13} color={palette.warning} />
             <Text style={styles.consistencyText}>
               {snapshot.balanceConsistency.discrepancy > 0
-                ? `Your bank balance has ${formatMoney(snapshot.balanceConsistency.discrepancy)} more than this accounts for.`
-                : `Your bank balance has ${formatMoney(-snapshot.balanceConsistency.discrepancy)} less than this accounts for — a payment may be missing.`}
+                ? `Your bank balance has ${formatMoney(snapshot.balanceConsistency.discrepancy)} more than this accounts for. Tap to sort it out.`
+                : `Your bank balance has ${formatMoney(-snapshot.balanceConsistency.discrepancy)} less than this accounts for — a payment may be missing. Tap to sort it out.`}
             </Text>
-          </View>
+          </Pressable>
         ) : null}
       </Card>
       </FadeSlideIn>
@@ -312,9 +336,17 @@ export default function TodayScreen() {
 
       <AddExpenseSheet
         visible={addVisible}
-        title={addThenSplit ? 'Split a bill' : 'Add expense'}
+        title={
+          adjustmentPrefill ? 'Account for it' : addThenSplit ? 'Split a bill' : 'Add expense'
+        }
         saveLabel={addThenSplit ? 'Next: who was there' : 'Save'}
-        onClose={() => setAddVisible(false)}
+        defaultType={adjustmentPrefill ? 'ADJUSTMENT' : 'EXPENSE'}
+        defaultAmount={adjustmentPrefill?.amount ?? ''}
+        defaultDirection={adjustmentPrefill?.direction}
+        onClose={() => {
+          setAddVisible(false);
+          setAdjustmentPrefill(null);
+        }}
         onSaved={async (transactionId) => {
           setAddVisible(false);
           if (addThenSplit && transactionId !== null) {
@@ -325,7 +357,28 @@ export default function TodayScreen() {
             if (created) setSplitFor(created);
           }
           setAddThenSplit(false);
+          setAdjustmentPrefill(null);
           load();
+        }}
+      />
+
+      <ReconcileSheet
+        visible={reconcileVisible}
+        consistency={snapshot.balanceConsistency}
+        onClose={() => setReconcileVisible(false)}
+        onFindIt={() => {
+          setReconcileVisible(false);
+          navigation.navigate('Review');
+        }}
+        onAddIt={(amount, direction) => {
+          setReconcileVisible(false);
+          setAdjustmentPrefill({ amount: String(Math.round(amount)), direction });
+          setAddVisible(true);
+        }}
+        onIgnore={async () => {
+          await setDismissedDiscrepancy(snapshot.balanceConsistency?.discrepancy ?? null);
+          setReconcileVisible(false);
+          setShowDiscrepancy(false);
         }}
       />
 

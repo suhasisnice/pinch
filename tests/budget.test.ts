@@ -11,6 +11,7 @@ import {
   outingAffordability,
   receivableConfidence,
   roundUpAmount,
+  shouldRaiseDiscrepancy,
   totalGoalReserve,
 } from '../src/math/budget';
 
@@ -306,6 +307,34 @@ describe('projection helpers', () => {
     expect(roundUpAmount(340)).toBe(0);
     expect(roundUpAmount(342)).toBe(8);
     expect(roundUpAmount(340.5)).toBe(9.5);
+  });
+});
+
+describe('shouldRaiseDiscrepancy', () => {
+  it('stays quiet about a gap small enough to be noise', () => {
+    expect(shouldRaiseDiscrepancy(20, null)).toBe(false);
+    expect(shouldRaiseDiscrepancy(-20, null)).toBe(false);
+  });
+
+  it('raises a real gap that has never been dismissed', () => {
+    expect(shouldRaiseDiscrepancy(300, null)).toBe(true);
+    expect(shouldRaiseDiscrepancy(-300, null)).toBe(true);
+  });
+
+  it('stays quiet about the gap the user already dismissed', () => {
+    expect(shouldRaiseDiscrepancy(300, 300)).toBe(false);
+    // Drifting a little is still the same gap, not a new fact.
+    expect(shouldRaiseDiscrepancy(320, 300)).toBe(false);
+  });
+
+  it('speaks up again once the gap grows into a different fact', () => {
+    // Dismissing "₹300 unaccounted" must not also silence ₹4,000.
+    expect(shouldRaiseDiscrepancy(4000, 300)).toBe(true);
+  });
+
+  it('speaks up when the gap flips direction', () => {
+    // Money missing and money unexplained are different problems.
+    expect(shouldRaiseDiscrepancy(-300, 300)).toBe(true);
   });
 });
 

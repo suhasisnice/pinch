@@ -1,6 +1,7 @@
 import * as db from '../src/db/dbService';
 import { ingestMessage, reprocessRawEvent, reprocessUnresolvedRawEvents } from '../src/services/captureService';
 import { addToBlocklist } from '../src/db/dbService';
+import { PARSER_RULES_VERSION } from '../src/services/revalidationService';
 import { createSqlJsAdapter } from './utils/sqljsAdapter';
 import { CapturedMessage } from '../modules/pinch-capture';
 
@@ -162,6 +163,48 @@ describe('reprocessUnresolvedRawEvents', () => {
     const history = await db.getParsedEventsForRawEvent(rawEvent.id);
     expect(history).toHaveLength(2);
     expect(history.every((h) => h.outcome === 'SKIPPED_NO_PARSE')).toBe(true);
+  });
+});
+
+/**
+ * Turns "a payment went missing once" into something answerable in bulk: a
+ * rule eating real transactions shows up at the top of this list, where one
+ * bug report would never have revealed it.
+ */
+describe('what the parser is dropping, grouped by rule', () => {
+  it('ranks the rules by how many messages each one caught', async () => {
+    await ingestMessage(sms('OTP 482913 for Rs.500 debit. Do not share.'));
+    await ingestMessage(sms('OTP 111111 for Rs.900 debit. Do not share.'));
+    await ingestMessage(sms('Rs.200 debited at SWIGGY on 11-09-26.')); // names no account
+
+    const groups = await db.getRejectionBreakdown(PARSER_RULES_VERSION);
+
+    expect(groups[0].count).toBe(2);
+    expect(groups[0].reason).toContain('hard reject');
+    expect(groups[0].example).toContain('OTP');
+
+    const structural = groups.find((g) => g.reason.includes('no account'));
+    expect(structural?.count).toBe(1);
+  });
+
+  it('carries an example so the rule can be read against a real message', async () => {
+    await ingestMessage(sms('Rs.200 debited at SWIGGY on 11-09-26.'));
+
+    const [group] = await db.getRejectionBreakdown(PARSER_RULES_VERSION);
+    expect(group.example).toContain('SWIGGY');
+    expect(group.outcome).toBe('SKIPPED_NO_PARSE');
+  });
+
+  it('ignores messages that did become transactions', async () => {
+    await ingestMessage(
+      sms('Rs.369.00 spent on your SBI Credit Card ending 9124 at Amazon on 11/09/26.')
+    );
+    expect(await db.getRejectionBreakdown(PARSER_RULES_VERSION)).toEqual([]);
+  });
+
+  it('does not mix in explanations from a parser version that no longer exists', async () => {
+    await ingestMessage(sms('OTP 482913 for Rs.500 debit. Do not share.'));
+    expect(await db.getRejectionBreakdown(PARSER_RULES_VERSION + 1)).toEqual([]);
   });
 });
 

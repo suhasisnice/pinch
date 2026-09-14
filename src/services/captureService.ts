@@ -696,6 +696,42 @@ export async function acceptCapture(
 }
 
 /**
+ * Discards a capture the user has confirmed is a payment already recorded,
+ * and — the point of asking — remembers why, so the same pair of names never
+ * has to be asked about again.
+ *
+ * What the answer actually tells the app is that two names are one person:
+ * the one this message used, and the one on the transaction it repeats. That
+ * is recorded against a contact, which makes it useful twice over — the
+ * duplicate matcher stops asking (`sameKnownPerson`), and settlement
+ * matching starts finding this person's repayments whichever name the
+ * reporting channel happens to use (`findContactIdByNameOrAlias`).
+ *
+ * Only for credits. Money arriving is a person paying, and a person is what
+ * a contact represents. A debit duplicate is two reports of paying a shop,
+ * and inventing a contact for a shop would put junk in the list of people
+ * the user actually owes and is owed by, to learn something nothing else
+ * reads.
+ */
+export async function confirmCaptureIsDuplicate(captureId: number): Promise<void> {
+  const capture = await db.getCaptureById(captureId);
+  if (!capture || capture.status !== 'PENDING') return;
+
+  const twinId = capture.possible_duplicate_of;
+  const alias = capture.parsed_merchant?.trim();
+
+  if (twinId !== null && alias) {
+    const twin = await db.getTransactionById(twinId);
+    if (twin && twin.direction === 'CREDIT' && capture.parsed_direction === 'CREDIT') {
+      const contactId = await db.findOrCreateContact({ name: twin.merchant });
+      await db.addContactAlias(contactId, alias);
+    }
+  }
+
+  await db.rejectCapture(captureId);
+}
+
+/**
  * Accepts several pending captures at their parsed values.
  *
  * Built on acceptCapture, so each one still goes through postTransaction and

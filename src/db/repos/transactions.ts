@@ -1,6 +1,7 @@
 import { getAdapter } from '../connection';
 import { CaptureSource, Direction, TransactionKind, TransactionRow, TransactionStatus } from '../types';
 import { sameMerchant } from '../../math/merchantClassifier';
+import { sameKnownPerson } from './ious';
 
 export interface NewTransaction {
   amount: number;
@@ -503,7 +504,17 @@ export async function findProbableDuplicate(
      ORDER BY occurred_at DESC;`,
     [amount, direction, from, to]
   );
-  return candidates.find((row) => sameMerchant(row.merchant, signals.merchant!)) ?? null;
+
+  const byName = candidates.find((row) => sameMerchant(row.merchant, signals.merchant!));
+  if (byName) return byName;
+
+  // Nothing in the two strings connects them — but Review may already have
+  // been told they are the same person, in which case this is settled and
+  // there is no reason to ask a second time.
+  for (const row of candidates) {
+    if (await sameKnownPerson(row.merchant, signals.merchant)) return row;
+  }
+  return null;
 }
 
 /** How close two reports have to land before "the same payment twice" is even worth asking about. */

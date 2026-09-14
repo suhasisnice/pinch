@@ -31,7 +31,12 @@ export async function checkForSettlement(transactionId: number): Promise<AutoSet
   if (!row || row.direction !== 'CREDIT' || row.kind !== 'INCOME') return null;
   if (row.excluded_at !== null || row.transfer_pair_id !== null) return null;
 
-  const contactId = await db.findContactIdByName(row.merchant);
+  // By alias as well as by the contact's own name. A friend's repayment
+  // reaches the app under whichever name the reporting channel uses — the
+  // one in your contacts if a UPI app saw it, the one registered against
+  // their handle if the bank's SMS did. Matching only the first meant the
+  // second was booked as income and the debt stayed open.
+  const contactId = await db.findContactIdByNameOrAlias(row.merchant);
   if (contactId === null) return null;
 
   const open = await db.getOpenIOUsForContact(contactId);
