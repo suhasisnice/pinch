@@ -39,6 +39,16 @@ const PROPERTIES = {
   // recompiles dependencies that never changed.
   'org.gradle.caching': 'true',
 
+  // Only configures the projects a task actually needs, rather than every
+  // module in the tree up front. An Expo/RN android/ folder is dozens of
+  // small library modules pulled in by autolinking; most of them are
+  // irrelevant to any one `assembleRelease` or `assembleDebug` invocation,
+  // so this trims real time off the configuration phase of every build, not
+  // just clean ones. Long-stable Gradle behaviour — unlike the still-partial
+  // configuration cache, this has no known compatibility gap with React
+  // Native's own Gradle plugin.
+  'org.gradle.configureondemand': 'true',
+
   // A 2 GB heap makes the compiler and the Hermes step spend their time in
   // garbage collection rather than work. Still leaves most of the machine
   // free — this is a ceiling, not a reservation.

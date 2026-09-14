@@ -18,6 +18,21 @@ describe('smartCategoriseMerchant, on a fresh database', () => {
     await expect(db.smartCategoriseMerchant('Uber Trip 8817')).resolves.toBe('Transport');
   });
 
+  it('knows Bangalore bills, rent and transit from the v9 seed', async () => {
+    await expect(db.smartCategoriseMerchant('BESCOM Electricity Payment')).resolves.toBe('Bills');
+    await expect(db.smartCategoriseMerchant('Monthly Rent Landlord')).resolves.toBe('Rent');
+    await expect(db.smartCategoriseMerchant('BMTC BUS KA57F6')).resolves.toBe('Transport');
+    await expect(db.smartCategoriseMerchant('nammayatri')).resolves.toBe('Transport');
+    await expect(db.smartCategoriseMerchant('NOBROKERHOOD MAINTENANCE')).resolves.toBe('Bills');
+  });
+
+  it('lets a single seeded word decide on its own, with no exact rule behind it', async () => {
+    // "chaayos" is only in the token seed, not MerchantRules, so this is the
+    // classifier alone.
+    await expect(db.smartCategoriseMerchant('Chaayos Koramangala')).resolves.toBe('Food');
+    await expect(db.smartCategoriseMerchant('Bhukkad Dhaba')).resolves.toBe('Food');
+  });
+
   it('returns null for a merchant with no recognisable word at all', async () => {
     await expect(db.smartCategoriseMerchant('XYZ9182 Holdings')).resolves.toBeNull();
   });
@@ -32,10 +47,11 @@ describe('smartCategoriseMerchant, on a fresh database', () => {
 
 describe('the token vocabulary learning from a correction', () => {
   it('generalises a correction to a merchant it has never seen', async () => {
-    // "Bhukkad" is not in the seed data and matches nothing on its own.
-    await expect(db.smartCategoriseMerchant('Bhukkad Dhaba')).resolves.toBeNull();
+    // Neither "bhukkad" nor "adda" is in the seed data, so this matches
+    // nothing on its own. (A "Dhaba" would: that is a Food seed word.)
+    await expect(db.smartCategoriseMerchant('Bhukkad Adda')).resolves.toBeNull();
 
-    await db.bumpTokenWeights('Bhukkad Dhaba', 'Food');
+    await db.bumpTokenWeights('Bhukkad Adda', 'Food');
 
     // The correction should not just remember this exact name (that is
     // MerchantRules' job) — it should teach "bhukkad" broadly, so a second

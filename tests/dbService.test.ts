@@ -72,6 +72,62 @@ describe('transactions', () => {
     const match = await db.findProbableDuplicate(150, 'DEBIT', fourMinutesLater);
     expect(match?.merchant).toBe('Zomato');
   });
+
+  // Phase 7: the false positive that motivated the multi-signal matcher —
+  // two genuinely different payments of the same round amount, minutes
+  // apart, used to collapse into "one payment reported twice" because
+  // nothing but amount+direction+window was ever compared.
+  describe('multi-signal matching (merchant/reference)', () => {
+    it('does not treat two different payments of the same amount as a duplicate once a merchant is given', async () => {
+      const at = new Date().toISOString();
+      await spend(50, 'College Canteen', { occurredAt: at });
+
+      const threeMinutesLater = new Date(Date.parse(at) + 3 * 60 * 1000).toISOString();
+      const match = await db.findProbableDuplicate(50, 'DEBIT', threeMinutesLater, undefined, {
+        merchant: 'Barista',
+      });
+      expect(match).toBeNull();
+    });
+
+    it('still catches the same merchant worded differently within the window', async () => {
+      const at = new Date().toISOString();
+      await spend(50, 'SWIGGY LTD', { occurredAt: at });
+
+      const threeMinutesLater = new Date(Date.parse(at) + 3 * 60 * 1000).toISOString();
+      const match = await db.findProbableDuplicate(50, 'DEBIT', threeMinutesLater, undefined, {
+        merchant: 'Swiggy',
+      });
+      expect(match?.merchant).toBe('SWIGGY LTD');
+    });
+
+    it('matches on reference number alone, regardless of the time window', async () => {
+      const at = new Date().toISOString();
+      await db.addTransaction({
+        amount: 500,
+        direction: 'DEBIT',
+        kind: 'SPEND',
+        merchant: 'Amazon',
+        occurredAt: at,
+        externalRef: 'UPI/REF/12345',
+      });
+
+      // Hours later — well outside the 360s window — but the same reference.
+      const hoursLater = new Date(Date.parse(at) + 3 * 60 * 60 * 1000).toISOString();
+      const match = await db.findProbableDuplicate(500, 'DEBIT', hoursLater, undefined, {
+        reference: 'upi/ref/12345',
+      });
+      expect(match?.merchant).toBe('Amazon');
+    });
+
+    it('preserves the original amount+direction+window behaviour when no merchant is given', async () => {
+      const at = new Date().toISOString();
+      await spend(50, 'College Canteen', { occurredAt: at });
+
+      const threeMinutesLater = new Date(Date.parse(at) + 3 * 60 * 1000).toISOString();
+      const match = await db.findProbableDuplicate(50, 'DEBIT', threeMinutesLater);
+      expect(match?.merchant).toBe('College Canteen');
+    });
+  });
 });
 
 describe('money queries respect kind, not direction', () => {
@@ -194,6 +250,21 @@ describe('IOUs', () => {
     expect(result.applied).toBe(250);
     expect((await db.getIOUById(a))?.openAmount).toBe(0);
     expect((await db.getIOUById(b))?.openAmount).toBe(50);
+  });
+
+  // A contact you both lend to and borrow from at once: money arriving can
+  // only close what THEY owe, never what you owe them — even when the
+  // I_OWE_THEM row happens to be older and would otherwise be picked first.
+  it('never applies an incoming payment against what you owe them', async () => {
+    const iOweThem = await db.createIOU({ contactId, amount: 400, direction: 'I_OWE_THEM' });
+    const theyOweMe = await db.createIOU({ contactId, amount: 1000, direction: 'THEY_OWE_ME' });
+
+    const result = await db.settleContactBalance(contactId, 600);
+
+    expect(result.applied).toBe(600);
+    expect(result.iouIds).toEqual([theyOweMe]);
+    expect((await db.getIOUById(theyOweMe))?.openAmount).toBe(400);
+    expect((await db.getIOUById(iOweThem))?.openAmount).toBe(400);
   });
 
   it('lists only debts with money still outstanding', async () => {

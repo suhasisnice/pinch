@@ -1,5 +1,5 @@
 import { getAdapter } from '../connection';
-import { OutingRow, TransactionRow } from '../types';
+import { OutingReserveRow, OutingRow, TransactionRow } from '../types';
 
 export interface OutingSummary {
   id: number;
@@ -18,6 +18,15 @@ export interface OutingSummary {
   /** null when no budget was set. */
   budgetFraction: number | null;
   isOverBudget: boolean;
+  /**
+   * Money set aside for this outing — summed from OutingReserves, never
+   * stored directly, so it cannot drift from the ledger entries that
+   * produced it. Separate from `totalSpent`: reserving money and spending it
+   * are two different events (PRODUCT_SPEC §"Reserved vs spent").
+   */
+  reservedAmount: number;
+  /** What is still needed to fully fund the plan, or null with no budget set. */
+  stillNeeded: number | null;
 }
 
 export async function createOuting(input: {
@@ -109,6 +118,7 @@ export async function getOutings(includeClosed = true): Promise<OutingSummary[]>
       transactionCount: number;
       openOwed: number | null;
       headcount: number;
+      reservedAmount: number | null;
     }
   >(
     `SELECT
@@ -125,7 +135,9 @@ export async function getOutings(includeClosed = true): Promise<OutingSummary[]>
                    WHERE i.outing_id = Outings.id AND i.direction = 'THEY_OWE_ME'
                  ) WHERE open_amount > 0.009), 0) AS openOwed,
        COALESCE((SELECT COUNT(DISTINCT i.contact_id) FROM IOUs i
-                 WHERE i.outing_id = Outings.id), 0) AS headcount
+                 WHERE i.outing_id = Outings.id), 0) AS headcount,
+       COALESCE((SELECT SUM(r.amount) FROM OutingReserves r
+                 WHERE r.outing_id = Outings.id), 0) AS reservedAmount
      FROM Outings
      ${includeClosed ? '' : 'WHERE closed_at IS NULL'}
      ORDER BY starts_at DESC;`
@@ -134,6 +146,7 @@ export async function getOutings(includeClosed = true): Promise<OutingSummary[]>
   return rows.map((row) => {
     const totalSpent = row.totalSpent ?? 0;
     const yourShare = Math.max(0, totalSpent - (row.openOwed ?? 0));
+    const reservedAmount = row.reservedAmount ?? 0;
     return {
       id: row.id,
       name: row.name,
@@ -149,8 +162,84 @@ export async function getOutings(includeClosed = true): Promise<OutingSummary[]>
       headcount: row.headcount + 1,
       budgetFraction: row.budget_amount ? totalSpent / row.budget_amount : null,
       isOverBudget: row.budget_amount != null && totalSpent > row.budget_amount,
+      reservedAmount,
+      stillNeeded: row.budget_amount != null ? Math.max(0, row.budget_amount - reservedAmount) : null,
     };
   });
+}
+
+/**
+ * Sets aside money for an outing without moving cash — the reserve ledger
+ * entry mirrors GoalContributions exactly and for the same reason:
+ * `reservedAmount` above is always summed fresh from this table, so it
+ * cannot drift from what was actually reserved and released.
+ *
+ * Never writes a Transaction: the money has not moved, it is still in the
+ * account and merely spoken for (same reasoning as contributeToGoal).
+ */
+export async function reserveForOuting(
+  outingId: number,
+  amount: number,
+  source: 'MANUAL' | 'AUTO' = 'MANUAL'
+): Promise<number> {
+  if (amount === 0) return 0;
+  const db = getAdapter();
+  const result = await db.runAsync(
+    `INSERT INTO OutingReserves (outing_id, amount, source, created_at) VALUES (?, ?, ?, ?);`,
+    [outingId, amount, source, new Date().toISOString()]
+  );
+  return result.lastInsertRowId;
+}
+
+/**
+ * Frees up previously reserved money. A negative-amount ledger entry rather
+ * than deleting rows, so the full history of what was reserved and when
+ * stays auditable (PRODUCT_SPEC §11: never discard evidence merely because
+ * it was superseded).
+ */
+export async function releaseOutingReserve(
+  outingId: number,
+  amount: number,
+  source: 'MANUAL' | 'AUTO' = 'MANUAL'
+): Promise<number> {
+  return reserveForOuting(outingId, -Math.abs(amount), source);
+}
+
+export async function getOutingReserved(outingId: number): Promise<number> {
+  const db = getAdapter();
+  const row = await db.getFirstAsync<{ total: number | null }>(
+    `SELECT COALESCE(SUM(amount), 0) AS total FROM OutingReserves WHERE outing_id = ?;`,
+    [outingId]
+  );
+  return row?.total ?? 0;
+}
+
+export async function getReserveHistory(outingId: number): Promise<OutingReserveRow[]> {
+  const db = getAdapter();
+  return db.getAllAsync<OutingReserveRow>(
+    `SELECT * FROM OutingReserves WHERE outing_id = ? ORDER BY created_at DESC;`,
+    [outingId]
+  );
+}
+
+/**
+ * Total money currently protected across every open outing — the Outings
+ * side of "protected money" in the budget engine (see math/budget.ts).
+ *
+ * Scoped to outings that are not yet closed: closing an outing already means
+ * "done," so its reserve should stop claiming a share of the budget even if
+ * nothing explicitly released it back with releaseOutingReserve. The ledger
+ * rows themselves are never deleted.
+ */
+export async function getTotalOutingReserved(): Promise<number> {
+  const db = getAdapter();
+  const row = await db.getFirstAsync<{ total: number | null }>(
+    `SELECT COALESCE(SUM(r.amount), 0) AS total
+     FROM OutingReserves r
+     JOIN Outings ON Outings.id = r.outing_id
+     WHERE Outings.closed_at IS NULL;`
+  );
+  return row?.total ?? 0;
 }
 
 export async function getOutingById(id: number): Promise<OutingSummary | null> {

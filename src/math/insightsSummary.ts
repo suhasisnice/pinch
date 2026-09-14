@@ -29,6 +29,8 @@ export interface Finding {
    * most useful thing on the screen.
    */
   weight: number;
+  /** Set when the finding is about one specific category, so the screen can offer "View X spending →". */
+  category?: string;
 }
 
 export interface FindingsInput {
@@ -142,6 +144,7 @@ export function buildFindings(input: FindingsInput): Finding[] {
           : `${Math.round(top.fraction * 100)}% of everything you have spent this period.`,
       tone: shareOfLimit >= 0.5 ? 'WARNING' : 'NEUTRAL',
       weight: shareOfLimit >= 0.5 ? 75 : 45,
+      category: top.category,
     });
   }
 
@@ -176,6 +179,7 @@ export function buildFindings(input: FindingsInput): Finding[] {
       detail: `${money(mover.currentTotal)} so far against a typical ${money(mover.typicalTotal)}.`,
       tone: up ? 'WARNING' : 'GOOD',
       weight: 60,
+      category: mover.category,
     });
   }
 

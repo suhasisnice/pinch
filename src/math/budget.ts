@@ -183,12 +183,23 @@ export interface BudgetInput {
   openPayables: number;
   /** Money spoken for by savings goals. */
   goalReserve: number;
+  /** Money set aside for outings (see repos/outings.ts's OutingReserves ledger). Optional so every existing caller/test keeps compiling unchanged. */
+  outingReserve?: number;
   daysRemaining: number;
 }
 
 export interface BudgetBreakdown extends BudgetInput {
   /** Everything you can still spend across the rest of the period. */
   spendablePool: number;
+  /**
+   * Same value as spendablePool, named to match PRODUCT_SPEC §1.1's
+   * vocabulary: "money the user has chosen to make available for ordinary
+   * spending." Both fields exist so nothing already reading spendablePool
+   * has to change while Today (Phase 3) can read the spec's own term.
+   */
+  availableBudget: number;
+  /** goalReserve + outingReserve — money spoken for, whichever purpose. */
+  protectedMoney: number;
   /** spendablePool / daysRemaining. The headline number. */
   dailyLimit: number;
   /** True when the pool has gone negative — already overcommitted. */
@@ -209,6 +220,9 @@ export interface BudgetBreakdown extends BudgetInput {
  * raw CREDITs would treat a friend's repayment as fresh allowance.
  */
 export function computeBudget(input: BudgetInput): BudgetBreakdown {
+  const outingReserve = input.outingReserve ?? 0;
+  const protectedMoney = input.goalReserve + outingReserve;
+
   const spendablePool =
     input.allowance +
     input.topUps -
@@ -217,13 +231,16 @@ export function computeBudget(input: BudgetInput): BudgetBreakdown {
     input.settledOut +
     input.expectedRecovery -
     input.openPayables -
-    input.goalReserve;
+    protectedMoney;
 
   const days = Math.max(1, input.daysRemaining);
 
   return {
     ...input,
+    outingReserve,
+    protectedMoney,
     spendablePool,
+    availableBudget: spendablePool,
     dailyLimit: spendablePool / days,
     isUnderwater: spendablePool < 0,
   };
@@ -327,4 +344,150 @@ export function roundUpAmount(amount: number, step = 10): number {
   if (step <= 0) return 0;
   const rounded = Math.ceil(amount / step) * step;
   return Number((rounded - amount).toFixed(2));
+}
+
+// ---------------------------------------------------------------------------
+// Balance consistency
+// ---------------------------------------------------------------------------
+
+export interface BalanceConsistency {
+  /**
+   * bankBalance minus (availableBudget + protectedMoney). Positive: the bank
+   * has money the ledger does not know about. Negative: the ledger thinks
+   * there is more than the bank actually has — usually a missed transaction.
+   */
+  discrepancy: number;
+  /** True when the gap is small enough to be rounding/pending-settlement noise. */
+  isConsistent: boolean;
+}
+
+/** Below this gap, don't bother the user — ordinary noise, not a missed transaction. */
+export const BALANCE_CONSISTENCY_TOLERANCE = 50;
+
+/**
+ * Compares the bank balance the user actually typed in against what the
+ * transaction ledger thinks should be there.
+ *
+ * The two numbers come from unrelated sources — one observed, one derived
+ * from parsed transactions — so PRODUCT_SPEC §1.1's "bank balance >= available
+ * budget" is not an identity this engine can enforce by construction; it can
+ * only measure the gap and say whether it is big enough to matter. Returns
+ * null when no balance has ever been recorded, so a caller can distinguish
+ * "never checked" from "checked and it matches."
+ *
+ * This is the same primitive Phase 7's missed-transaction reconciliation
+ * needs ("Expected balance 8,200. User verifies bank and enters 7,900...
+ * 300 unaccounted") — built once here as pure math, wired into a
+ * find/add-manually/ignore flow whichever phase gets to that UI.
+ */
+export function checkBalanceConsistency(
+  bankBalance: number | null,
+  availableBudget: number,
+  protectedMoney: number
+): BalanceConsistency | null {
+  if (bankBalance === null) return null;
+  const discrepancy = bankBalance - (availableBudget + protectedMoney);
+  return { discrepancy, isConsistent: Math.abs(discrepancy) <= BALANCE_CONSISTENCY_TOLERANCE };
+}
+
+// ---------------------------------------------------------------------------
+// Goal tracking status — Phase 4.
+// ---------------------------------------------------------------------------
+
+export type GoalTrackingStatus = 'ON_TRACK' | 'BEHIND';
+
+/**
+ * Whether a goal with a deadline has saved its fair share of the time
+ * elapsed so far — the "ON TRACK" badge `SPOTIFY_FINANCE_UI_PROMPT.md`'s
+ * goal-row example shows.
+ *
+ * Deliberately time-elapsed-vs-money-saved, not a comparison against a
+ * historical contribution rate: that would need a query per goal (its full
+ * `GoalContributions` history) just to answer a status a single subtraction
+ * already answers correctly — a goal that has saved 40% of its target 40%
+ * of the way to its deadline is on pace by definition, regardless of
+ * whether that came in one contribution or ten.
+ *
+ * Returns null for a goal with no deadline — "ahead of" or "behind" nothing
+ * is not a real question until there is a date to be ahead of or behind.
+ */
+export function goalTrackingStatus(
+  savedAmount: number,
+  targetAmount: number,
+  createdAt: string,
+  deadline: string | null,
+  now: Date = new Date()
+): GoalTrackingStatus | null {
+  if (!deadline || targetAmount <= 0) return null;
+
+  const totalMs = Date.parse(deadline) - Date.parse(createdAt);
+  if (totalMs <= 0) return null;
+
+  const elapsedMs = now.getTime() - Date.parse(createdAt);
+  const expectedFraction = Math.max(0, Math.min(1, elapsedMs / totalMs));
+  const actualFraction = Math.max(0, Math.min(1, savedAmount / targetAmount));
+
+  // A little slack: a goal funded in occasional lump sums (allowance day,
+  // not daily) shouldn't flip to BEHIND the moment it isn't perfectly
+  // linear against the calendar.
+  const SLACK = 0.05;
+  return actualFraction + SLACK >= expectedFraction ? 'ON_TRACK' : 'BEHIND';
+}
+
+/**
+ * A projected finish date for a goal with no deadline, from its current
+ * saving rate. Returns null when nothing has been saved yet — there is no
+ * rate to project from, and dividing by a zero pace would only produce a
+ * misleadingly precise-looking "never."
+ */
+export function estimatedCompletionDate(
+  savedAmount: number,
+  targetAmount: number,
+  createdAt: string,
+  now: Date = new Date()
+): Date | null {
+  const remaining = targetAmount - savedAmount;
+  if (remaining <= 0) return now;
+  if (savedAmount <= 0) return null;
+
+  const daysSoFar = Math.max(1, (now.getTime() - Date.parse(createdAt)) / MS_PER_DAY);
+  const dailyRate = savedAmount / daysSoFar;
+  if (dailyRate <= 0) return null;
+
+  const daysRemaining = remaining / dailyRate;
+  return new Date(now.getTime() + daysRemaining * MS_PER_DAY);
+}
+
+// ---------------------------------------------------------------------------
+// Outing affordability — Phase 5.
+// ---------------------------------------------------------------------------
+
+export type OutingAffordability = 'COMFORTABLE' | 'TIGHT' | 'DISRUPTIVE';
+
+/**
+ * How much room a planned outing leaves once its money is set aside — the
+ * spec's Comfortable/Tight/Disruptive states. `PRODUCT_SPEC.md` says the app
+ * "must not block creation," so this is advisory only: nothing here stops
+ * `reserveForOuting` from running.
+ *
+ * Same shape as `canIAfford`'s severity ladder (`newDailyLimit` relative to
+ * the current one), deliberately: reserving for an outing and spending on
+ * one impulse purchase both ask the identical question — "how much does
+ * committing this money change what I have left per day?" — so they should
+ * not read as two different mental models with two different thresholds.
+ */
+export function outingAffordability(
+  fundingTarget: number,
+  availableBudget: number,
+  daysRemaining: number
+): OutingAffordability {
+  if (fundingTarget <= 0) return 'COMFORTABLE';
+
+  const days = Math.max(1, daysRemaining);
+  const dailyLimit = availableBudget / days;
+  const dailyLimitAfter = (availableBudget - fundingTarget) / days;
+
+  if (availableBudget - fundingTarget < 0) return 'DISRUPTIVE';
+  if (dailyLimit > 0 && dailyLimitAfter <= dailyLimit * 0.5) return 'TIGHT';
+  return 'COMFORTABLE';
 }

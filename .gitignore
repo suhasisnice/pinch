@@ -16,3 +16,10 @@ modules/*/android/.gradle/
 
 # Local scratch (screenshots, logs)
 errors/
+
+# Screenshots dropped in the root to report a bug. These are pictures of a
+# real ledger — account digits, UPI references, contact names — and have no
+# business in the history of a repository about handling that data carefully.
+Screenshot*.png
+Screenshot*.jpg
+Screenshot*.jpeg

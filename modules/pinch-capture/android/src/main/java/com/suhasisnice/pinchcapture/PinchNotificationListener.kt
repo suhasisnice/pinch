@@ -6,8 +6,8 @@ import android.service.notification.StatusBarNotification
 import org.json.JSONObject
 
 /**
- * Captures payment notifications from banking and UPI apps, and bank alert
- * emails from Gmail.
+ * Captures payment notifications from banking and UPI apps, and
+ * transaction-shaped emails from Gmail.
  *
  * This exists because a large share of student spending never produces an SMS
  * at all — a GPay or PhonePe payment posts a notification and nothing else. It
@@ -24,10 +24,19 @@ import org.json.JSONObject
  * personal email gets written to the on-disk capture queue, if only
  * momentarily before JS discards it — a much bigger privacy footprint than
  * "restrict to known payment apps" was ever meant to allow. So a second,
- * content-level filter applies to Gmail alone: the notification must itself
- * look like a bank alert (its sender name matches a known bank) before it is
- * ever buffered. Every other package on the list is trusted on package
- * identity alone, same as before.
+ * content-level filter applies to Gmail alone: the notification must at
+ * least look transaction-shaped — a money verb next to a number — before it
+ * is ever buffered.
+ *
+ * This deliberately does not require the sender to be a recognised bank. An
+ * SMS from a friend saying "sent you 500" is not rejected outright either —
+ * parseMessage still scores it, and a low-confidence hit lands in the review
+ * inbox rather than vanishing — so an email making the same claim should not
+ * be held to a stricter standard just because the transport is Gmail rather
+ * than SMS. Whether it was really a bank, and how much to trust it, is
+ * parseMessage's decision once the message reaches JS, not a reason to keep
+ * it from ever getting there. Every other package on the list is trusted on
+ * package identity alone, same as before.
  */
 class PinchNotificationListener : NotificationListenerService() {
 
@@ -60,10 +69,10 @@ class PinchNotificationListener : NotificationListenerService() {
         if (body.isBlank()) return
 
         // The content-level gate described above: an email notification only
-        // ever gets buffered when it reads like a bank sent it. A payment
-        // app's notification skips this — its package is already the trust
-        // signal.
-        if (isEmail && !looksLikeBankAlert(body)) return
+        // ever gets buffered when it reads like it is describing a payment at
+        // all. A payment app's notification skips this — its package is
+        // already the trust signal.
+        if (isEmail && !looksLikeMoneyMessage(body)) return
 
         val entry = JSONObject().apply {
             put("source", "NOTIFICATION")
@@ -80,10 +89,18 @@ class PinchNotificationListener : NotificationListenerService() {
     private fun isEmailApp(packageName: String): Boolean =
         EMAIL_PACKAGES.any { packageName.startsWith(it) }
 
-    private fun looksLikeBankAlert(body: String): Boolean {
-        val lower = body.lowercase()
-        return KNOWN_BANK_NAMES.any { lower.contains(it) }
-    }
+    /**
+     * A coarse approximation of parseMessage's own amount-plus-verb gate —
+     * deliberately not the real thing. This only decides whether an email is
+     * worth handing to JS at all; parseMessage, running there a moment
+     * later, makes the real call on amount, direction and confidence with
+     * the full regex set. Requiring both a transaction verb and a digit
+     * still excludes the overwhelming majority of an inbox — newsletters,
+     * personal chat, calendar invites — without trying to duplicate the
+     * parser's precision natively.
+     */
+    private fun looksLikeMoneyMessage(body: String): Boolean =
+        MONEY_VERBS.containsMatchIn(body) && HAS_DIGIT.containsMatchIn(body)
 
     companion object {
         // Gmail proper, plus Gmail Go (same alerts, lighter app, common on
@@ -93,18 +110,11 @@ class PinchNotificationListener : NotificationListenerService() {
             "com.google.android.gm.lite"
         )
 
-        // Matched against the notification's sender name and subject, not an
-        // SMS header, so these are the names a bank actually signs its mail
-        // as rather than the short codes used in KNOWN_BANK_TOKENS elsewhere.
-        private val KNOWN_BANK_NAMES = listOf(
-            "canara", "hdfc", "icici", "state bank of india", "sbi", "axis bank",
-            "kotak", "yes bank", "idfc", "indusind", "punjab national bank", "pnb",
-            "bank of baroda", "union bank", "federal bank", "rbl bank",
-            "au small finance bank", "bandhan bank", "citibank", "hsbc",
-            "standard chartered", "karnataka bank", "south indian bank",
-            "city union bank", "dcb bank", "bank of india", "central bank of india",
-            "uco bank", "indian overseas bank", "punjab & sind", "indian bank"
+        private val MONEY_VERBS = Regex(
+            "\\b(?:debited|credited|spent|withdrawn|deducted|paid|sent|received|deposited|purchase)\\b",
+            RegexOption.IGNORE_CASE
         )
+        private val HAS_DIGIT = Regex("\\d")
 
         private val PAYMENT_PACKAGES = listOf(
             // UPI apps

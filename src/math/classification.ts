@@ -8,7 +8,7 @@
  * money is eventually spent on gets captured separately.
  */
 
-export type NonSpendReason = 'WALLET_TOPUP' | 'CARD_BILL' | 'CASH_WITHDRAWAL';
+export type NonSpendReason = 'WALLET_TOPUP' | 'CARD_BILL' | 'CASH_WITHDRAWAL' | 'INVESTMENT';
 
 export interface ClassifiableTransaction {
   direction: 'DEBIT' | 'CREDIT';
@@ -66,13 +66,22 @@ export function classifyNonSpend(tx: ClassifiableTransaction): NonSpendReason | 
  * it: cash spending sends no messages, so nothing would ever replace it and
  * the month would look far cheaper than it was. Under-reporting is the worse
  * error, so the withdrawal stays counted and only gets a truthful category.
+ *
+ * INVESTMENT removes from spending on *either* direction: a contribution
+ * (debit) is money moved into a different asset the user still owns, same
+ * reasoning as a wallet top-up; a withdrawal (credit) is that same money
+ * coming back, not new income, same reasoning a friend's repayment is not
+ * income. `getGrossSpendBetween`/`getIncomeBetween` both already filter on
+ * `non_spend_reason IS NULL` regardless of which one flags a row, so no
+ * query needed to change for the credit side to be excluded correctly.
  */
 export function removesFromSpending(reason: NonSpendReason | null): boolean {
-  return reason === 'WALLET_TOPUP' || reason === 'CARD_BILL';
+  return reason === 'WALLET_TOPUP' || reason === 'CARD_BILL' || reason === 'INVESTMENT';
 }
 
 export const NON_SPEND_LABELS: Record<NonSpendReason, string> = {
   WALLET_TOPUP: 'Moved to a wallet',
   CARD_BILL: 'Credit card bill',
   CASH_WITHDRAWAL: 'Cash withdrawn',
+  INVESTMENT: 'Investment',
 };

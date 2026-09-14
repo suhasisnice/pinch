@@ -125,16 +125,28 @@ export async function settleIOU(
 }
 
 /**
- * Settles a contact's open IOUs oldest-first out of a single payment, which is
- * how repayment actually arrives: one UPI transfer covering several bills.
- * Returns how much was applied and which IOUs it touched.
+ * Settles a contact's open THEY_OWE_ME debts oldest-first out of a single
+ * incoming payment, which is how repayment actually arrives: one UPI
+ * transfer covering several bills.
+ *
+ * Direction-filtered on purpose. `getOpenIOUsForContact` returns both
+ * directions for a contact you both lend to and borrow from, and money
+ * arriving can only ever close a debt where *they* owe *you* — applying it
+ * against an I_OWE_THEM row instead (whichever happened to be older) would
+ * mark a debt you owe as paid off by a payment that was never yours to make,
+ * for money you just received rather than sent. The mirror-image filter
+ * already existed for the opposite direction (see `postTransaction`'s
+ * SETTLE_OUT branch, which only ever touches `I_OWE_THEM` rows); this was
+ * the one direction that had no filter at all.
  */
 export async function settleContactBalance(
   contactId: number,
   amount: number,
   transactionId?: number | null
 ): Promise<{ applied: number; iouIds: number[] }> {
-  const open = await getOpenIOUsForContact(contactId);
+  const open = (await getOpenIOUsForContact(contactId)).filter(
+    (iou) => iou.direction === 'THEY_OWE_ME'
+  );
   let remaining = amount;
   let applied = 0;
   const iouIds: number[] = [];

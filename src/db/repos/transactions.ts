@@ -1,5 +1,6 @@
 import { getAdapter } from '../connection';
-import { CaptureSource, Direction, TransactionKind, TransactionRow } from '../types';
+import { CaptureSource, Direction, TransactionKind, TransactionRow, TransactionStatus } from '../types';
+import { sameMerchant } from '../../math/merchantClassifier';
 
 export interface NewTransaction {
   amount: number;
@@ -14,6 +15,10 @@ export interface NewTransaction {
   dedupKey?: string | null;
   outingId?: number | null;
   note?: string | null;
+  /** Defaults to COMPLETED — see TransactionStatus. */
+  status?: TransactionStatus;
+  /** A manual ledger correction, not a new kind — see TransactionRow.is_adjustment. */
+  isAdjustment?: boolean;
 }
 
 /**
@@ -40,8 +45,8 @@ export async function addTransaction(input: NewTransaction): Promise<number> {
   const result = await db.runAsync(
     `INSERT INTO Transactions
        (amount, direction, kind, merchant, category, occurred_at, source,
-        raw_text, external_ref, dedup_key, outing_id, note, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        raw_text, external_ref, dedup_key, outing_id, note, status, is_adjustment, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
     [
       Math.abs(input.amount),
       input.direction,
@@ -55,10 +60,23 @@ export async function addTransaction(input: NewTransaction): Promise<number> {
       input.dedupKey ?? null,
       input.outingId ?? null,
       input.note ?? null,
+      input.status ?? 'COMPLETED',
+      input.isAdjustment ? 1 : 0,
       now,
     ]
   );
   return result.lastInsertRowId;
+}
+
+/**
+ * Moves a transaction along its lifecycle without touching kind, direction
+ * or amount. No row currently reaches anything but COMPLETED through the
+ * app itself — this is the primitive Phase 7 writes into once ingestion can
+ * recognise a pending or failed payment instead of discarding it.
+ */
+export async function setTransactionStatus(id: number, status: TransactionStatus): Promise<void> {
+  const db = getAdapter();
+  await db.runAsync(`UPDATE Transactions SET status = ? WHERE id = ?;`, [status, id]);
 }
 
 export async function getTransactionById(id: number): Promise<TransactionRow | null> {
@@ -94,8 +112,19 @@ export async function setTransactionOuting(id: number, outingId: number | null):
   await db.runAsync(`UPDATE Transactions SET outing_id = ? WHERE id = ?;`, [outingId, id]);
 }
 
+/**
+ * Deletes a transaction outright.
+ *
+ * `transfer_pair_id` is a bare column with no foreign key, so a plain
+ * `DELETE` used to leave the other leg of a linked transfer pointing at a
+ * row that no longer existed — still excluded from spend, forever, for a
+ * transfer that no longer exists. `unmarkTransfer` already does exactly the
+ * symmetric-null this needs (it exists for the "undo a detected transfer"
+ * flow); calling it first is a no-op when there is no pairing to clear.
+ */
 export async function deleteTransaction(id: number): Promise<void> {
   const db = getAdapter();
+  await unmarkTransfer(id);
   await db.runAsync(`DELETE FROM Transactions WHERE id = ?;`, [id]);
 }
 
@@ -117,6 +146,7 @@ export async function updateTransaction(
     note?: string | null;
     direction?: Direction;
     kind?: TransactionKind;
+    isAdjustment?: boolean;
   }
 ): Promise<void> {
   const db = getAdapter();
@@ -150,6 +180,10 @@ export async function updateTransaction(
   if (fields.kind !== undefined) {
     sets.push('kind = ?');
     params.push(fields.kind);
+  }
+  if (fields.isAdjustment !== undefined) {
+    sets.push('is_adjustment = ?');
+    params.push(fields.isAdjustment ? 1 : 0);
   }
   if (sets.length === 0) return;
 
@@ -316,7 +350,7 @@ export async function getGrossSpendBetween(startIso: string, endIso: string): Pr
        COALESCE(SUM(CASE WHEN kind = 'SPEND' THEN amount ELSE 0 END), 0)
        - COALESCE(SUM(CASE WHEN kind = 'REFUND' THEN amount ELSE 0 END), 0) AS total
      FROM Transactions
-     WHERE kind IN ('SPEND', 'REFUND') AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL
+     WHERE kind IN ('SPEND', 'REFUND') AND status = 'COMPLETED' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL
        AND occurred_at >= ? AND occurred_at < ?;`,
     [startIso, endIso]
   );
@@ -328,7 +362,7 @@ export async function getIncomeBetween(startIso: string, endIso: string): Promis
   const db = getAdapter();
   const row = await db.getFirstAsync<{ total: number | null }>(
     `SELECT COALESCE(SUM(amount), 0) AS total FROM Transactions
-     WHERE kind = 'INCOME' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL AND occurred_at >= ? AND occurred_at < ?;`,
+     WHERE kind = 'INCOME' AND status = 'COMPLETED' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL AND occurred_at >= ? AND occurred_at < ?;`,
     [startIso, endIso]
   );
   return row?.total ?? 0;
@@ -414,23 +448,108 @@ export async function getDailySpend(
  * routinely lags the paying app's push notification by minutes, not seconds
  * — the two reports of the same payment are rarely close enough to catch at
  * a tighter window.
+ *
+ * `signals.reference`, when given, is checked first and independently of the
+ * time window: a reference number is close to a certain identifier, and a
+ * bank's own confirmation SMS for a UPI payment has arrived hours after the
+ * paying app's push in the wild, well outside any window that wouldn't also
+ * false-match unrelated payments.
+ *
+ * `signals.merchant`, when given, guards against the opposite false
+ * positive: two *different* people paying the exact same amount within the
+ * window — a common coincidence at ₹100/₹200/₹500 round numbers — collapsing
+ * into "one payment reported twice" purely because nothing else was
+ * compared. A same-amount/same-direction row is only treated as the same
+ * payment if its merchant also plausibly matches (`sameMerchant`). Omitting
+ * `merchant` keeps the original amount+direction+window-only behaviour.
+ *
+ * What this deliberately does *not* do is guess when the merchant does not
+ * match. See `findUnconfirmedDuplicate` below for that case, which is
+ * common enough to matter and never safe to decide automatically.
  */
 export async function findProbableDuplicate(
   amount: number,
   direction: Direction,
   occurredAtIso: string,
-  windowSeconds = 360
+  windowSeconds = 360,
+  signals: { merchant?: string | null; reference?: string | null } = {}
 ): Promise<TransactionRow | null> {
   const db = getAdapter();
+
+  if (signals.reference) {
+    const byRef = await db.getFirstAsync<TransactionRow>(
+      `SELECT * FROM Transactions WHERE UPPER(external_ref) = UPPER(?) ORDER BY occurred_at DESC LIMIT 1;`,
+      [signals.reference]
+    );
+    if (byRef) return byRef;
+  }
+
   const at = new Date(occurredAtIso).getTime();
   const from = new Date(at - windowSeconds * 1000).toISOString();
   const to = new Date(at + windowSeconds * 1000).toISOString();
 
-  return db.getFirstAsync<TransactionRow>(
+  if (!signals.merchant) {
+    return db.getFirstAsync<TransactionRow>(
+      `SELECT * FROM Transactions
+       WHERE abs(amount - ?) < 0.01 AND direction = ? AND occurred_at >= ? AND occurred_at <= ?
+       ORDER BY occurred_at DESC LIMIT 1;`,
+      [amount, direction, from, to]
+    );
+  }
+
+  const candidates = await db.getAllAsync<TransactionRow>(
     `SELECT * FROM Transactions
      WHERE abs(amount - ?) < 0.01 AND direction = ? AND occurred_at >= ? AND occurred_at <= ?
-     ORDER BY occurred_at DESC LIMIT 1;`,
+     ORDER BY occurred_at DESC;`,
     [amount, direction, from, to]
+  );
+  return candidates.find((row) => sameMerchant(row.merchant, signals.merchant!)) ?? null;
+}
+
+/** How close two reports have to land before "the same payment twice" is even worth asking about. */
+export const NEAR_SIMULTANEOUS_SECONDS = 90;
+
+/**
+ * A transaction this message might be a second report of, where nothing can
+ * confirm it either way — the case the review inbox exists to ask about.
+ *
+ * The same payment is frequently named *differently* by its two sources: a
+ * UPI app labels the sender with whatever the phone's contacts call them
+ * ("Ravi Anna"), while the bank's SMS uses the name registered against the
+ * handle ("Rajesh Kumar M"). Those are one person and share no characters,
+ * so `findProbableDuplicate`'s merchant check can never connect them and
+ * the payment gets counted twice.
+ *
+ * Amount and timing alone would connect them — but they would also connect
+ * two people paying an identical amount seconds apart, which is exactly
+ * what happens when a group settles a shared bill at once. Merging those
+ * silently loses somebody's money.
+ *
+ * Neither answer is safe to assume, so this returns the candidate and the
+ * caller files it as a question rather than a decision. Requiring a
+ * *different* source narrows it to the shape that is actually ambiguous:
+ * one real-world event produces at most one message per channel, so two
+ * reports arriving on the same channel are two payments however alike they
+ * read.
+ */
+export async function findUnconfirmedDuplicate(
+  amount: number,
+  direction: Direction,
+  occurredAtIso: string,
+  source: CaptureSource
+): Promise<TransactionRow | null> {
+  const db = getAdapter();
+  const at = new Date(occurredAtIso).getTime();
+  const from = new Date(at - NEAR_SIMULTANEOUS_SECONDS * 1000).toISOString();
+  const to = new Date(at + NEAR_SIMULTANEOUS_SECONDS * 1000).toISOString();
+
+  return db.getFirstAsync<TransactionRow>(
+    `SELECT * FROM Transactions
+     WHERE abs(amount - ?) < 0.01 AND direction = ? AND source <> ?
+       AND excluded_at IS NULL
+       AND occurred_at >= ? AND occurred_at <= ?
+     ORDER BY occurred_at DESC LIMIT 1;`,
+    [amount, direction, source, from, to]
   );
 }
 
@@ -546,6 +665,23 @@ export async function setNonSpendReason(id: number, reason: string | null): Prom
 }
 
 /** True when any card purchase has been captured, not just the bill. */
+/**
+ * Net money currently sitting in investments — contributions minus
+ * withdrawals, both tagged `non_spend_reason = 'INVESTMENT'` regardless of
+ * direction (see `math/classification.ts`). Not a valuation: the app has no
+ * market data and V1 is offline-first, so this is "how much you've put in
+ * and not taken back," not "what it's worth today."
+ */
+export async function getTotalInvested(): Promise<number> {
+  const db = getAdapter();
+  const row = await db.getFirstAsync<{ total: number | null }>(
+    `SELECT COALESCE(SUM(CASE WHEN direction = 'DEBIT' THEN amount ELSE -amount END), 0) AS total
+     FROM Transactions
+     WHERE non_spend_reason = 'INVESTMENT' AND excluded_at IS NULL;`
+  );
+  return row?.total ?? 0;
+}
+
 export async function hasCardTransactions(): Promise<boolean> {
   const db = getAdapter();
   const row = await db.getFirstAsync<{ n: number }>(

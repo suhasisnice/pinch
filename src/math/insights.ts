@@ -472,6 +472,8 @@ export function spendingPersonality(slices: CategorySlice[]): SpendingPersonalit
     Subscriptions: { label: 'The Subscriber', blurb: `${percent}% on things that auto-renew` },
     Academics: { label: 'The Scholar', blurb: `${percent}% on actual college things` },
     Health: { label: 'The Careful One', blurb: `${percent}% on health` },
+    Bills: { label: 'The Grown-Up', blurb: `${percent}% on keeping the lights on` },
+    Rent: { label: 'The Tenant', blurb: `${percent}% went to a roof over your head` },
   };
 
   return (

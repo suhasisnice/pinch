@@ -1,8 +1,10 @@
 import * as db from '../db/dbService';
 import {
+  BalanceConsistency,
   BudgetBreakdown,
   ReceivableInput,
   TodayStatus,
+  checkBalanceConsistency,
   computeBudget,
   computeToday,
   expectedRecovery,
@@ -28,6 +30,19 @@ export interface BudgetSnapshot {
   goalReserveCapped: boolean;
   /** What goals asked for before the ceiling was applied. */
   goalReserveRequested: number;
+  /**
+   * The actual observed balance from BalanceSnapshots, projected forward —
+   * null until the user has typed one in at least once. Never derived from
+   * the period ledger: PRODUCT_SPEC §1.1 calls this "the actual
+   * reported/observed cash balance," and the app has no other source for it.
+   */
+  bankBalance: number | null;
+  /** budget.availableBudget, surfaced at the top level for convenience. */
+  availableBudget: number;
+  /** budget.protectedMoney, surfaced at the top level for convenience. */
+  protectedMoney: number;
+  /** null when bankBalance is null (never recorded). */
+  balanceConsistency: BalanceConsistency | null;
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -63,6 +78,8 @@ export async function getBudgetSnapshot(
     totalReceivable,
     totalPayable,
     pendingCaptures,
+    outingReserve,
+    balanceState,
   ] = await Promise.all([
     db.getGrossSpendBetween(period.startsOn, period.endsOn),
     db.getIncomeBetween(period.startsOn, period.endsOn),
@@ -74,6 +91,8 @@ export async function getBudgetSnapshot(
     db.getTotalReceivable(),
     db.getTotalPayable(),
     db.getPendingCaptureCount(),
+    db.getTotalOutingReserved(),
+    db.getBalanceState(),
   ]);
 
   // Weight each outstanding debt by how reliably that person actually pays.
@@ -113,11 +132,14 @@ export async function getBudgetSnapshot(
     expectedRecovery: expectedRecovery(receivables),
     openPayables: totalPayable,
     goalReserve,
+    outingReserve,
     daysRemaining: period.daysRemaining,
   });
 
   const spentToday = await db.getGrossSpendBetween(startOfDayIso(now), endOfDayIso(now));
   const daily = await db.getDailySpend(period.startsOn, period.endsOn);
+
+  const bankBalance = balanceState.projected;
 
   return {
     budget,
@@ -133,6 +155,10 @@ export async function getBudgetSnapshot(
     pendingCaptures,
     goalReserveCapped: goalReserveResult.capped,
     goalReserveRequested: goalReserveResult.requested,
+    bankBalance,
+    availableBudget: budget.availableBudget,
+    protectedMoney: budget.protectedMoney,
+    balanceConsistency: checkBalanceConsistency(bankBalance, budget.availableBudget, budget.protectedMoney),
   };
 }
 
@@ -140,7 +166,7 @@ async function getKindTotal(kind: string, startIso: string, endIso: string): Pro
   const adapter = db.getAdapter();
   const row = await adapter.getFirstAsync<{ total: number | null }>(
     `SELECT COALESCE(SUM(amount), 0) AS total FROM Transactions
-     WHERE kind = ? AND occurred_at >= ? AND occurred_at < ?;`,
+     WHERE kind = ? AND status = 'COMPLETED' AND occurred_at >= ? AND occurred_at < ?;`,
     [kind, startIso, endIso]
   );
   return row?.total ?? 0;

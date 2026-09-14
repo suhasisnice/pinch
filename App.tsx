@@ -189,7 +189,7 @@ export default function App() {
       <View style={styles.center}>
         <StatusBar barStyle="light-content" />
         <View style={styles.errorIcon}>
-          <Icon name="warning" size={28} color={palette.onErrorContainer} />
+          <Icon name="warning" size={28} color={palette.onDanger} />
         </View>
         <Text style={styles.errorTitle}>Pinch couldn't start</Text>
         <Text style={styles.errorBody}>{status.message}</Text>
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.xs,
   },
-  loadingMark: { ...typography.hero, fontSize: 40, color: palette.primary },
+  loadingMark: { ...typography.hero, fontSize: 40, color: palette.accent },
   loadingText: { ...typography.caption, color: palette.textSecondary },
 
   errorIcon: {
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.errorContainer,
+    backgroundColor: palette.dangerMuted,
     marginBottom: spacing.sm,
   },
   errorTitle: { ...typography.display, color: palette.textPrimary },

@@ -81,3 +81,20 @@ describe('everything else', () => {
     ).toBeNull();
   });
 });
+
+// Phase 9: an investment contribution/withdrawal is never auto-detected —
+// classifyNonSpend has no pattern for it, on either direction — so it is
+// only ever set by hand. removesFromSpending must still say yes for it on
+// both sides: a contribution is not spending, and a withdrawal is not income.
+describe('investments (manual only)', () => {
+  it('is never auto-detected by classifyNonSpend', () => {
+    expect(classifyNonSpend(debit('Rs.5000 debited from A/c XX1234 to ZERODHA'))).toBeNull();
+    expect(
+      classifyNonSpend({ direction: 'CREDIT', merchant: 'Zerodha', rawText: 'Rs.5000 credited' })
+    ).toBeNull();
+  });
+
+  it('removes from spending on both directions once set', () => {
+    expect(removesFromSpending('INVESTMENT')).toBe(true);
+  });
+});

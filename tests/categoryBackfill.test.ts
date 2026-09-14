@@ -76,15 +76,15 @@ describe('backfillCategories', () => {
   });
 
   it('picks up what a correction taught it, not just the seed vocabulary', async () => {
-    const first = await spend('Bhukkad Dhaba');
+    const first = await spend('Bhukkad Adda');
     await backfillCategories();
-    // Nothing in the seed data knows "bhukkad"; this one stays blank.
+    // Nothing in the seed data knows "bhukkad" or "adda"; this one stays blank.
     expect((await db.getTransactionById(first))?.category).toBeNull();
 
     const { learnFromCategoryCorrection } = await import(
       '../src/services/classificationService'
     );
-    await learnFromCategoryCorrection('Bhukkad Dhaba', 'Food');
+    await learnFromCategoryCorrection('Bhukkad Adda', 'Food');
 
     const second = await spend('Bhukkad Corner');
     const result = await backfillCategories();

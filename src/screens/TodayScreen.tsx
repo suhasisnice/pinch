@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { BudgetSnapshot, getBudgetSnapshot } from '../services/budgetService';
@@ -10,7 +10,6 @@ import { TransactionRow } from '../db/types';
 import { formatMoney, formatRelative } from '../utils/format';
 import { accentForState, categoryColor, layer, palette, radii, spacing, typography } from '../theme/theme';
 import {
-  BlurOrb,
   Button,
   Card,
   CardTitle,
@@ -104,21 +103,21 @@ export default function TodayScreen() {
             )} · ${snapshot.daysRemaining} days left`}
           />
         </View>
-        <Text
+        <Pressable
           style={styles.gear}
           onPress={() => navigation.navigate("Settings")}
           accessibilityRole="button"
           accessibilityLabel="Settings"
-          suppressHighlighting
+          hitSlop={12}
         >
           <Icon name="settings" size={22} color={palette.textSecondary} />
-        </Text>
+        </Pressable>
       </View>
 
       {snapshot.budget.spendablePool < 0 ? (
         <Card style={styles.troubleBanner}>
           <View style={styles.troubleHead}>
-            <Icon name="warning" size={16} color={palette.warningAmber} />
+            <Icon name="warning" size={16} color={palette.warning} />
             <Text style={styles.troubleTitle}>Your numbers look wrong</Text>
           </View>
           <Text style={styles.troubleBody}>
@@ -153,10 +152,41 @@ export default function TodayScreen() {
 
       {balance ? <BalanceCard state={balance} onChanged={load} /> : null}
 
+      {/* Available budget and protected money, named the way the product
+          spec's own vocabulary names them — both existed on BudgetSnapshot
+          since Phase 1 and were computed but never shown anywhere. */}
+      <FadeSlideIn delay={35}>
+      <Card onPress={() => setBreakdownVisible(true)}>
+        <Text style={styles.availableLabel}>Available budget</Text>
+        <Text style={styles.availableAmount}>{formatMoney(snapshot.availableBudget)}</Text>
+        {snapshot.protectedMoney > 0.009 ? (
+          <Text style={styles.protectedNote}>
+            {formatMoney(snapshot.protectedMoney)} protected for goals and outings
+          </Text>
+        ) : null}
+        <View style={styles.periodBar}>
+          <ProgressBar
+            fraction={snapshot.availableBudget > 0 ? snapshot.budget.grossSpend / snapshot.availableBudget : 0}
+            color={palette.info}
+            height={6}
+          />
+        </View>
+        {snapshot.balanceConsistency && !snapshot.balanceConsistency.isConsistent ? (
+          <View style={styles.consistencyNote}>
+            <Icon name="info" size={13} color={palette.warning} />
+            <Text style={styles.consistencyText}>
+              {snapshot.balanceConsistency.discrepancy > 0
+                ? `Your bank balance has ${formatMoney(snapshot.balanceConsistency.discrepancy)} more than this accounts for.`
+                : `Your bank balance has ${formatMoney(-snapshot.balanceConsistency.discrepancy)} less than this accounts for — a payment may be missing.`}
+            </Text>
+          </View>
+        ) : null}
+      </Card>
+      </FadeSlideIn>
+
       {/* The number. Everything else on this screen explains it. */}
       <FadeSlideIn>
       <Card style={styles.hero} onPress={() => setBreakdownVisible(true)}>
-        <BlurOrb color={accent} size={260} opacity={0.22} style={styles.heroGlow} />
         <Text style={[styles.heroLabel, { color: accent }]}>Safe to spend today</Text>
         <AnimatedMoney
           amount={Math.max(0, snapshot.today.remainingToday)}
@@ -177,7 +207,7 @@ export default function TodayScreen() {
           </Text>
         ) : snapshot.streakDays > 0 ? (
           <View style={styles.streakRow}>
-            <Icon name="streak" size={14} color={palette.warningAmber} />
+            <Icon name="streak" size={14} color={palette.warning} />
             <Text style={styles.heroNote}>{snapshot.streakDays}-day streak under budget</Text>
           </View>
         ) : null}
@@ -259,7 +289,7 @@ export default function TodayScreen() {
               subtitle={`${tx.category ?? 'Uncategorised'} · ${formatRelative(tx.occurred_at)}`}
               onPress={() => setDetailFor(tx)}
               right={
-                <Text style={[styles.txAmount, tx.direction === 'CREDIT' && { color: palette.mint }]}>
+                <Text style={[styles.txAmount, tx.direction === 'CREDIT' && { color: palette.accent }]}>
                   {tx.direction === 'CREDIT' ? '+' : '−'}
                   {formatMoney(tx.amount)}
                 </Text>
@@ -271,10 +301,10 @@ export default function TodayScreen() {
       </FadeSlideIn>
 
       {brokeIn !== null && brokeIn < snapshot.daysRemaining ? (
-        <Card style={{ backgroundColor: layer(palette.warningAmber, 0.12) }}>
+        <Card style={{ backgroundColor: layer(palette.warning, 0.12) }}>
           <Text style={styles.projection}>
             At your current pace you run out in{' '}
-            <Text style={{ color: palette.warningAmber, fontWeight: '800' }}>{brokeIn} days</Text>, with{' '}
+            <Text style={{ color: palette.warning, fontWeight: '800' }}>{brokeIn} days</Text>, with{' '}
             {snapshot.daysRemaining} left in the period.
           </Text>
         </Card>
@@ -362,11 +392,11 @@ function verdictColor(severity: string): string {
     case 'RECKLESS':
       return palette.danger;
     case 'TIGHT':
-      return palette.warningAmber;
+      return palette.warning;
     case 'FINE':
-      return palette.mint;
+      return palette.accent;
     default:
-      return palette.neonGreen;
+      return palette.accent;
   }
 }
 
@@ -385,7 +415,7 @@ function verdictHeadline(severity: string): string {
 
 const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  gear: { fontSize: 22, paddingTop: 4, paddingLeft: spacing.sm },
+  gear: { paddingTop: 4, paddingLeft: spacing.sm },
 
   // The one container in the app that gets the extra-extra-large radius.
   // MD3 reserves that shape for the thing a screen is actually about, and
@@ -395,18 +425,33 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xl,
     paddingHorizontal: spacing.lg,
     gap: 2,
-    borderRadius: radii.hero,
-    backgroundColor: palette.surfaceContainer,
+    borderRadius: radii.card,
+    backgroundColor: palette.surface,
     overflow: 'hidden',
   },
-  /** Sits behind the figure, tinted by the same accent the figure carries. */
-  heroGlow: { position: 'absolute', top: -110, alignSelf: 'center' },
   heroLabel: { ...typography.heroLabel },
   heroAmount: { ...typography.hero, marginTop: spacing.xs },
   heroSub: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
   heroBar: { width: '100%', marginTop: spacing.md },
   heroNote: { ...typography.caption, color: palette.textSecondary },
   heroExplain: { ...typography.micro, color: palette.textMuted, marginTop: spacing.sm },
+
+  availableLabel: {
+    ...typography.micro,
+    color: palette.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  availableAmount: { ...typography.heroCompact, color: palette.textPrimary, marginTop: 4 },
+  protectedNote: { ...typography.caption, color: palette.textMuted, marginTop: 2 },
+  periodBar: { marginTop: spacing.sm },
+  consistencyNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginTop: spacing.sm,
+  },
+  consistencyText: { ...typography.caption, color: palette.warning, flex: 1, lineHeight: 17 },
   streakRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: spacing.sm },
 
   verdict: { marginTop: spacing.sm, gap: 4 },
@@ -417,7 +462,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
 
   txAmount: { ...typography.bodyBold, color: palette.textPrimary },
-  link: { ...typography.caption, color: palette.primary },
+  link: { ...typography.caption, color: palette.accent },
 
   // A tonal container rather than an outlined one: in MD3 the fill is what
   // says "this is a different kind of thing", and a coloured hairline around
@@ -426,24 +471,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: palette.secondaryContainer,
+    backgroundColor: palette.accentMuted,
     paddingVertical: 14,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
   },
-  reviewText: { ...typography.bodyBold, color: palette.onSecondaryContainer },
-  reviewChevron: { color: palette.onSecondaryContainer, fontSize: 22 },
+  reviewText: { ...typography.bodyBold, color: palette.accent },
+  reviewChevron: { color: palette.accent, fontSize: 22 },
 
   projection: { ...typography.body, color: palette.textSecondary, lineHeight: 20 },
 
   // Amber stays: this is a status, and the colour is the fastest read on
   // the card. It is the container that becomes tonal, not the meaning.
   troubleBanner: {
-    backgroundColor: layer(palette.warningAmber, 0.12),
+    backgroundColor: layer(palette.warning, 0.12),
     gap: spacing.sm,
   },
   troubleHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  troubleTitle: { ...typography.cardTitle, color: palette.warningAmber },
+  troubleTitle: { ...typography.cardTitle, color: palette.warning },
   troubleBody: { ...typography.body, color: palette.textSecondary, lineHeight: 20 },
   troubleActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
 });

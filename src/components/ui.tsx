@@ -35,24 +35,6 @@ import Icon, { IconName } from './Icon';
  * writing.
  */
 
-/**
- * The atmospheric wash MD3 puts behind a surface: a large, heavily diffused
- * shape sitting partly off-canvas.
- *
- * Kept to a tenth of an opacity on purpose. At this strength it is not a
- * shape anyone will notice or name — it just stops the background reading
- * as a flat sheet of near-black, which is the difference between a dark
- * theme and a dark *design*.
- */
-function ScreenAtmosphere() {
-  return (
-    <View pointerEvents="none" style={styles.atmosphere}>
-      <BlurOrb color={palette.primary} size={340} opacity={0.1} style={styles.atmosphereTop} />
-      <BlurOrb color={palette.tertiary} size={260} opacity={0.07} style={styles.atmosphereBottom} />
-    </View>
-  );
-}
-
 export function Screen({
   children,
   scroll = true,
@@ -65,14 +47,12 @@ export function Screen({
   if (!scroll) {
     return (
       <SafeAreaView style={styles.screen} edges={['top']}>
-        <ScreenAtmosphere />
         {children}
       </SafeAreaView>
     );
   }
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      <ScreenAtmosphere />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -123,7 +103,7 @@ export function Card({
         style={({ pressed }) => [
           styles.card,
           style,
-          pressed && { backgroundColor: layer(palette.primary, stateLayer.press) },
+          pressed && { backgroundColor: layer(palette.accent, stateLayer.press) },
         ]}
       >
         {children}
@@ -184,11 +164,13 @@ export function Button({
   }[resolved];
 
   const labelColor = {
-    filled: palette.onPrimary,
-    tonal: palette.onSecondaryContainer,
-    outlined: palette.primary,
-    text: palette.primary,
-    danger: palette.onErrorContainer,
+    filled: palette.onAccent,
+    // Spec: "Secondary: Dark pill" — a neutral dark surface, not a tint of
+    // the one accent (that would read as a second, weaker green button).
+    tonal: palette.textPrimary,
+    outlined: palette.accent,
+    text: palette.accent,
+    danger: palette.onDanger,
   }[resolved];
 
   // The caller's style carries layout (a flex:1 in a button row), so it rides
@@ -218,91 +200,45 @@ export function Button({
 }
 
 /**
- * Floating action button. Tertiary-coloured by MD3 convention, which is what
- * keeps it from competing with every filled button on the screen.
+ * A compact circular icon action — the spec's "Icon actions: Compact
+ * circular/rounded control", not a Material extended FAB with a label
+ * riding along it. `PHASE_3_TODAY.md` itself argues the Today add-action
+ * should be "a compact floating pill... rather than a giant floating
+ * circle," which points toward `Button` for that specific case; this stays
+ * available for a genuine icon-only floating action elsewhere.
+ *
+ * (Currently unused by any screen — kept as a design-system primitive for
+ * whichever phase needs a floating icon action next.)
  */
 export function FAB({
   icon,
-  label,
   onPress,
   accessibilityLabel,
   style,
 }: {
   icon: IconName;
-  label?: string;
   onPress: () => void;
-  /** Required when there is no visible label — an icon alone says nothing aloud. */
-  accessibilityLabel?: string;
+  accessibilityLabel: string;
   style?: ViewStyle;
 }) {
   const press = usePressScale(0.94);
 
   return (
-    <Animated.View style={[style, press.style, elevation.level3]}>
+    <Animated.View style={[style, press.style, elevation.level2]}>
       <Pressable
         onPress={onPress}
         onPressIn={press.onPressIn}
         onPressOut={press.onPressOut}
         accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel ?? label}
+        accessibilityLabel={accessibilityLabel}
         style={({ pressed }) => [
           styles.fab,
-          label ? styles.fabExtended : null,
-          pressed && { backgroundColor: layer(palette.onTertiary, stateLayer.press) },
+          pressed && { backgroundColor: layer(palette.onAccent, stateLayer.press) },
         ]}
       >
-        <Icon name={icon} size={22} color={palette.onTertiary} />
-        {label ? <Text style={styles.fabLabel}>{label}</Text> : null}
+        <Icon name={icon} size={22} color={palette.onAccent} />
       </Pressable>
     </Animated.View>
-  );
-}
-
-/**
- * A soft, out-of-focus orb of colour.
- *
- * MD3's atmospheric backgrounds are CSS blur on a coloured shape, which
- * React Native has no equivalent for — expo-blur blurs what is *behind* a
- * view, not the view itself. A radial gradient fading to nothing produces
- * the same effect honestly, and on the GPU, which a stack of translucent
- * circles faking a falloff would not.
- */
-export function BlurOrb({
-  color,
-  size,
-  opacity = 0.28,
-  style,
-}: {
-  color: string;
-  size: number;
-  opacity?: number;
-  style?: ViewStyle;
-}) {
-  // Concentric rings, each a little wider and fainter: an approximation of a
-  // gaussian falloff cheap enough to leave running behind a scrolling list.
-  const rings = 6;
-  return (
-    <View pointerEvents="none" style={[{ width: size, height: size }, style]}>
-      {Array.from({ length: rings }).map((_, index) => {
-        const scale = (index + 1) / rings;
-        const ringSize = size * scale;
-        return (
-          <View
-            key={index}
-            style={{
-              position: 'absolute',
-              left: (size - ringSize) / 2,
-              top: (size - ringSize) / 2,
-              width: ringSize,
-              height: ringSize,
-              borderRadius: ringSize / 2,
-              backgroundColor: color,
-              opacity: (opacity / rings) * (rings - index) * 0.6,
-            }}
-          />
-        );
-      })}
-    </View>
   );
 }
 
@@ -317,10 +253,10 @@ export function Chip({
   onPress?: () => void;
   color?: string;
 }) {
-  const selectedBackground = color ?? palette.secondaryContainer;
+  const selectedBackground = color ?? palette.accentMuted;
   // A caller-supplied tint can be any colour, so the label is measured
   // against it rather than assumed. See onColor in theme.ts.
-  const selectedLabel = color ? onColor(color) : palette.onSecondaryContainer;
+  const selectedLabel = color ? onColor(color) : palette.accent;
 
   return (
     <Pressable
@@ -331,7 +267,7 @@ export function Chip({
       style={({ pressed }) => [
         styles.chip,
         selected && { backgroundColor: selectedBackground, borderColor: 'transparent' },
-        pressed && { backgroundColor: layer(palette.primary, stateLayer.press) },
+        pressed && { backgroundColor: layer(palette.accent, stateLayer.press) },
       ]}
     >
       <Text style={[styles.chipLabel, selected && { color: selectedLabel, fontWeight: '500' }]}>
@@ -356,7 +292,7 @@ export function Field({
 
   return (
     <View style={styles.field}>
-      <Text style={[styles.fieldLabel, focused && { color: palette.primary }]}>{label}</Text>
+      <Text style={[styles.fieldLabel, focused && { color: palette.accent }]}>{label}</Text>
       <TextInput
         placeholderTextColor={palette.textMuted}
         {...inputProps}
@@ -370,7 +306,7 @@ export function Field({
         }}
         style={[
           styles.input,
-          focused && { borderBottomColor: palette.primary },
+          focused && { borderBottomColor: palette.accent },
           inputProps.style,
         ]}
       />
@@ -385,7 +321,7 @@ export function Field({
  */
 export function ProgressBar({
   fraction,
-  color = palette.primary,
+  color = palette.accent,
   height = 8,
 }: {
   fraction: number;
@@ -447,7 +383,7 @@ export function EmptyState({
   return (
     <View style={styles.empty}>
       <View style={styles.emptyIcon}>
-        <Icon name={icon} size={26} color={palette.onSecondaryContainer} />
+        <Icon name={icon} size={26} color={palette.accent} />
       </View>
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyBody}>{body}</Text>
@@ -459,7 +395,7 @@ export function EmptyState({
 export function Loading({ label }: { label?: string }) {
   return (
     <View style={styles.loading}>
-      <ActivityIndicator color={palette.primary} />
+      <ActivityIndicator color={palette.accent} />
       {label ? <Text style={styles.loadingLabel}>{label}</Text> : null}
     </View>
   );
@@ -547,7 +483,7 @@ export function Row({
       style={({ pressed }) => [
         styles.row,
         pressed && {
-          backgroundColor: layer(palette.primary, stateLayer.press),
+          backgroundColor: layer(palette.accent, stateLayer.press),
           borderRadius: radii.sm,
         },
       ]}
@@ -565,11 +501,6 @@ export function Dot({ color, size = 10 }: { color: string; size?: number }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.background },
-  // Anchored off-canvas so only the falloff is ever on screen — the shape
-  // itself never resolves into an object you could point at.
-  atmosphere: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
-  atmosphereTop: { position: 'absolute', top: -190, right: -120 },
-  atmosphereBottom: { position: 'absolute', bottom: -140, left: -110 },
   scrollContent: { padding: spacing.md, paddingBottom: spacing.xxl * 2, gap: spacing.md },
 
   titleBlock: { marginBottom: spacing.xs },
@@ -579,8 +510,8 @@ const styles = StyleSheet.create({
   // Tonal separation, not a border: MD3 leans on the surface stepping up a
   // tone rather than drawing a line around everything.
   card: {
-    backgroundColor: palette.surfaceContainerLow,
-    borderRadius: radii.lg,
+    backgroundColor: palette.surface,
+    borderRadius: radii.card,
     padding: spacing.md,
     ...elevation.level1,
   },
@@ -603,30 +534,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderRadius: radii.pill,
   },
-  buttonFilled: { backgroundColor: palette.primary },
-  buttonTonal: { backgroundColor: palette.secondaryContainer },
+  buttonFilled: { backgroundColor: palette.accent },
+  // Spec: "Secondary: Dark pill" — not a green tint (see labelColor above).
+  buttonTonal: { backgroundColor: palette.surfaceElevated },
   buttonOutlined: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: palette.outline,
+    borderColor: palette.border,
   },
   buttonText: { backgroundColor: 'transparent', paddingHorizontal: spacing.md },
-  buttonDanger: { backgroundColor: palette.errorContainer },
+  buttonDanger: { backgroundColor: palette.dangerMuted },
   buttonDisabled: { opacity: 0.38 },
   buttonLabel: { ...typography.label },
 
+  // 48px, not MD3's standard 56 — "compact," per the spec's icon-action language.
   fab: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
-    width: 56,
-    height: 56,
-    borderRadius: radii.fab,
-    backgroundColor: palette.tertiary,
+    width: 48,
+    height: 48,
+    borderRadius: radii.pill,
+    backgroundColor: palette.accent,
   },
-  fabExtended: { width: 'auto', paddingHorizontal: spacing.lg },
-  fabLabel: { ...typography.label, color: palette.onTertiary },
 
   chip: {
     paddingVertical: 8,
@@ -634,7 +563,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: palette.outlineVariant,
+    borderColor: palette.border,
   },
   chipLabel: { ...typography.micro, color: palette.textSecondary },
 
@@ -649,7 +578,7 @@ const styles = StyleSheet.create({
   // text field. The asymmetry is the whole signature — rounding all four
   // corners turns it back into a generic box.
   input: {
-    backgroundColor: palette.surfaceContainerHigh,
+    backgroundColor: palette.surfaceElevated,
     borderTopLeftRadius: radii.input,
     borderTopRightRadius: radii.input,
     paddingHorizontal: spacing.md,
@@ -657,13 +586,13 @@ const styles = StyleSheet.create({
     color: palette.textPrimary,
     fontSize: 16,
     borderBottomWidth: 2,
-    borderBottomColor: palette.outline,
+    borderBottomColor: palette.border,
   },
   fieldHint: { ...typography.micro, color: palette.textMuted },
 
   progressTrack: {
     width: '100%',
-    backgroundColor: palette.surfaceContainerHighest,
+    backgroundColor: palette.surfaceElevated,
     overflow: 'hidden',
   },
 
@@ -674,7 +603,7 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.secondaryContainer,
+    backgroundColor: palette.accentMuted,
   },
   emptyTitle: { ...typography.cardTitle, color: palette.textPrimary },
   emptyBody: {
@@ -691,9 +620,9 @@ const styles = StyleSheet.create({
   sheetBackdrop: { flex: 1, backgroundColor: palette.scrim, justifyContent: 'flex-end' },
   sheetDismissArea: { flex: 1 },
   sheet: {
-    backgroundColor: palette.surfaceContainerLow,
-    borderTopLeftRadius: radii.xl,
-    borderTopRightRadius: radii.xl,
+    backgroundColor: palette.surface,
+    borderTopLeftRadius: radii.sheet,
+    borderTopRightRadius: radii.sheet,
     maxHeight: '88%',
     paddingBottom: spacing.lg,
   },
@@ -701,7 +630,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 4,
     borderRadius: 2,
-    backgroundColor: palette.outlineVariant,
+    backgroundColor: palette.border,
     alignSelf: 'center',
     marginTop: spacing.sm,
   },
@@ -713,7 +642,7 @@ const styles = StyleSheet.create({
   },
   sheetTitle: { ...typography.display, fontSize: 24, lineHeight: 32, color: palette.textPrimary },
   sheetCloseHit: { paddingVertical: 6, paddingHorizontal: spacing.sm, borderRadius: radii.pill },
-  sheetClose: { ...typography.label, color: palette.primary },
+  sheetClose: { ...typography.label, color: palette.accent },
   sheetScroll: { flexGrow: 0 },
   sheetContent: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, gap: spacing.md },
 

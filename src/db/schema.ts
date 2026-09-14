@@ -24,6 +24,8 @@ export const CATEGORIES = [
   'Subscriptions',
   'Academics',
   'Health',
+  'Bills',
+  'Rent',
   'Other',
 ] as const;
 
@@ -81,4 +83,14 @@ export const DEFAULT_MERCHANT_RULES: ReadonlyArray<{ pattern: string; category: 
   { pattern: 'xerox', category: 'Academics' },
   { pattern: 'udemy', category: 'Academics' },
   { pattern: 'coursera', category: 'Academics' },
+  { pattern: 'bescom', category: 'Bills' },
+  { pattern: 'bwssb', category: 'Bills' },
+  { pattern: 'nobroker', category: 'Rent' },
+  // Longer, so it outranks "nobroker" above: NoBrokerHood is the apartment
+  // maintenance app, not rent.
+  { pattern: 'nobrokerhood', category: 'Bills' },
+  { pattern: 'stanza', category: 'Rent' },
+  { pattern: 'nestaway', category: 'Rent' },
+  { pattern: 'bmtc', category: 'Transport' },
+  { pattern: 'namma yatri', category: 'Transport' },
 ];

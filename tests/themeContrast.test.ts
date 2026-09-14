@@ -4,7 +4,7 @@ import { categoryColors, onColor, palette } from '../src/theme/theme';
  * Contrast is a property of the palette, so it can be checked like any other
  * property of it.
  *
- * A dark tonal scale is easy to get wrong in a way nobody notices in review:
+ * A dark palette is easy to get wrong in a way nobody notices in review:
  * every surface is a near-black and every muted text colour is a mid-grey,
  * and the gap between two of them can quietly close when a tone is nudged to
  * look better in isolation. This fails the build instead.
@@ -31,13 +31,13 @@ const AA = 4.5;
 describe('palette contrast', () => {
   const bodyPairs: Array<[string, string, string]> = [
     ['textPrimary on the page', palette.textPrimary, palette.background],
-    ['textPrimary on a card', palette.textPrimary, palette.surfaceContainerLow],
-    ['textSecondary on a card', palette.textSecondary, palette.surfaceContainerLow],
-    ['textMuted on a card', palette.textMuted, palette.surfaceContainerLow],
+    ['textPrimary on a card', palette.textPrimary, palette.surface],
+    ['textSecondary on a card', palette.textSecondary, palette.surface],
+    ['textMuted on a card', palette.textMuted, palette.surface],
     // The tightest pair in the app: the faintest text on the most raised
     // surface it is ever placed on. If anything is going to fail, it is this.
-    ['textMuted on a raised surface', palette.textMuted, palette.surfaceContainerHigh],
-    ['primary as a link on a card', palette.primary, palette.surfaceContainerLow],
+    ['textMuted on a raised surface', palette.textMuted, palette.surfaceElevated],
+    ['accent as a link on a card', palette.accent, palette.surface],
   ];
 
   it.each(bodyPairs)('%s clears AA', (_label, foreground, background) => {
@@ -45,10 +45,8 @@ describe('palette contrast', () => {
   });
 
   const onColourPairs: Array<[string, string, string]> = [
-    ['a filled button', palette.onPrimary, palette.primary],
-    ['a tonal button', palette.onSecondaryContainer, palette.secondaryContainer],
-    ['a FAB', palette.onTertiary, palette.tertiary],
-    ['a destructive button', palette.onErrorContainer, palette.errorContainer],
+    ['a filled button', palette.onAccent, palette.accent],
+    ['a destructive button', palette.onDanger, palette.danger],
   ];
 
   it.each(onColourPairs)('the label on %s clears AA', (_label, foreground, background) => {
@@ -58,13 +56,7 @@ describe('palette contrast', () => {
   it('keeps every surface tone distinguishable from the one below it', () => {
     // Tonal elevation only reads as depth if consecutive steps actually
     // differ. Too small a gap and the whole system collapses back to flat.
-    const ladder = [
-      palette.surfaceContainerLowest,
-      palette.surfaceContainerLow,
-      palette.surfaceContainer,
-      palette.surfaceContainerHigh,
-      palette.surfaceContainerHighest,
-    ];
+    const ladder = [palette.background, palette.surface, palette.surfaceElevated];
 
     for (let i = 1; i < ladder.length; i += 1) {
       expect(luminance(ladder[i])).toBeGreaterThan(luminance(ladder[i - 1]));
@@ -73,19 +65,10 @@ describe('palette contrast', () => {
 });
 
 describe('onColor', () => {
-  const tints = [
-    palette.violet,
-    palette.mint,
-    palette.warningAmber,
-    palette.neonGreen,
-    // The one that motivated this: a mid-tone red where a fixed dark label
-    // would have landed at 4.02:1 and nothing would have flagged it.
-    palette.danger,
-    palette.sky,
-    palette.pink,
-    palette.primary,
-    palette.tertiary,
-  ];
+  // accentMuted/dangerMuted are translucent overlays meant to sit over a
+  // surface, not opaque backgrounds a label sits "on" in isolation — this
+  // luminance math needs a solid hex, so only the solid tints are checked here.
+  const tints = [palette.info, palette.warning, palette.danger, palette.accent];
 
   it.each(tints)('picks a label that clears AA on %s', (tint) => {
     expect(contrast(onColor(tint), tint)).toBeGreaterThanOrEqual(AA);

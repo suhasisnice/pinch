@@ -422,7 +422,16 @@ const SEED_CATEGORY_TOKENS: Record<string, string[]> = {
   ],
 };
 
-function buildSeedInsert(): string {
+/**
+ * V8's own seed statement, frozen exactly as it shipped: a plain `INSERT`
+ * (not `OR IGNORE`), reading only `SEED_CATEGORY_TOKENS`. `buildSeedInsert`
+ * below was generalized to take a `seed` argument and switched to
+ * `OR IGNORE` for v9 onward — v8 already ran on every existing install
+ * under the original semantics, so its own migration keeps generating
+ * exactly that SQL rather than reading through the now-shared function.
+ * Never edit a migration that has already shipped; add the next one.
+ */
+function buildV8SeedInsert(): string {
   const rows: string[] = [];
   for (const [category, tokens] of Object.entries(SEED_CATEGORY_TOKENS)) {
     for (const token of tokens) {
@@ -442,7 +451,181 @@ const V8_CATEGORY_TOKENS: Migration = {
       weight INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (token, category)
     );`,
-    buildSeedInsert(),
+    buildV8SeedInsert(),
+  ],
+};
+
+// OR IGNORE so a later seed never overwrites a weight the user has already
+// taught for the same token and category. Used by v9 onward only — see
+// buildV8SeedInsert above for why v8 does not read through this.
+function buildSeedInsert(seed: Record<string, string[]>): string {
+  const rows: string[] = [];
+  for (const [category, tokens] of Object.entries(seed)) {
+    for (const token of tokens) {
+      rows.push(`('${token}', '${category}', ${SEED_TOKEN_WEIGHT})`);
+    }
+  }
+  return `INSERT OR IGNORE INTO CategoryTokenWeights (token, category, weight) VALUES ${rows.join(', ')};`;
+}
+
+// ---------------------------------------------------------------------------
+// v9 — Bills and Rent, which v8 had no category for at all (a BESCOM or
+// landlord payment carried zero signal), plus Bangalore transit it missed.
+// A separate migration rather than an edit to v8's list: v8 has already run
+// on every existing install, so only a new version reaches them.
+// ---------------------------------------------------------------------------
+const LOCAL_CATEGORY_TOKENS: Record<string, string[]> = {
+  Bills: [
+    'bescom', 'bwssb', 'bbmp', 'electricity', 'lpg', 'indane', 'bharatgas',
+    'hpgas', 'cylinder', 'bill', 'bills', 'recharge', 'postpaid',
+    'maintenance', 'mygate', 'nobrokerhood', 'apnacomplex',
+  ],
+  // No "pg" or "rental": "PAYU PG" is a payment gateway on countless
+  // statements, and "rental" is as often a bike or car as a flat.
+  Rent: [
+    'rent', 'landlord', 'nobroker', 'nestaway', 'zolo', 'stanza', 'colive',
+    'housing', 'lease',
+  ],
+  Transport: ['yatri', 'nammayatri', 'bmtc', 'bmrcl', 'ksrtc'],
+};
+
+const V9_LOCAL_CATEGORY_TOKENS: Migration = {
+  version: 9,
+  name: 'bills_rent_local_transit_tokens',
+  statements: [buildSeedInsert(LOCAL_CATEGORY_TOKENS)],
+};
+
+// ---------------------------------------------------------------------------
+// v10 — Phase 1 financial engine: outing reserves and a transaction lifecycle.
+//
+// OutingReserves mirrors GoalContributions exactly, for the same reason:
+// Goals already separate "spoken for" from "spent" via an append-only ledger
+// summed on read, so savedAmount cannot drift from the entries that produced
+// it. Outings had no equivalent, so Phase 5's "reserve money without moving
+// cash" had nothing to reserve into. A signed-amount ledger costs nothing an
+// isolated reserved_amount column wouldn't, and gets the same guarantee.
+//
+// `status` gives a transaction a lifecycle without touching kind or
+// direction. It defaults every row — old and new — to COMPLETED, because
+// nothing in the current parser produces anything else yet (it hard-rejects
+// failed/pending language outright rather than recording it as such). No
+// inline CHECK: every prior ADD COLUMN in this file is unconstrained
+// (non_spend_reason, excluded_at), so validity is enforced in the repo layer
+// rather than risking an ALTER TABLE ... ADD COLUMN CHECK this codebase has
+// never exercised against expo-sqlite on-device.
+// ---------------------------------------------------------------------------
+const V10_FINANCIAL_ENGINE: Migration = {
+  version: 10,
+  name: 'outing_reserves_and_transaction_status',
+  statements: [
+    `CREATE TABLE IF NOT EXISTS OutingReserves (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      outing_id INTEGER NOT NULL REFERENCES Outings(id) ON DELETE CASCADE,
+      amount REAL NOT NULL CHECK (amount <> 0),
+      source TEXT NOT NULL DEFAULT 'MANUAL' CHECK (source IN ('MANUAL', 'AUTO')),
+      created_at TEXT NOT NULL
+    );`,
+    `CREATE INDEX IF NOT EXISTS idx_outing_reserve ON OutingReserves(outing_id);`,
+
+    `ALTER TABLE Transactions ADD COLUMN status TEXT NOT NULL DEFAULT 'COMPLETED';`,
+    `CREATE INDEX IF NOT EXISTS idx_txn_status ON Transactions(status);`,
+  ],
+};
+
+// ---------------------------------------------------------------------------
+// v11 — Phase 2 manual transactions: an Adjustment marker.
+//
+// Not a new `kind` — see v5's own comment above on why that means rebuilding
+// the whole table. An adjustment is a manual correction to the ledger
+// ("I forgot to log 200 in cash spending"), and it should count toward the
+// budget exactly like the SPEND or INCOME it actually is; `is_adjustment`
+// only changes how it is labelled in the UI, never how any existing
+// spend/income/category/insights query sums it, so none of them change.
+// Unconstrained ADD COLUMN, matching v5/v6/v10's own precedent.
+// ---------------------------------------------------------------------------
+const V11_ADJUSTMENTS: Migration = {
+  version: 11,
+  name: 'transaction_adjustments',
+  statements: [
+    `ALTER TABLE Transactions ADD COLUMN is_adjustment INTEGER NOT NULL DEFAULT 0;`,
+    `CREATE INDEX IF NOT EXISTS idx_txn_adjustment ON Transactions(is_adjustment);`,
+  ],
+};
+
+// ---------------------------------------------------------------------------
+// v12 — Phase 7: raw-event retention.
+//
+// Before this, a message the parser rejected (or that a blocklist caught, or
+// that the duplicate matcher swallowed) left no row anywhere — it was gone
+// as completely as if the phone had never received it, which is exactly why
+// a dropped payment was undiagnosable: there was nothing left to diagnose.
+//
+// RawEvents stores every captured message exactly once, unconditionally,
+// before any parsing or filtering runs. ParsedEvents records what happened
+// to it each time it was (re)processed — one row per attempt, never
+// overwritten, so a message reprocessed under a newer parser version keeps
+// its old outcome on the record rather than losing the history of why it was
+// once rejected. `outcome` names exactly which gate a message met;
+// `reject_reason` carries the specific pattern/rule for HARD/SOFT rejects,
+// so "why did my payment not show up" becomes a query instead of a guess.
+// ---------------------------------------------------------------------------
+const V12_RAW_EVENTS: Migration = {
+  version: 12,
+  name: 'raw_event_retention',
+  statements: [
+    `CREATE TABLE IF NOT EXISTS RawEvents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source TEXT NOT NULL CHECK (source IN ('SMS', 'NOTIFICATION')),
+      sender TEXT,
+      body TEXT NOT NULL,
+      received_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );`,
+    `CREATE INDEX IF NOT EXISTS idx_rawevents_received ON RawEvents(received_at);`,
+
+    `CREATE TABLE IF NOT EXISTS ParsedEvents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      raw_event_id INTEGER NOT NULL REFERENCES RawEvents(id) ON DELETE CASCADE,
+      parser_version INTEGER NOT NULL,
+      outcome TEXT NOT NULL CHECK (outcome IN (
+        'POSTED', 'QUEUED', 'SKIPPED_BLOCKED', 'SKIPPED_NO_PARSE',
+        'SKIPPED_DUPLICATE', 'SKIPPED_ADD_FAILED'
+      )),
+      reject_reason TEXT,
+      amount REAL,
+      direction TEXT CHECK (direction IS NULL OR direction IN ('DEBIT', 'CREDIT')),
+      merchant TEXT,
+      confidence REAL,
+      transaction_id INTEGER REFERENCES Transactions(id) ON DELETE SET NULL,
+      capture_id INTEGER REFERENCES CaptureInbox(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL
+    );`,
+    `CREATE INDEX IF NOT EXISTS idx_parsedevents_raw ON ParsedEvents(raw_event_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_parsedevents_outcome ON ParsedEvents(outcome, created_at);`,
+  ],
+};
+
+// ---------------------------------------------------------------------------
+// v13 — "is this the same payment, or a different one?"
+//
+// Two sources reporting one payment often name the sender differently — a
+// UPI app uses the phone's contact name, the bank's SMS uses the name
+// registered against the handle — so no string comparison can connect them.
+// Matching on amount and timing alone would, but two people paying an
+// identical amount seconds apart (everyone settling a shared bill at once)
+// is a real thing that would then silently lose one of them.
+//
+// Neither guess is safe, so the app stops guessing: the capture goes to the
+// review inbox pointing at the transaction it might duplicate, and the
+// person who was there answers. PRODUCT_SPEC §1.4 — automatic when
+// confident, ask when uncertain.
+// ---------------------------------------------------------------------------
+const V13_POSSIBLE_DUPLICATE: Migration = {
+  version: 13,
+  name: 'capture_possible_duplicate',
+  statements: [
+    `ALTER TABLE CaptureInbox ADD COLUMN possible_duplicate_of INTEGER REFERENCES Transactions(id) ON DELETE SET NULL;`,
+    `CREATE INDEX IF NOT EXISTS idx_inbox_possible_dupe ON CaptureInbox(possible_duplicate_of);`,
   ],
 };
 
@@ -455,6 +638,11 @@ export const MIGRATIONS: Migration[] = [
   V6_NON_SPEND,
   V7_BALANCE,
   V8_CATEGORY_TOKENS,
+  V9_LOCAL_CATEGORY_TOKENS,
+  V10_FINANCIAL_ENGINE,
+  V11_ADJUSTMENTS,
+  V12_RAW_EVENTS,
+  V13_POSSIBLE_DUPLICATE,
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

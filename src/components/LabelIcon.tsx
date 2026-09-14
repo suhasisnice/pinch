@@ -14,7 +14,7 @@ import { palette } from '../theme/theme';
 export default function LabelIcon({
   label,
   size = 22,
-  color = palette.violet,
+  color = palette.info,
 }: {
   label: string | null | undefined;
   size?: number;
@@ -29,7 +29,7 @@ export default function LabelIcon({
 /** Same, in a tinted circle — the form used in list rows and card headers. */
 export function LabelIconBadge({
   label,
-  color = palette.violet,
+  color = palette.info,
   size = 40,
 }: {
   label: string | null | undefined;
@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
   badge: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.surfaceContainerHigh,
+    backgroundColor: palette.surfaceElevated,
     borderWidth: 1,
   },
 });

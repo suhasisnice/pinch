@@ -78,6 +78,26 @@ describe('resetData', () => {
     expect(spend).toBe(0);
   });
 
+  it('clears raw/parsed capture events along with the ledger they fed', async () => {
+    const rawEventId = await db.recordRawEvent({
+      source: 'SMS',
+      sender: 'VM-HDFCBK',
+      body: 'OTP 482913 for Rs.500 debit. Do not share.',
+      receivedAt: new Date().toISOString(),
+    });
+    await db.recordParsedEvent({
+      rawEventId,
+      parserVersion: 11,
+      outcome: 'SKIPPED_NO_PARSE',
+      rejectReason: 'hard reject: otp',
+    });
+
+    await db.resetData({ ledger: true });
+
+    expect(await db.getRecentRawEvents(10)).toHaveLength(0);
+    expect(await db.getParsedEventsForRawEvent(rawEventId)).toHaveLength(0);
+  });
+
   it('can erase everything when asked', async () => {
     await db.resetData({
       ledger: true,

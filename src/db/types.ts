@@ -19,6 +19,18 @@ export type CaptureSource = 'SMS' | 'NOTIFICATION' | 'MANUAL';
 
 export type IOUDirection = 'THEY_OWE_ME' | 'I_OWE_THEM';
 
+/**
+ * A transaction's lifecycle, independent of `kind`/`direction`.
+ *
+ * Every row defaults to COMPLETED — the parser currently hard-rejects
+ * failed/pending language rather than recording it, so nothing produces the
+ * other states yet. The column exists so Phase 7 can start writing PENDING
+ * and FAILED rows without a schema change, and so a failed payment can be
+ * excluded from spending sums structurally (Rule I) rather than only by
+ * never having been parsed into a row in the first place.
+ */
+export type TransactionStatus = 'COMPLETED' | 'PENDING' | 'FAILED' | 'REVERSED' | 'REFUNDED';
+
 export interface TransactionRow {
   id: number;
   amount: number;
@@ -38,6 +50,13 @@ export interface TransactionRow {
   /** Set when this left the account but was not spent on anything. */
   non_spend_reason: string | null;
   excluded_at: string | null;
+  status: TransactionStatus;
+  /**
+   * A manual correction to the ledger, not a new `kind` — a debit adjustment
+   * is still `SPEND` and a credit adjustment is still `INCOME` for every
+   * budget/insights query. This only changes how it is labelled. 0 or 1.
+   */
+  is_adjustment: number;
   created_at: string;
 }
 
@@ -115,6 +134,15 @@ export interface OutingRow {
   closed_at: string | null;
 }
 
+/** One entry in an outing's reserve ledger. Signed; summed on read, never stored as a total. */
+export interface OutingReserveRow {
+  id: number;
+  outing_id: number;
+  amount: number;
+  source: 'MANUAL' | 'AUTO';
+  created_at: string;
+}
+
 export interface GoalRow {
   id: number;
   name: string;
@@ -149,6 +177,12 @@ export interface CaptureInboxRow {
   status: CaptureStatus;
   transaction_id: number | null;
   dedup_key: string | null;
+  /**
+   * Set when this looks like it might be an already-recorded payment
+   * reported by a second source, but nothing could confirm it — the review
+   * inbox asks rather than guessing. See migration v13.
+   */
+  possible_duplicate_of: number | null;
   created_at: string;
 }
 

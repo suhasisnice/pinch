@@ -145,7 +145,7 @@ function UpdateBalanceSheet({
 
       {drift !== null && Math.abs(drift) > 0.5 ? (
         <View style={styles.driftBox}>
-          <Icon name="info" size={15} color={palette.warningAmber} />
+          <Icon name="info" size={15} color={palette.warning} />
           <Text style={styles.driftText}>
             {formatMoney(Math.abs(drift))}{' '}
             {drift < 0 ? 'less' : 'more'} than Pinch expected. That gap is usually cash spending,
@@ -175,17 +175,17 @@ const styles = StyleSheet.create({
   amount: { ...typography.heroCompact, fontSize: 30, color: palette.textPrimary, marginTop: 2 },
   empty: { ...typography.body, color: palette.textMuted, marginTop: spacing.xs },
   meta: { ...typography.micro, color: palette.textMuted, marginTop: 2, lineHeight: 15 },
-  update: { ...typography.caption, color: palette.primary, marginTop: spacing.sm },
+  update: { ...typography.caption, color: palette.accent, marginTop: spacing.sm },
 
   intro: { ...typography.body, color: palette.textSecondary, lineHeight: 20 },
   driftBox: {
     flexDirection: 'row',
     gap: spacing.sm,
-    backgroundColor: layer(palette.warningAmber, 0.1),
+    backgroundColor: layer(palette.warning, 0.1),
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: palette.warningAmber,
+    borderColor: palette.warning,
     padding: spacing.sm,
   },
-  driftText: { ...typography.caption, color: palette.warningAmber, flex: 1, lineHeight: 17 },
+  driftText: { ...typography.caption, color: palette.warning, flex: 1, lineHeight: 17 },
 });
