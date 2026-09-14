@@ -629,6 +629,40 @@ const V13_POSSIBLE_DUPLICATE: Migration = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// v14 — the other name the same person goes by.
+//
+// One person reaches the app under at least two names: the one the phone's
+// contacts call them, which is what a UPI app's notification shows, and the
+// one registered against their UPI handle, which is what the bank's SMS
+// uses. Nothing in either string connects them.
+//
+// That breaks two things, not one. Duplicate detection cannot tell the two
+// reports of a payment apart from two different payments (v13 asks about
+// that). And settlement matching — findContactIdByName, an exact match —
+// silently fails to find the friend repaying a debt, so the repayment lands
+// as income and the debt stays open. Both are the same missing fact, so
+// both are fixed by storing it once: the answer the user already gives in
+// Review is recorded here rather than thrown away, and the question stops
+// being asked about that person again.
+// ---------------------------------------------------------------------------
+const V14_CONTACT_ALIASES: Migration = {
+  version: 14,
+  name: 'contact_aliases',
+  statements: [
+    `CREATE TABLE IF NOT EXISTS ContactAliases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      contact_id INTEGER NOT NULL REFERENCES Contacts(id) ON DELETE CASCADE,
+      alias TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );`,
+    // An alias names one person. Case-insensitive so "RAVI ANNA" and
+    // "Ravi Anna" cannot both be learned against different contacts.
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_contact_alias_unique ON ContactAliases(lower(alias));`,
+    `CREATE INDEX IF NOT EXISTS idx_contact_alias_contact ON ContactAliases(contact_id);`,
+  ],
+};
+
 export const MIGRATIONS: Migration[] = [
   V1_INITIAL,
   V2_CONTACT_PHONE,
@@ -643,6 +677,7 @@ export const MIGRATIONS: Migration[] = [
   V11_ADJUSTMENTS,
   V12_RAW_EVENTS,
   V13_POSSIBLE_DUPLICATE,
+  V14_CONTACT_ALIASES,
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

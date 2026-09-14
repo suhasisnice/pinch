@@ -14,7 +14,8 @@ import {
   requestSmsPermission,
 } from '../../modules/pinch-capture';
 import { backfillFromInbox, reprocessUnresolvedRawEvents } from '../services/captureService';
-import { countUnresolvedRawEvents } from '../db/dbService';
+import { countUnresolvedRawEvents, getRejectionBreakdown } from '../db/dbService';
+import { PARSER_RULES_VERSION } from '../services/revalidationService';
 import { revalidateHistory } from '../services/revalidationService';
 import {
   getMonthlyAllowance,
@@ -242,6 +243,42 @@ export default function SettingsScreen() {
    * recovers a payment a since-fixed rule once dropped, rather than just
    * explaining why it happened.
    */
+  /**
+   * What the parser is throwing away, grouped by the rule that threw it.
+   *
+   * Reading it here rather than shipping it anywhere: this is the user's
+   * own message history, and the point is to see whether one rule is
+   * quietly eating real transactions in bulk.
+   */
+  async function showWhatIsBeingDropped() {
+    setBusy(true);
+    try {
+      const groups = await getRejectionBreakdown(PARSER_RULES_VERSION);
+      if (groups.length === 0) {
+        Alert.alert(
+          'Nothing dropped',
+          'Every message captured under the current rules became a transaction or a review item.'
+        );
+        return;
+      }
+
+      const lines = groups
+        .slice(0, 8)
+        .map((group) => {
+          const example = group.example.replace(/\s+/g, ' ').slice(0, 70);
+          return `${group.count}x  ${group.reason}\n     e.g. "${example}…"`;
+        })
+        .join('\n\n');
+
+      Alert.alert(
+        'What is being skipped',
+        `${lines}\n\nA rule near the top with a real payment under it is a rule worth loosening.`
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function recoverMissed() {
     setBusy(true);
     try {
@@ -351,6 +388,12 @@ export default function SettingsScreen() {
               label={busy ? 'Checking…' : 'Recover missed messages'}
               variant="ghost"
               onPress={recoverMissed}
+              disabled={busy}
+            />
+            <Button
+              label={busy ? 'Checking…' : 'See what is being skipped'}
+              variant="ghost"
+              onPress={showWhatIsBeingDropped}
               disabled={busy}
             />
             <Text style={styles.note}>

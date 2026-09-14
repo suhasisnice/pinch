@@ -390,6 +390,25 @@ export function checkBalanceConsistency(
   return { discrepancy, isConsistent: Math.abs(discrepancy) <= BALANCE_CONSISTENCY_TOLERANCE };
 }
 
+/**
+ * Whether an unaccounted-balance gap is worth raising again after the user
+ * has already dismissed one.
+ *
+ * Dismissing is "I know about this one, stop asking" — not "never mention
+ * my balance again". A gap that then grows or flips direction is a
+ * different fact and worth surfacing; the same gap sitting there is not.
+ * The tolerance is the same one that decides a gap is worth mentioning at
+ * all, so nothing can resurface that would not have been shown fresh.
+ */
+export function shouldRaiseDiscrepancy(
+  discrepancy: number,
+  dismissed: number | null
+): boolean {
+  if (Math.abs(discrepancy) <= BALANCE_CONSISTENCY_TOLERANCE) return false;
+  if (dismissed === null) return true;
+  return Math.abs(discrepancy - dismissed) > BALANCE_CONSISTENCY_TOLERANCE;
+}
+
 // ---------------------------------------------------------------------------
 // Goal tracking status — Phase 4.
 // ---------------------------------------------------------------------------

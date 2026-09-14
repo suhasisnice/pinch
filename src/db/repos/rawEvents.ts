@@ -232,6 +232,51 @@ export async function getLatestParsedEvent(rawEventId: number): Promise<ParsedEv
   return row ? toParsedEventRow(row) : null;
 }
 
+export interface RejectionGroup {
+  /** The stored explanation, e.g. "hard reject: \\botp\\b" or "no amount found". */
+  reason: string;
+  outcome: ParsedEventOutcome;
+  count: number;
+  /** One message that met this gate, for reading what the rule is actually catching. */
+  example: string;
+}
+
+/**
+ * Why messages are being dropped, most common first.
+ *
+ * The parser is tuned against the handful of formats anyone thought to try;
+ * a real phone holds months of messages from banks nobody tested. Since
+ * Phase 7 every one of them is kept along with the gate it met, which turns
+ * "a payment went missing once" into something answerable in bulk: a rule
+ * catching hundreds of real transactions shows up at the top of this list,
+ * where a single bug report would never have revealed it.
+ *
+ * Grouped on the current parser version only. An explanation from an older
+ * version describes a rule that may no longer exist, and mixing the two
+ * would make a fixed problem look like a live one.
+ */
+export async function getRejectionBreakdown(
+  parserVersion: number,
+  limit = 20
+): Promise<RejectionGroup[]> {
+  const db = getAdapter();
+  return db.getAllAsync<RejectionGroup>(
+    `SELECT
+       COALESCE(ParsedEvents.reject_reason, ParsedEvents.outcome) AS reason,
+       ParsedEvents.outcome AS outcome,
+       COUNT(*) AS count,
+       MIN(RawEvents.body) AS example
+     FROM ParsedEvents
+     JOIN RawEvents ON RawEvents.id = ParsedEvents.raw_event_id
+     WHERE ParsedEvents.parser_version = ?
+       AND ParsedEvents.outcome LIKE 'SKIPPED%'
+     GROUP BY reason, ParsedEvents.outcome
+     ORDER BY count DESC
+     LIMIT ?;`,
+    [parserVersion, limit]
+  );
+}
+
 /** How many raw events never became a transaction or a review item — the headline "missed" count. */
 export async function countUnresolvedRawEvents(): Promise<number> {
   const db = getAdapter();

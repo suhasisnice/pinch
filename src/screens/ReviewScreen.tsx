@@ -3,7 +3,7 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { CaptureInboxRow, TransactionRow } from '../db/types';
-import { acceptCapture } from '../services/captureService';
+import { acceptCapture, confirmCaptureIsDuplicate } from '../services/captureService';
 import { formatMoney, formatRelative } from '../utils/format';
 import { palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Card, EmptyState, Loading, Screen, ScreenTitle } from '../components/ui';
@@ -114,7 +114,9 @@ export default function ReviewScreen() {
                     <Button
                       label="Same one"
                       onPress={async () => {
-                        await db.rejectCapture(capture.id);
+                        // Records that these two names are one person, so
+                        // this stops being a question the next time they pay.
+                        await confirmCaptureIsDuplicate(capture.id);
                         load();
                       }}
                       style={styles.flex}

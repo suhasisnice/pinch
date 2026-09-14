@@ -309,6 +309,97 @@ export async function findContactIdByName(name: string): Promise<number | null> 
   return row?.id ?? null;
 }
 
+// ---------------------------------------------------------------------------
+// The other names a person arrives under.
+// ---------------------------------------------------------------------------
+
+/**
+ * Records that `alias` is another name for a person already known.
+ *
+ * Learned from the user answering "same one" in Review, where they have
+ * just told the app something it cannot work out for itself: that the name
+ * a UPI app shows ("Ravi Anna", from the phone's contacts) and the one the
+ * bank's SMS shows ("Rajesh Kumar M", registered against the handle) are
+ * one person. Storing it means the question is asked once, not every time
+ * that friend pays.
+ *
+ * Silently does nothing when the alias is already claimed — by this contact
+ * or another. A name that has already been resolved to someone is not worth
+ * overwriting on the strength of one later answer, and re-learning the same
+ * pair is the common case.
+ */
+export async function addContactAlias(contactId: number, alias: string): Promise<void> {
+  const trimmed = alias.trim();
+  if (!trimmed) return;
+
+  const db = getAdapter();
+  const contact = await getContactById(contactId);
+  // Never store the contact's own name as an alias of itself: it resolves
+  // through Contacts already, and it would burn the unique index slot that
+  // a genuinely different name needs.
+  if (!contact || contact.name.trim().toLowerCase() === trimmed.toLowerCase()) return;
+
+  try {
+    await db.runAsync(
+      `INSERT OR IGNORE INTO ContactAliases (contact_id, alias, created_at) VALUES (?, ?, ?);`,
+      [contactId, trimmed, new Date().toISOString()]
+    );
+  } catch {
+    // Unique index on lower(alias): already known, nothing to learn.
+  }
+}
+
+/**
+ * The person behind a name, whether it is the one on the contact or one
+ * they have been seen under since.
+ *
+ * This is what `checkForSettlement` needs to be right. Matching on the
+ * contact's own name alone meant a repayment whose SMS used the sender's
+ * registered name never found the debt it was closing — so it was booked as
+ * income and the debt stayed open, silently, with which channel happened to
+ * report the payment first deciding whether the app got it right.
+ */
+export async function findContactIdByNameOrAlias(name: string): Promise<number | null> {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+
+  const direct = await findContactIdByName(trimmed);
+  if (direct !== null) return direct;
+
+  const db = getAdapter();
+  const row = await db.getFirstAsync<{ contact_id: number }>(
+    `SELECT contact_id FROM ContactAliases WHERE lower(alias) = lower(?);`,
+    [trimmed]
+  );
+  return row?.contact_id ?? null;
+}
+
+/** Every extra name one person is known by, for showing what has been learned. */
+export async function getContactAliases(contactId: number): Promise<string[]> {
+  const db = getAdapter();
+  const rows = await db.getAllAsync<{ alias: string }>(
+    `SELECT alias FROM ContactAliases WHERE contact_id = ? ORDER BY created_at ASC;`,
+    [contactId]
+  );
+  return rows.map((row) => row.alias);
+}
+
+/**
+ * Whether two names are known to be the same person — the duplicate
+ * matcher's way of using what Review has already been told, so a pair it
+ * once had to ask about merges on its own from then on.
+ */
+export async function sameKnownPerson(a: string, b: string): Promise<boolean> {
+  if (!a?.trim() || !b?.trim()) return false;
+  if (a.trim().toLowerCase() === b.trim().toLowerCase()) return true;
+
+  const [left, right] = await Promise.all([
+    findContactIdByNameOrAlias(a),
+    findContactIdByNameOrAlias(b),
+  ]);
+  return left !== null && left === right;
+}
+
 export async function updateContact(
   id: number,
   fields: { name?: string; phone?: string | null; isGhost?: boolean }
