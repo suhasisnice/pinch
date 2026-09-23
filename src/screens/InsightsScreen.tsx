@@ -635,7 +635,7 @@ const styles = StyleSheet.create({
 
   weekRow: { flexDirection: 'row', gap: spacing.md },
   weekStat: { flex: 1, gap: 2 },
-  weekLabel: { ...typography.micro, color: palette.textSecondary, textTransform: 'uppercase', letterSpacing: 1 },
+  weekLabel: { ...typography.sectionLabel, color: palette.textSecondary },
   weekValue: { ...typography.bodyBold, fontSize: 20, color: palette.textPrimary },
   weekVerdict: { ...typography.caption, marginTop: spacing.sm },
 

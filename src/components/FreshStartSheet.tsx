@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.surfaceElevated,
     borderRadius: radii.md,
   },
-  previewLabel: { ...typography.micro, color: palette.textSecondary, textTransform: 'uppercase', letterSpacing: 1 },
+  previewLabel: { ...typography.sectionLabel, color: palette.textSecondary },
   previewAmount: { ...typography.display, color: palette.accent },
   previewSub: { ...typography.caption, color: palette.textMuted },
 

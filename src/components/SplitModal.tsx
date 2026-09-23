@@ -504,10 +504,8 @@ const styles = StyleSheet.create({
   quickBlock: { gap: spacing.sm },
   quickHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   quickLabel: {
-    ...typography.micro,
+    ...typography.sectionLabel,
     color: palette.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   quickAddAll: { ...typography.micro, color: palette.accent },
   quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

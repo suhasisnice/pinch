@@ -40,17 +40,26 @@ function manualIndianGrouping(value: number, decimals: boolean): string {
   return fraction ? `${joined}.${fraction}` : joined;
 }
 
-/** "₹1,240" */
+/**
+ * The minus sign for money. U+2212, not the hyphen: a hyphen is shorter than
+ * a digit and sits lower than "+", so "−₹240" and "+₹240" line up and a
+ * hyphenated "-₹240" does not. Screens already hand-typed this character
+ * next to formatMoney's hyphen, which put two different minus signs on one
+ * screen.
+ */
+export const MINUS = '−';
+
+/** "₹1,240", "−₹1,240" */
 export function formatMoney(amount: number, opts?: { decimals?: boolean }): string {
   const negative = amount < 0;
   const body = formatAmount(Math.abs(amount), opts);
-  return negative ? `-₹${body}` : `₹${body}`;
+  return negative ? `${MINUS}₹${body}` : `₹${body}`;
 }
 
 /** Compact form for tight spaces: ₹1.2k, ₹45k, ₹1.2L */
 export function formatMoneyCompact(amount: number): string {
   const value = Math.abs(amount);
-  const sign = amount < 0 ? '-' : '';
+  const sign = amount < 0 ? MINUS : '';
 
   if (value >= 10000000) return `${sign}₹${(value / 10000000).toFixed(1)}Cr`;
   if (value >= 100000) return `${sign}₹${(value / 100000).toFixed(1)}L`;

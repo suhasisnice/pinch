@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Text, TextStyle, ViewStyle } from 'react-native';
-import { formatMoney } from '../utils/format';
+import MoneyAmount from './Money';
 
 /**
  * The app's motion vocabulary, built on React Native's own Animated.
@@ -116,9 +116,12 @@ export function AnimatedMoney({
 }) {
   const displayed = useCountUp(amount);
   return (
-    <Text style={style} numberOfLines={numberOfLines} adjustsFontSizeToFit={adjustsFontSizeToFit}>
-      {formatMoney(displayed)}
-    </Text>
+    <MoneyAmount
+      amount={displayed}
+      style={style}
+      numberOfLines={numberOfLines}
+      adjustsFontSizeToFit={adjustsFontSizeToFit}
+    />
   );
 }
 

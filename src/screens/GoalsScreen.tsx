@@ -507,7 +507,7 @@ function ManageGoalSheet({
 }
 
 const styles = StyleSheet.create({
-  reserveLabel: { ...typography.micro, color: palette.textSecondary, textTransform: 'uppercase', letterSpacing: 1 },
+  reserveLabel: { ...typography.sectionLabel, color: palette.textSecondary },
   reserveAmount: { ...typography.heroCompact, color: palette.info, marginTop: 4 },
   reserveNote: { ...typography.caption, color: palette.textMuted, marginTop: spacing.xs, lineHeight: 17 },
   reserveCapped: {
@@ -523,10 +523,8 @@ const styles = StyleSheet.create({
   goalMeta: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
   goalPercent: { ...typography.bodyBold, fontSize: 17, color: palette.info },
   statusLabel: {
-    ...typography.micro,
+    ...typography.sectionLabel,
     color: palette.accent,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
     marginBottom: spacing.sm,
   },
   goalPace: { ...typography.caption, color: palette.textSecondary, marginTop: spacing.sm },

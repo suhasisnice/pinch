@@ -471,7 +471,7 @@ function AddDebtSheet({
 const styles = StyleSheet.create({
   totals: { flexDirection: 'row', gap: spacing.sm },
   totalCard: { flex: 1, alignItems: 'center', gap: 4 },
-  totalLabel: { ...typography.micro, color: palette.textSecondary, textTransform: 'uppercase', letterSpacing: 1 },
+  totalLabel: { ...typography.sectionLabel, color: palette.textSecondary },
   totalAmount: { ...typography.heroCompact, fontSize: 28 },
 
   balanceAmount: { ...typography.bodyBold, fontSize: 16 },
@@ -491,10 +491,8 @@ const styles = StyleSheet.create({
   mergeIntro: { ...typography.body, color: palette.textSecondary, lineHeight: 20 },
 
   groupLabel: {
-    ...typography.micro,
+    ...typography.sectionLabel,
     color: palette.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
     marginBottom: spacing.xs,
   },
   iouAmount: { ...typography.bodyBold, color: palette.textPrimary },
