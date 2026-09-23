@@ -37,13 +37,15 @@ export interface NewIOU {
   transactionId?: number | null;
   reason?: string | null;
   outingId?: number | null;
+  /** Set only by a reimbursement link, so unlinking can remove exactly what it made. */
+  originTransactionId?: number | null;
 }
 
 export async function createIOU(input: NewIOU): Promise<number> {
   const db = getAdapter();
   const result = await db.runAsync(
-    `INSERT INTO IOUs (transaction_id, contact_id, direction, amount, reason, outing_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?);`,
+    `INSERT INTO IOUs (transaction_id, contact_id, direction, amount, reason, outing_id, origin_transaction_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
     [
       input.transactionId ?? null,
       input.contactId,
@@ -51,6 +53,7 @@ export async function createIOU(input: NewIOU): Promise<number> {
       Math.abs(input.amount),
       input.reason ?? null,
       input.outingId ?? null,
+      input.originTransactionId ?? null,
       new Date().toISOString(),
     ]
   );
@@ -78,6 +81,25 @@ export async function getOpenIOUsForContact(contactId: number): Promise<IOUDetai
      ORDER BY IOUs.created_at ASC;`,
     [contactId]
   );
+}
+
+/**
+ * How much of each payment is still expected back, keyed by transaction.
+ *
+ * One lookup for a whole list rather than one per row: the day's ledger
+ * wants to show which payments already have somebody on the hook, and
+ * asking per row would be a query per transaction on every render.
+ */
+export async function getOpenReceivableByTransaction(): Promise<Map<number, number>> {
+  const db = getAdapter();
+  const rows = await db.getAllAsync<{ transactionId: number; open: number }>(
+    `SELECT IOUs.transaction_id AS transactionId, SUM(${OPEN_AMOUNT_SQL}) AS open
+     FROM IOUs
+     WHERE IOUs.transaction_id IS NOT NULL AND IOUs.direction = 'THEY_OWE_ME'
+     GROUP BY IOUs.transaction_id
+     HAVING open > 0.009;`
+  );
+  return new Map(rows.map((row) => [row.transactionId, row.open]));
 }
 
 export async function getIOUsForOuting(outingId: number): Promise<IOUDetail[]> {

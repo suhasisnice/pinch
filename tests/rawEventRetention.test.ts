@@ -3,11 +3,14 @@ import { ingestMessage, reprocessRawEvent, reprocessUnresolvedRawEvents } from '
 import { addToBlocklist } from '../src/db/dbService';
 import { PARSER_RULES_VERSION } from '../src/services/revalidationService';
 import { createSqlJsAdapter } from './utils/sqljsAdapter';
+import { disableConfirmGate } from './utils/settings';
 import { CapturedMessage } from '../modules/pinch-capture';
 
 beforeEach(async () => {
   db.__resetDatabaseForTests();
   await db.initDatabase(await createSqlJsAdapter());
+  // These are about ledger mechanics, not the confirm-before-logging gate.
+  await disableConfirmGate();
 });
 
 const sms = (body: string, sender = 'VM-HDFCBK'): CapturedMessage => ({

@@ -220,6 +220,104 @@ const INBOUND_MARKERS =
 const CREDIT_VERBS = /\b(?:credited|received|added|refunded|deposited)\b/i;
 
 // ---------------------------------------------------------------------------
+// Which way the money went.
+//
+// Asking "does this message contain a debit verb?" is only safe while the
+// message contains one verb. Bank SMS routinely contain both, in either
+// order — a debit alert that goes on to say the money was credited to the
+// payee, a credit alert quoting the month's debits, a reversal describing
+// the original payment it undoes. Answering globally, with debit winning
+// ties, silently reads some of those backwards, and a sign error is the
+// worst thing this parser can do: it moves the number by twice the amount
+// and looks like an ordinary transaction while doing it.
+//
+// The verb that decides is the one governing the amount that was actually
+// extracted, which is reliably the nearest one to it. Indian bank SMS put
+// it on either side — "is credited with Rs 20", "Rs.369 spent on" — so
+// distance is measured in both directions rather than assuming an order.
+// ---------------------------------------------------------------------------
+const DEBIT_STRONG_G = new RegExp(DEBIT_VERBS_STRONG.source, 'gi');
+const DEBIT_DIRECTIONAL_G = new RegExp(DEBIT_VERBS_DIRECTIONAL.source, 'gi');
+const CREDIT_G = new RegExp(CREDIT_VERBS.source, 'gi');
+
+interface DirectionHit {
+  index: number;
+  direction: ParsedDirection;
+}
+
+function matchPositions(pattern: RegExp, text: string): number[] {
+  pattern.lastIndex = 0;
+  const found: number[] = [];
+  let match = pattern.exec(text);
+  while (match !== null) {
+    found.push(match.index);
+    match = pattern.exec(text);
+  }
+  pattern.lastIndex = 0;
+  return found;
+}
+
+/**
+ * Every direction verb in the message and which way each one points.
+ *
+ * A directional verb ("paid", "sent") is not evidence on its own — the same
+ * word covers both ends of a payment — so it takes its meaning from whether
+ * anything says the money arrived with the user.
+ */
+function directionHits(text: string, inbound: boolean): DirectionHit[] {
+  const hits: DirectionHit[] = [];
+  for (const index of matchPositions(DEBIT_STRONG_G, text)) hits.push({ index, direction: 'DEBIT' });
+  for (const index of matchPositions(CREDIT_G, text)) hits.push({ index, direction: 'CREDIT' });
+  for (const index of matchPositions(DEBIT_DIRECTIONAL_G, text)) {
+    hits.push({ index, direction: inbound ? 'CREDIT' : 'DEBIT' });
+  }
+  return hits;
+}
+
+export interface ResolvedDirection {
+  direction: ParsedDirection;
+  /**
+   * True when every direction verb in the message agrees. A message that
+   * says both scores lower and lands in review, which is the right place
+   * for one whose own wording does not settle which way the money went.
+   */
+  unambiguous: boolean;
+}
+
+/**
+ * The direction of the verb nearest the amount, or null when the message
+ * names no direction at all.
+ *
+ * Ties go to a debit, which is the pre-existing behaviour and the safer
+ * reading: counting money as spent when it arrived understates what is
+ * available, while the reverse overstates it and invites overspending.
+ */
+export function resolveDirection(
+  text: string,
+  amountIndex: number,
+  inbound: boolean
+): ResolvedDirection | null {
+  const hits = directionHits(text, inbound);
+  if (hits.length === 0) return null;
+
+  let best: DirectionHit | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const hit of hits) {
+    const distance = Math.abs(hit.index - amountIndex);
+    if (distance < bestDistance || (distance === bestDistance && hit.direction === 'DEBIT')) {
+      best = hit;
+      bestDistance = distance;
+    }
+  }
+  if (!best) return null;
+
+  return {
+    direction: best.direction,
+    unambiguous: hits.every((hit) => hit.direction === best!.direction),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Merchant extraction. Tried in order; the first hit wins, and earlier
 // patterns are the more specific ones.
 // ---------------------------------------------------------------------------
@@ -354,6 +452,24 @@ function extractFirst(text: string, patterns: RegExp[]): string | null {
   return null;
 }
 
+/**
+ * Same, but keeping where the match started — which is what lets the
+ * direction be decided by the verb attached to *this* amount rather than by
+ * any verb anywhere in the message.
+ */
+function extractFirstAt(
+  text: string,
+  patterns: RegExp[]
+): { value: string; index: number } | null {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1] && match.index !== undefined) {
+      return { value: match[1], index: match.index };
+    }
+  }
+  return null;
+}
+
 // Every ACCOUNT_PATTERNS match ends on its captured digits, so what follows
 // the match is what follows the digits.
 const CONTINUES_AS_DATE = /^[/.-]\d{1,2}(?:[/.-]\d{2,4})?\b/;
@@ -435,23 +551,21 @@ export function parseMessage(
   const accountHint = extractAccountHint(text);
   if (!refund && isRejected(text, accountHint !== null)) return null;
 
-  const amountRaw = extractFirst(text, AMOUNT_PATTERNS);
-  const amount = amountRaw ? parseAmount(amountRaw) : null;
-  if (amount === null) return null;
+  const amountMatch = extractFirstAt(text, AMOUNT_PATTERNS);
+  const amount = amountMatch ? parseAmount(amountMatch.value) : null;
+  if (amount === null || amountMatch === null) return null;
 
-  // A directional verb only reads as a debit when nothing says the money
-  // arrived with the user. Strong verbs are not up for discussion.
+  // Decided by the verb governing this amount, not by whichever verb appears
+  // anywhere in the message — see resolveDirection. A long alert naming both
+  // a debit and a credit used to be read as a debit whichever one was the
+  // actual event.
   const inbound = INBOUND_MARKERS.test(text);
-  const isDebit =
-    DEBIT_VERBS_STRONG.test(text) || (DEBIT_VERBS_DIRECTIONAL.test(text) && !inbound);
-  const isCredit = CREDIT_VERBS.test(text) || inbound;
-  if (!refund && !isDebit && !isCredit) return null;
+  const resolved = resolveDirection(text, amountMatch.index, inbound);
+  if (!refund && resolved === null) return null;
 
-  // "debited ... ; MERCHANT credited" names both verbs. The account is the
-  // subject of the sentence, so a debit reading wins.
   // A reversal is money arriving, whatever verbs the sentence also contains —
   // "Rs 250 debited ... has been reversed" names a debit and is a credit.
-  const direction: ParsedDirection = refund ? 'CREDIT' : isDebit ? 'DEBIT' : 'CREDIT';
+  const direction: ParsedDirection = refund ? 'CREDIT' : resolved!.direction;
 
   const rawName = extractFirst(
     text,
@@ -471,7 +585,10 @@ export function parseMessage(
   // Confidence is additive over independent corroborating signals.
   let confidence = 0.3;
   if (refund) confidence += 0.2; // an explicit reversal is unambiguous
-  else if (isDebit !== isCredit) confidence += 0.2; // unambiguous direction
+  // Every direction verb in the message agrees. One that contradicts itself
+  // scores lower and lands in review, which is where a message whose own
+  // wording does not settle the direction belongs.
+  else if (resolved!.unambiguous) confidence += 0.2;
   if (counterparty && counterparty.length >= 3) confidence += 0.2;
   if (reference) confidence += 0.15;
   if (accountHint) confidence += 0.2;
@@ -527,15 +644,14 @@ export function explainRejection(
     if (reason) return reason;
   }
 
-  const amountRaw = extractFirst(text, AMOUNT_PATTERNS);
-  const amount = amountRaw ? parseAmount(amountRaw) : null;
-  if (amount === null) return 'no amount found';
+  const amountMatch = extractFirstAt(text, AMOUNT_PATTERNS);
+  const amount = amountMatch ? parseAmount(amountMatch.value) : null;
+  if (amount === null || amountMatch === null) return 'no amount found';
 
   const inbound = INBOUND_MARKERS.test(text);
-  const isDebit =
-    DEBIT_VERBS_STRONG.test(text) || (DEBIT_VERBS_DIRECTIONAL.test(text) && !inbound);
-  const isCredit = CREDIT_VERBS.test(text) || inbound;
-  if (!refund && !isDebit && !isCredit) return 'no debit or credit verb found';
+  if (!refund && resolveDirection(text, amountMatch.index, inbound) === null) {
+    return 'no debit or credit verb found';
+  }
 
   if (options.source !== 'NOTIFICATION' && !accountHint) {
     return 'no account or card number named (and not a notification)';

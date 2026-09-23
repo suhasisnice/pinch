@@ -6,11 +6,14 @@ import {
 } from '../src/services/captureService';
 import { checkForSettlement } from '../src/services/settlementService';
 import { createSqlJsAdapter } from './utils/sqljsAdapter';
+import { disableConfirmGate } from './utils/settings';
 import { CapturedMessage } from '../modules/pinch-capture';
 
 beforeEach(async () => {
   db.__resetDatabaseForTests();
   await db.initDatabase(await createSqlJsAdapter());
+  // These are about ledger mechanics, not the confirm-before-logging gate.
+  await disableConfirmGate();
 });
 
 /**

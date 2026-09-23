@@ -1,9 +1,11 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { showDialog } from '../components/Dialog';
+import { StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { CaptureInboxRow, TransactionRow } from '../db/types';
 import { acceptCapture, confirmCaptureIsDuplicate } from '../services/captureService';
+import { ACCEPT_THRESHOLD } from '../services/parserService';
 import { formatMoney, formatRelative } from '../utils/format';
 import { palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Card, EmptyState, Loading, Screen, ScreenTitle } from '../components/ui';
@@ -85,6 +87,10 @@ export default function ReviewScreen() {
                 </Text>
                 {twin ? (
                   <Text style={styles.dupeTag}>Possible repeat</Text>
+                ) : capture.confidence >= ACCEPT_THRESHOLD ? (
+                  // Read cleanly — the only question is whether it should
+                  // count, not whether it was understood.
+                  <Text style={styles.awaitingTag}>Waiting on you</Text>
                 ) : (
                   <Text style={styles.confidence}>{Math.round(capture.confidence * 100)}% sure</Text>
                 )}
@@ -144,7 +150,10 @@ export default function ReviewScreen() {
                     style={styles.flex}
                   />
                   <Button
-                    label="Add it"
+                    // A confident parse is asking permission to count;
+                    // a shaky one is asking whether it read the message
+                    // right. Same two buttons, different question.
+                    label={capture.confidence >= ACCEPT_THRESHOLD ? 'Confirm' : 'Add it'}
                     onPress={async () => {
                       await acceptCapture(capture.id);
                       load();
@@ -181,18 +190,25 @@ function rejectWithOptionToBlock(capture: CaptureInboxRow, reload: () => void) {
     return;
   }
 
-  Alert.alert('Not a transaction', `Should Pinch keep reading messages from ${sender}?`, [
-    { text: 'Cancel', style: 'cancel' },
-    { text: 'Just this one', onPress: dismiss },
-    {
-      text: 'Block sender',
-      style: 'destructive',
-      onPress: async () => {
-        await db.addToBlocklist(sender, 'Blocked from review');
-        await dismiss();
-      },
-    },
-  ]);
+  void showDialog({
+    title: 'Not a transaction',
+    message: `Should Pinch keep reading messages from ${sender}?`,
+    actions: [
+      { label: 'Cancel', value: 'cancel', variant: 'ghost' },
+      { label: 'Just this one', value: 'once', variant: 'secondary' },
+      { label: 'Block sender', value: 'block', variant: 'danger' },
+    ],
+    dismissValue: 'cancel',
+  }).then(async (choice) => {
+    if (choice === 'once') {
+      await dismiss();
+      return;
+    }
+    if (choice === 'block') {
+      await db.addToBlocklist(sender, 'Blocked from review');
+      await dismiss();
+    }
+  });
 }
 
 const styles = StyleSheet.create({
@@ -200,6 +216,7 @@ const styles = StyleSheet.create({
   amount: { ...typography.display, color: palette.textPrimary },
   confidence: { ...typography.micro, color: palette.warning },
   dupeTag: { ...typography.micro, color: palette.info },
+  awaitingTag: { ...typography.micro, color: palette.accent },
   dupeQuestion: {
     ...typography.caption,
     color: palette.textSecondary,

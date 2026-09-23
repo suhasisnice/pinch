@@ -324,6 +324,75 @@ describe('dedup keys', () => {
   });
 });
 
+/**
+ * A long alert naming both a debit and a credit used to be read as a debit
+ * whichever one was the actual event, because the check was "does a debit
+ * verb appear anywhere". Direction is now decided by the verb governing the
+ * amount that was extracted — which is the nearest one to it, on either
+ * side, since Indian bank SMS put it before or after depending on the bank.
+ *
+ * A sign error is the worst thing this parser can do: it moves the budget by
+ * twice the amount and looks like an ordinary transaction while doing it.
+ */
+describe('messages that name both directions', () => {
+  it('reads a credit as a credit when a debit is mentioned further away', () => {
+    const parsed = parseMessage(
+      'Dear Customer, Acct XX9876 is credited with Rs 20.00 on 14-Sep-26 from Ravi Anna. ' +
+        'Total amount debited this month is Rs 5,000.00. -ICICI Bank'
+    );
+    expect(parsed?.direction).toBe('CREDIT');
+    expect(parsed?.amount).toBe(20);
+  });
+
+  it('still reads a debit as a debit when the payee is credited', () => {
+    const parsed = parseMessage(
+      'Your A/c XX1234 is debited with Rs 500.00 on 24-Sep-26 and credited to beneficiary RAHUL K.'
+    );
+    expect(parsed?.direction).toBe('DEBIT');
+    expect(parsed?.amount).toBe(500);
+  });
+
+  it('handles credit first, debit second, in one sentence', () => {
+    const parsed = parseMessage(
+      'Rs 250.00 credited to your A/c XX9876 and Rs 0.00 debited as charges on 24-Sep-26.'
+    );
+    expect(parsed?.direction).toBe('CREDIT');
+    expect(parsed?.amount).toBe(250);
+  });
+
+  it('handles debit first, credit second, in one sentence', () => {
+    const parsed = parseMessage(
+      'Rs 500.00 debited from A/c XX1234 on 24-Sep-26. Amount credited to the merchant.'
+    );
+    expect(parsed?.direction).toBe('DEBIT');
+    expect(parsed?.amount).toBe(500);
+  });
+
+  it('trusts a message whose verbs agree more than one that contradicts itself', () => {
+    const clean = parseMessage(
+      'Dear Customer, Acct XX9876 is credited with Rs 20.00 on 14-Sep-26 from Ravi Anna.'
+    );
+    const conflicted = parseMessage(
+      'Dear Customer, Acct XX9876 is credited with Rs 20.00 on 14-Sep-26 from Ravi Anna. ' +
+        'Total amount debited this month is Rs 5,000.00.'
+    );
+
+    expect(clean?.direction).toBe('CREDIT');
+    expect(conflicted?.direction).toBe('CREDIT');
+    // The contradictory one loses the unambiguous-direction bonus, so it is
+    // likelier to be held for review rather than posted on its own say-so.
+    expect(conflicted!.confidence).toBeLessThan(clean!.confidence);
+  });
+
+  it('keeps reading a reversal as money coming back, debit verbs and all', () => {
+    const parsed = parseMessage(
+      'Rs 250.00 debited from A/c XX1234 at SWIGGY has been reversed and credited back.'
+    );
+    expect(parsed?.direction).toBe('CREDIT');
+    expect(parsed?.isRefund).toBe(true);
+  });
+});
+
 describe('explainRejection', () => {
   it('is null for anything parseMessage would actually accept', () => {
     const sms = 'Rs.200 debited from A/c XX1234 at SWIGGY on 11-09-26.';

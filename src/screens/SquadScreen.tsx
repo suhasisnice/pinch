@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { showConfirm, showMessage } from '../components/Dialog';
+import { RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { ContactBalance, IOUDetail, TransactionRow } from '../db/types';
@@ -286,7 +287,7 @@ function ContactSheet({
           variant="secondary"
           onPress={() =>
             sendNudge(balance.name, net, ious[0]?.merchant ?? 'that thing', balance.phone).catch(() =>
-              Alert.alert('Could not open WhatsApp')
+              showMessage('Could not open WhatsApp')
             )
           }
         />
@@ -342,20 +343,16 @@ function MergeContactSheet({
     : others;
 
   function pick(other: { id: number; name: string }) {
-    Alert.alert(
-      `Merge with ${other.name}?`,
-      `Every debt with either name moves onto one balance under "${contactName}". "${other.name}" disappears — this cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Merge',
-          style: 'destructive',
-          onPress: async () => {
-            await db.mergeContacts(contactId, other.id);
-            onMerged();
-          },
-        },
-      ]
+    void showConfirm({
+      title: `Merge with ${other.name}?`,
+      message: `Every debt with either name moves onto one balance under "${contactName}". "${other.name}" disappears — this cannot be undone.`,
+      confirmLabel: 'Merge',
+      destructive: true,
+    }).then(async (ok) => {
+      if (!ok) return;
+      await db.mergeContacts(contactId, other.id);
+      onMerged();
+    }
     );
   }
 

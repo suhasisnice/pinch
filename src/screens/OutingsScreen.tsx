@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { showConfirm, showMessage } from '../components/Dialog';
+import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { OutingSummary } from '../db/repos/outings';
@@ -497,14 +498,13 @@ function OutingDetailSheet({
             // budget changed for an unstated reason.
             const confirm = () => db.closeOuting(outing!.id).then(onDismissed);
             if (reserved > 0.009) {
-              Alert.alert(
-                'Close this outing?',
-                `${formatMoney(reserved)} still reserved for it returns to your available budget.`,
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Close', onPress: confirm },
-                ]
-              );
+              void showConfirm({
+                title: 'Close this outing?',
+                message: `${formatMoney(reserved)} still reserved for it returns to your available budget.`,
+                confirmLabel: 'Close',
+              }).then((ok) => {
+                if (ok) confirm();
+              });
             } else {
               confirm();
             }
@@ -525,32 +525,27 @@ function OutingDetailSheet({
         label="Delete outing"
         variant="danger"
         onPress={() => {
-          Alert.alert(
-            'Delete this outing?',
-            `"${outing.name}" will be removed. The ${outing.transactionCount} item${
+          void showConfirm({
+            title: 'Delete this outing?',
+            message: `"${outing.name}" will be removed. The ${outing.transactionCount} item${
               outing.transactionCount === 1 ? '' : 's'
             } and any debts stay in your ledger — they just stop being grouped under it.${
               reserved > 0.009 ? ` ${formatMoney(reserved)} reserved for it returns to your available budget.` : ''
             }`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Delete',
-                style: 'destructive',
-                onPress: async () => {
-                  try {
-                    await db.deleteOuting(outing.id);
-                    onDismissed();
-                  } catch (error) {
-                    Alert.alert(
-                      'Could not delete',
-                      error instanceof Error ? error.message : 'Something went wrong.'
-                    );
-                  }
-                },
-              },
-            ]
-          );
+            confirmLabel: 'Delete',
+            destructive: true,
+          }).then(async (ok) => {
+            if (!ok) return;
+            try {
+              await db.deleteOuting(outing.id);
+              onDismissed();
+            } catch (error) {
+              await showMessage(
+                'Could not delete',
+                error instanceof Error ? error.message : 'Something went wrong.'
+              );
+            }
+          });
         }}
       />
       <Text style={styles.note}>

@@ -1,14 +1,24 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, AppState, AppStateStatus, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { AppState, AppStateStatus, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { initDatabase, setTransactionExcluded } from './src/db/dbService';
+import {
+  getTransactionById,
+  initDatabase,
+  rejectCapture,
+  setTransactionCategory,
+  setTransactionExcluded,
+} from './src/db/dbService';
 import RootNavigator from './src/navigation/RootNavigator';
 import {
   addNotificationResponseListener,
   configureNotifications,
   TXN_DECLINE_ACTION,
+  TXN_CONFIRM_ACTION,
+  TXN_REJECT_ACTION,
+  CATEGORY_ACTION_PREFIX,
 } from './src/notifications/notificationService';
-import { ingestBatch, ingestPending } from './src/services/captureService';
+import { acceptCapture, ingestBatch, ingestPending } from './src/services/captureService';
+import { learnFromCategoryCorrection } from './src/services/classificationService';
 import { runFirstRunSetup } from './src/services/onboardingService';
 import { revalidateIfRulesChanged } from './src/services/revalidationService';
 import {
@@ -17,6 +27,7 @@ import {
   openNotificationListenerSettings,
 } from './modules/pinch-capture';
 import { Button } from './src/components/ui';
+import { DialogHost, showDialog, showMessage } from './src/components/Dialog';
 import { formatMoney } from './src/utils/format';
 import { palette, spacing, typography } from './src/theme/theme';
 import Icon from './src/components/Icon';
@@ -104,7 +115,11 @@ export default function App() {
             }
             lines.push('Anything here can be restored in Settings.');
 
-            Alert.alert('Cleaned up your history', lines.join('\n\n'));
+            void showMessage(
+              'Cleaned up your history',
+              undefined,
+              lines.map((line) => ({ label: line }))
+            );
           })
           .catch(() => undefined);
 
@@ -120,14 +135,18 @@ export default function App() {
           .then((result) => {
             if (cancelled || !result.ran) return;
             if (isCaptureAvailable && result.sms && !result.listener) {
-              Alert.alert(
-                'One more thing',
-                'UPI apps like GPay and PhonePe often never send an SMS. Give Pinch notification access and it catches those too.',
-                [
-                  { text: 'Later', style: 'cancel' },
-                  { text: 'Open settings', onPress: openNotificationListenerSettings },
-                ]
-              );
+              void showDialog({
+                title: 'One more thing',
+                message:
+                  'UPI apps like GPay and PhonePe often never send an SMS. Give Pinch notification access and it catches those too.',
+                actions: [
+                  { label: 'Later', value: 'later', variant: 'ghost' },
+                  { label: 'Open settings', value: 'open' },
+                ],
+                dismissValue: 'later',
+              }).then((choice) => {
+                if (choice === 'open') openNotificationListenerSettings();
+              });
             }
           })
           .catch(() => undefined);
@@ -158,16 +177,45 @@ export default function App() {
     return () => subscription?.remove();
   }, [status.phase]);
 
-  // "Remove it" on the transaction notification — the only action that
-  // needs handling. A plain tap or "Looks right" both mean the transaction
-  // stands as posted, which is already true, so there is nothing to do.
+  // Answering a notification without opening the app.
+  //
+  // Three kinds arrive here. "Remove it" excludes a transaction that already
+  // posted. Confirm/reject decides a captured payment that is being held
+  // *before* it counts — ignoring it is also an answer, and leaves it in
+  // Review. A category action sets the category on a logged transaction.
+  //
+  // A plain tap on any of them needs no handling: it opens the app, where
+  // the same decision is available with the evidence on screen.
   useEffect(() => {
     if (status.phase !== 'READY') return;
     const subscription = addNotificationResponseListener((payload, actionIdentifier) => {
-      if (actionIdentifier !== TXN_DECLINE_ACTION) return;
       const transactionId = payload.transactionId as number | undefined;
-      if (transactionId === undefined) return;
-      setTransactionExcluded(transactionId, true).catch(() => undefined);
+      const captureId = payload.captureId as number | undefined;
+
+      if (actionIdentifier === TXN_DECLINE_ACTION && transactionId !== undefined) {
+        setTransactionExcluded(transactionId, true).catch(() => undefined);
+        return;
+      }
+
+      if (actionIdentifier === TXN_CONFIRM_ACTION && captureId !== undefined) {
+        acceptCapture(captureId).catch(() => undefined);
+        return;
+      }
+
+      if (actionIdentifier === TXN_REJECT_ACTION && captureId !== undefined) {
+        rejectCapture(captureId).catch(() => undefined);
+        return;
+      }
+
+      if (actionIdentifier?.startsWith(CATEGORY_ACTION_PREFIX) && transactionId !== undefined) {
+        const category = actionIdentifier.slice(CATEGORY_ACTION_PREFIX.length);
+        // Learned as well as applied, so the next payment to the same place
+        // does not have to be asked about again.
+        setTransactionCategory(transactionId, category)
+          .then(() => getTransactionById(transactionId))
+          .then((row) => (row ? learnFromCategoryCorrection(row.merchant, category) : undefined))
+          .catch(() => undefined);
+      }
     });
     return () => subscription.remove();
   }, [status.phase]);
@@ -214,6 +262,8 @@ export default function App() {
     <SafeAreaProvider>
       <StatusBar barStyle="light-content" backgroundColor={palette.background} />
       <RootNavigator />
+      {/* Mounted last so dialogs sit above everything, including sheets. */}
+      <DialogHost />
     </SafeAreaProvider>
   );
 }
