@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, AppState, StyleSheet, Switch, Text, View } from 'react-native';
+import { showConfirm, showMessage } from '../components/Dialog';
+import { AppState, StyleSheet, Switch, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { TransactionRow } from '../db/types';
@@ -102,7 +103,7 @@ export default function SettingsScreen() {
     const days = Number(periodDays.replace(/[^\d]/g, '')) || 30;
     if (!Number.isFinite(parsed) || parsed <= 0) {
       // Silently doing nothing here was indistinguishable from a broken button.
-      Alert.alert('Enter an allowance', 'How much do you have for this period?');
+      void showMessage('Enter an allowance', 'How much do you have for this period?');
       return;
     }
 
@@ -110,14 +111,14 @@ export default function SettingsScreen() {
       await setMonthlyAllowance(parsed);
       const period = await db.startBudgetPeriod({ allowance: parsed, days });
       setBudgetEdited(false);
-      Alert.alert(
+      await showMessage(
         'Budget updated',
         `${formatMoney(parsed)} over ${days} days — about ${formatMoney(
           parsed / period.daysTotal
         )} a day.`
       );
     } catch (error) {
-      Alert.alert(
+      await showMessage(
         'Could not save',
         error instanceof Error ? error.message : 'Something went wrong saving the period.'
       );
@@ -134,7 +135,7 @@ export default function SettingsScreen() {
     const granted = await requestSmsPermission();
     refreshPermissions();
     if (!granted) {
-      Alert.alert(
+      await showMessage(
         'SMS access needed',
         'Pinch reads bank texts on your phone to log spending automatically. You can turn it on under Permissions in app settings.'
       );
@@ -149,7 +150,7 @@ export default function SettingsScreen() {
     const granted = await requestContactsPermission();
     refreshPermissions();
     if (!granted) {
-      Alert.alert(
+      await showMessage(
         'Contacts access needed',
         'Only used to pick who a bill is split with, so nudges have a number to open.'
       );
@@ -185,7 +186,7 @@ export default function SettingsScreen() {
 
       setBudgetEdited(false);
       await load();
-      Alert.alert(
+      await showMessage(
         'Starting fresh',
         everything
           ? 'Everything cleared. Your budget starts from today.'
@@ -201,10 +202,14 @@ export default function SettingsScreen() {
       ? `This removes all ${counts?.transactions ?? 0} transactions, ${counts?.goals ?? 0} goals, ${counts?.contacts ?? 0} people and ${counts?.blocked ?? 0} blocked senders.`
       : `This removes all ${counts?.transactions ?? 0} transactions and ${counts?.ious ?? 0} debts. Goals, friends and blocked senders are kept.`;
 
-    Alert.alert(everything ? 'Erase everything?' : 'Clear spending history?', `${detail} This cannot be undone.`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Clear', style: 'destructive', onPress: () => startFresh(everything) },
-    ]);
+    void showConfirm({
+      title: everything ? 'Erase everything?' : 'Clear spending history?',
+      message: `${detail} This cannot be undone.`,
+      confirmLabel: 'Clear',
+      destructive: true,
+    }).then((ok) => {
+      if (ok) startFresh(everything);
+    });
   }
 
   async function recheckHistory() {
@@ -212,7 +217,7 @@ export default function SettingsScreen() {
     try {
       const result = await revalidateHistory();
       await load();
-      Alert.alert(
+      await showMessage(
         result.rejected.length === 0 ? 'Nothing to clean up' : 'History rechecked',
         result.rejected.length === 0
           ? `Checked ${result.checked} imported messages and they all still look like real transactions.`
@@ -227,10 +232,11 @@ export default function SettingsScreen() {
     setBusy(true);
     try {
       const result = await backfillFromInbox(150);
-      Alert.alert(
-        'Backfill complete',
-        `${result.posted} added, ${result.queuedForReview} need review, ${result.skipped} skipped.`
-      );
+      await showMessage('Backfill complete', undefined, [
+        { label: `${result.posted} added` },
+        { label: `${result.queuedForReview} need review` },
+        { label: `${result.skipped} skipped` },
+      ]);
     } finally {
       setBusy(false);
     }
@@ -255,24 +261,22 @@ export default function SettingsScreen() {
     try {
       const groups = await getRejectionBreakdown(PARSER_RULES_VERSION);
       if (groups.length === 0) {
-        Alert.alert(
+        await showMessage(
           'Nothing dropped',
           'Every message captured under the current rules became a transaction or a review item.'
         );
         return;
       }
 
-      const lines = groups
-        .slice(0, 8)
-        .map((group) => {
-          const example = group.example.replace(/\s+/g, ' ').slice(0, 70);
-          return `${group.count}x  ${group.reason}\n     e.g. "${example}…"`;
-        })
-        .join('\n\n');
-
-      Alert.alert(
+      // A list, shown as a list — one rule per row with the message it
+      // caught underneath, rather than a paragraph of newlines.
+      await showMessage(
         'What is being skipped',
-        `${lines}\n\nA rule near the top with a real payment under it is a rule worth loosening.`
+        'A rule near the top with a real payment under it is a rule worth loosening.',
+        groups.slice(0, 10).map((group) => ({
+          label: `${group.count}× ${group.reason}`,
+          detail: `e.g. "${group.example.replace(/\s+/g, ' ').slice(0, 90)}…"`,
+        }))
       );
     } finally {
       setBusy(false);
@@ -284,15 +288,22 @@ export default function SettingsScreen() {
     try {
       const before = await countUnresolvedRawEvents();
       if (before === 0) {
-        Alert.alert('Nothing to recover', 'Every message on file already became a transaction or a review item.');
+        await showMessage(
+          'Nothing to recover',
+          'Every message on file already became a transaction or a review item.'
+        );
         return;
       }
       const result = await reprocessUnresolvedRawEvents();
       await load();
-      Alert.alert(
+      await showMessage(
         result.posted + result.queued === 0 ? 'Nothing recovered' : 'Recovery complete',
-        `Checked ${result.checked} message${result.checked === 1 ? '' : 's'} that never became a transaction. ` +
-          `${result.posted} added, ${result.queued} sent to Review, ${result.stillSkipped} still don't look like real transactions.`
+        `Checked ${result.checked} message${result.checked === 1 ? '' : 's'} that never became a transaction.`,
+        [
+          { label: `${result.posted} added` },
+          { label: `${result.queued} sent to Review` },
+          { label: `${result.stillSkipped} still don't look like real transactions` },
+        ]
       );
     } finally {
       setBusy(false);
@@ -477,6 +488,18 @@ export default function SettingsScreen() {
             if (value) await requestNotificationPermission();
             update({ enabled: value });
           }}
+        />
+        <Toggle
+          label="Confirm before logging"
+          hint="Every captured payment waits in Review until you confirm it. Nothing is lost if you miss the notification — but your numbers don't move until you answer."
+          value={notifications.confirmBeforeLogging}
+          onChange={(value) => update({ confirmBeforeLogging: value })}
+        />
+        <Toggle
+          label="Ask for a missing category"
+          hint="When a logged payment couldn't be categorised"
+          value={notifications.categoryPromptsEnabled}
+          onChange={(value) => update({ categoryPromptsEnabled: value })}
         />
         <Toggle
           label="Per-transaction pulse"

@@ -18,6 +18,28 @@ export const TXN_DECISION_CATEGORY = 'txn-decision';
 export const TXN_DECLINE_ACTION = 'DECLINE';
 const TXN_ACCEPT_ACTION = 'ACCEPT';
 
+/**
+ * A captured payment that has not been logged yet and is waiting to be
+ * confirmed. Distinct from TXN_DECISION above, which acts on a transaction
+ * that already exists: here "no" means it never becomes one, and ignoring
+ * it leaves the payment sitting in Review rather than in the ledger.
+ */
+export const TXN_CONFIRM_CATEGORY = 'txn-confirm';
+export const TXN_CONFIRM_ACTION = 'CONFIRM_CAPTURE';
+export const TXN_REJECT_ACTION = 'REJECT_CAPTURE';
+
+/**
+ * Setting a category without opening the app.
+ *
+ * Android shows only the first few actions, so this offers the three
+ * categories a student's uncategorised spending actually tends to fall
+ * into; anything else is one tap away in the app. The chosen category
+ * rides on the action identifier so the handler needs no extra state.
+ */
+export const CATEGORY_PROMPT_CATEGORY = 'category-prompt';
+export const CATEGORY_ACTION_PREFIX = 'SET_CATEGORY:';
+export const QUICK_CATEGORIES = ['Food', 'Transport', 'Shopping'] as const;
+
 let configured = false;
 
 /**
@@ -52,6 +74,19 @@ export async function configureNotifications(): Promise<void> {
     { identifier: TXN_ACCEPT_ACTION, buttonTitle: 'Looks right' },
     { identifier: TXN_DECLINE_ACTION, buttonTitle: 'Remove it' },
   ]);
+
+  await Notifications.setNotificationCategoryAsync(TXN_CONFIRM_CATEGORY, [
+    { identifier: TXN_CONFIRM_ACTION, buttonTitle: 'Confirm' },
+    { identifier: TXN_REJECT_ACTION, buttonTitle: 'Not a transaction' },
+  ]);
+
+  await Notifications.setNotificationCategoryAsync(
+    CATEGORY_PROMPT_CATEGORY,
+    QUICK_CATEGORIES.map((category) => ({
+      identifier: `${CATEGORY_ACTION_PREFIX}${category}`,
+      buttonTitle: category,
+    }))
+  );
 }
 
 export async function requestNotificationPermission(): Promise<boolean> {
@@ -137,6 +172,15 @@ export async function deliver(
   // means anything coherent.
   const isTxnDecision = planned.type === 'TXN_PULSE' || planned.type === 'OVERSPEND';
 
+  const categoryIdentifier =
+    planned.type === 'TXN_CONFIRM'
+      ? TXN_CONFIRM_CATEGORY
+      : planned.type === 'CATEGORY_PROMPT'
+        ? CATEGORY_PROMPT_CATEGORY
+        : isTxnDecision
+          ? TXN_DECISION_CATEGORY
+          : undefined;
+
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -144,7 +188,7 @@ export async function deliver(
         body: planned.body,
         data: planned.payload ?? {},
         ...(Platform.OS === 'android' ? { channelId: CHANNEL_ID } : {}),
-        ...(isTxnDecision ? { categoryIdentifier: TXN_DECISION_CATEGORY } : {}),
+        ...(categoryIdentifier ? { categoryIdentifier } : {}),
       },
       trigger: null, // immediate
     });

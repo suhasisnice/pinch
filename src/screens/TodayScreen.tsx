@@ -33,6 +33,7 @@ import MarkAsLoanSheet from '../components/MarkAsLoanSheet';
 import FreshStartSheet from '../components/FreshStartSheet';
 import BudgetBreakdownSheet from '../components/BudgetBreakdownSheet';
 import ReconcileSheet from '../components/ReconcileSheet';
+import QuickReimburseSheet from '../components/QuickReimburseSheet';
 import BalanceCard from '../components/BalanceCard';
 import { AnimatedMoney, FadeSlideIn } from '../components/motion';
 import Icon from '../components/Icon';
@@ -51,6 +52,8 @@ export default function TodayScreen() {
   const [freshVisible, setFreshVisible] = useState(false);
   const [breakdownVisible, setBreakdownVisible] = useState(false);
   const [testAmount, setTestAmount] = useState('');
+  const [reimburseFor, setReimburseFor] = useState<TransactionRow | null>(null);
+  const [owedByTx, setOwedByTx] = useState<Map<number, number>>(new Map());
   const [reconcileVisible, setReconcileVisible] = useState(false);
   const [showDiscrepancy, setShowDiscrepancy] = useState(false);
   const [adjustmentPrefill, setAdjustmentPrefill] = useState<{
@@ -73,6 +76,8 @@ export default function TodayScreen() {
     setSnapshot(next);
     setBalance(await db.getBalanceState());
     setToday(await db.getTransactionsBetween(start.toISOString(), end.toISOString()));
+    // One lookup for the whole day rather than one per row.
+    setOwedByTx(await db.getOpenReceivableByTransaction());
 
     // Dismissing one gap should not silence a different, larger one later.
     const dismissed = await getDismissedDiscrepancy();
@@ -305,21 +310,46 @@ export default function TodayScreen() {
             body="Captured payments land here automatically, or add one by hand."
           />
         ) : (
-          today.map((tx) => (
-            <Row
-              key={tx.id}
-              left={<Dot color={categoryColor(tx.category)} />}
-              title={tx.merchant}
-              subtitle={`${tx.category ?? 'Uncategorised'} · ${formatRelative(tx.occurred_at)}`}
-              onPress={() => setDetailFor(tx)}
-              right={
-                <Text style={[styles.txAmount, tx.direction === 'CREDIT' && { color: palette.accent }]}>
-                  {tx.direction === 'CREDIT' ? '+' : '−'}
-                  {formatMoney(tx.amount)}
-                </Text>
-              }
-            />
-          ))
+          today.map((tx) => {
+            const owed = owedByTx.get(tx.id);
+            // Only spending can be owed back, and only once — a payment that
+            // already has somebody on the hook shows what is coming rather
+            // than offering to ask again.
+            const canReimburse = tx.kind === 'SPEND' && owed === undefined;
+
+            return (
+              <Row
+                key={tx.id}
+                left={<Dot color={categoryColor(tx.category)} />}
+                title={tx.merchant}
+                subtitle={`${tx.category ?? 'Uncategorised'} · ${formatRelative(tx.occurred_at)}`}
+                onPress={() => setDetailFor(tx)}
+                right={
+                  <View style={styles.txRight}>
+                    <Text
+                      style={[styles.txAmount, tx.direction === 'CREDIT' && { color: palette.accent }]}
+                    >
+                      {tx.direction === 'CREDIT' ? '+' : '−'}
+                      {formatMoney(tx.amount)}
+                    </Text>
+                    {owed !== undefined ? (
+                      <Text style={styles.txOwed}>{formatMoney(owed)} back</Text>
+                    ) : canReimburse ? (
+                      <Text
+                        style={styles.txReimburse}
+                        onPress={() => setReimburseFor(tx)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Say who ${tx.merchant} was for`}
+                        suppressHighlighting
+                      >
+                        for someone?
+                      </Text>
+                    ) : null}
+                  </View>
+                }
+              />
+            );
+          })
         )}
       </Card>
       </FadeSlideIn>
@@ -358,6 +388,15 @@ export default function TodayScreen() {
           }
           setAddThenSplit(false);
           setAdjustmentPrefill(null);
+          load();
+        }}
+      />
+
+      <QuickReimburseSheet
+        transaction={reimburseFor}
+        onClose={() => setReimburseFor(null)}
+        onSaved={() => {
+          setReimburseFor(null);
           load();
         }}
       />
@@ -514,7 +553,10 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row', gap: spacing.sm },
   flex: { flex: 1 },
 
+  txRight: { alignItems: 'flex-end', gap: 1 },
   txAmount: { ...typography.bodyBold, color: palette.textPrimary },
+  txOwed: { ...typography.micro, color: palette.accent },
+  txReimburse: { ...typography.micro, color: palette.textMuted },
   link: { ...typography.caption, color: palette.accent },
 
   // A tonal container rather than an outlined one: in MD3 the fill is what

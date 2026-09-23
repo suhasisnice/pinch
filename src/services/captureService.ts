@@ -3,14 +3,16 @@ import { CapturedMessage, drainMessages, readRecentSms } from '../../modules/pin
 import { ACCEPT_THRESHOLD, buildDedupKey, explainRejection, parseMessage } from './parserService';
 import { PARSER_RULES_VERSION } from './revalidationService';
 import { getBudgetSnapshot } from './budgetService';
-import { planForTransaction } from '../notifications/engine';
-import { deliverAll, loadDeliveryHistory } from '../notifications/notificationService';
+import { NotificationSettings, planForTransaction } from '../notifications/engine';
+import { TITLES } from '../notifications/messages';
+import { deliver, deliverAll, loadDeliveryHistory } from '../notifications/notificationService';
 import {
   getMonthlyAllowance,
   getNotificationSettings,
   getRoundUpGoalId,
 } from '../settings/settingsStore';
 import { roundUpAmount } from '../math/budget';
+import { formatMoney } from '../utils/format';
 import { classifyNewTransaction } from './classificationService';
 import { checkForTransferMatch } from './transferService';
 import { checkForSettlement } from './settlementService';
@@ -143,7 +145,20 @@ async function processMessage(
     message.source
   );
 
-  if (unconfirmed || parsed.confidence < ACCEPT_THRESHOLD) {
+  // A confident parse is held for confirmation rather than logged outright,
+  // when that setting is on. Nothing is lost by waiting — an unanswered one
+  // sits in Review exactly like a shaky parse does — but the budget does not
+  // move until the payment is confirmed, which is the whole point of asking.
+  //
+  // Never during a bulk import. Backfilling months of SMS would otherwise
+  // demand a hundred confirmations and fire a hundred notifications for
+  // payments that happened weeks ago; `silent` is already how the backfill
+  // says it is replaying history rather than reporting something new.
+  const settings = await getNotificationSettings();
+  const holdForConfirmation =
+    settings.confirmBeforeLogging && options.silent !== true;
+
+  if (unconfirmed || holdForConfirmation || parsed.confidence < ACCEPT_THRESHOLD) {
     const id = await db.recordCapture({
       rawText: message.body,
       source: message.source,
@@ -167,6 +182,14 @@ async function processMessage(
       captureId: id,
       rejectReason: unconfirmed ? `might duplicate transaction #${unconfirmed.id}` : null,
     });
+
+    // Only worth a buzz when the app could actually act on the answer, and
+    // only for one it is otherwise confident about — a shaky parse or a
+    // suspected duplicate is a question the Review screen asks properly,
+    // with the evidence on screen.
+    if (holdForConfirmation && !unconfirmed && parsed.confidence >= ACCEPT_THRESHOLD) {
+      await notifyPendingConfirmation(id, parsed.amount, parsed.direction, merchant, settings);
+    }
     return 'QUEUED';
   }
 
@@ -197,6 +220,66 @@ async function processMessage(
     transactionId: posted,
   });
   return 'POSTED';
+}
+
+/**
+ * Asks, on the lock screen, whether a payment the app is otherwise sure
+ * about should count.
+ *
+ * Deliberately outside `planForTransaction`, which plans nudges about
+ * spending that has already happened and caps them per day. This is not a
+ * nudge — it is the only thing standing between a captured payment and the
+ * ledger, so it is never rate-limited and never suppressed by quiet hours;
+ * a payment at 2am still has to be answerable in the morning, and the
+ * Review queue is where it waits either way.
+ */
+async function notifyPendingConfirmation(
+  captureId: number,
+  amount: number,
+  direction: 'DEBIT' | 'CREDIT',
+  merchant: string,
+  settings: NotificationSettings
+): Promise<void> {
+  if (!settings.enabled) return;
+  const sign = direction === 'CREDIT' ? '+' : '−';
+  await deliver(
+    {
+      type: 'TXN_CONFIRM',
+      tier: 'PENDING',
+      title: TITLES.TXN_CONFIRM,
+      body: `${sign}${formatMoney(amount)} · ${merchant}. Confirm to count it.`,
+      payload: { captureId },
+    },
+    settings
+  ).catch(() => undefined);
+}
+
+/**
+ * Asks what a payment was, once it is on the books without a category.
+ *
+ * Only for spending, and only when nothing worked it out — the rules, the
+ * learned classifier and the user's own corrections all had their turn
+ * first. An uncategorised row is not wrong, it is just invisible to
+ * Insights, and the cheapest moment to fix that is while the user still
+ * remembers what they bought.
+ */
+async function notifyMissingCategory(
+  transactionId: number,
+  amount: number,
+  merchant: string,
+  settings: NotificationSettings
+): Promise<void> {
+  if (!settings.enabled || !settings.categoryPromptsEnabled) return;
+  await deliver(
+    {
+      type: 'CATEGORY_PROMPT',
+      tier: 'UNCATEGORISED',
+      title: TITLES.CATEGORY_PROMPT,
+      body: `${formatMoney(amount)} at ${merchant} has no category. Tap to set one.`,
+      payload: { transactionId },
+    },
+    settings
+  ).catch(() => undefined);
 }
 
 /**
@@ -586,6 +669,17 @@ async function runSpendSideEffects(
   try {
     const settings = await getNotificationSettings();
     if (!settings.enabled) return;
+
+    // Asked before the spending nudges below, and independently of them: an
+    // uncategorised row is not a spending problem, it is a gap in what
+    // Insights can say later, and the cheapest moment to close it is while
+    // the user still remembers what they bought. Re-read rather than
+    // trusting the category passed in, because classifyNewTransaction runs
+    // between the insert and here and may well have worked one out.
+    const stored = await db.getTransactionById(transactionId);
+    if (stored && stored.kind === 'SPEND' && stored.category === null) {
+      await notifyMissingCategory(transactionId, amount, merchant, settings);
+    }
 
     const [snapshot, history, allowance] = await Promise.all([
       getBudgetSnapshot(await getMonthlyAllowance()),

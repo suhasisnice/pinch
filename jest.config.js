@@ -15,5 +15,8 @@ module.exports = {
     // react-native itself ships Flow syntax plain ts-jest cannot parse. See
     // tests/mocks/react-native.ts.
     '^react-native$': '<rootDir>/tests/mocks/react-native.ts',
+    // Needs the native bridge, so every call threw under Jest. See
+    // tests/mocks/async-storage.ts.
+    '^@react-native-async-storage/async-storage$': '<rootDir>/tests/mocks/async-storage.ts',
   },
 };

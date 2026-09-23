@@ -36,6 +36,15 @@ export interface NotificationSettings {
   maxPerDay: number;
   /** A spend at or above this, in a social category, offers a split. */
   splitPromptThreshold: number;
+  /**
+   * Hold every captured payment for confirmation instead of logging it
+   * outright. Nothing is lost either way - an unanswered one waits in
+   * Review exactly like a low-confidence parse - but with this on, the
+   * budget does not move until the payment is confirmed.
+   */
+  confirmBeforeLogging: boolean;
+  /** Ask for a category when a logged payment could not be given one. */
+  categoryPromptsEnabled: boolean;
 }
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
@@ -50,6 +59,8 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   quietEndHour: 8,
   maxPerDay: 12,
   splitPromptThreshold: 300,
+  confirmBeforeLogging: true,
+  categoryPromptsEnabled: true,
 };
 
 /** Per-type caps and cooldowns. A nudge that fires too often becomes wallpaper. */
@@ -61,6 +72,11 @@ const LIMITS: Record<NotificationType, { maxPerDay: number; cooldownMinutes: num
   STREAK: { maxPerDay: 1, cooldownMinutes: 720 },
   SETTLE_REMINDER: { maxPerDay: 1, cooldownMinutes: 1440 },
   DAY_RESET: { maxPerDay: 1, cooldownMinutes: 720 },
+  // Neither is a nudge - one gates a payment from counting at all, the
+  // other is the only prompt that will ever ask about that transaction.
+  // Rate-limiting them would silently drop real work on a busy day.
+  TXN_CONFIRM: { maxPerDay: Number.MAX_SAFE_INTEGER, cooldownMinutes: 0 },
+  CATEGORY_PROMPT: { maxPerDay: Number.MAX_SAFE_INTEGER, cooldownMinutes: 0 },
 };
 
 /** Categories where paying for the group is the norm. */

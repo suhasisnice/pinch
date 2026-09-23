@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { showConfirm, showDialog } from './Dialog';
+import { StyleSheet, Text, View } from 'react-native';
 import * as db from '../db/dbService';
 import { TransactionRow } from '../db/types';
 import { CATEGORIES } from '../db/schema';
@@ -57,6 +58,7 @@ export default function TransactionDetailSheet({
   onChanged,
   onSplit,
   onMarkLoan,
+  onLinkReimbursement,
 }: {
   transaction: TransactionRow | null;
   onClose: () => void;
@@ -65,6 +67,8 @@ export default function TransactionDetailSheet({
   onSplit: (transaction: TransactionRow) => void;
   /** Hands off to recording this payment as a debt. */
   onMarkLoan: (transaction: TransactionRow) => void;
+  /** Hands off to linking an incoming payment to the spends it paid back. */
+  onLinkReimbursement?: (transaction: TransactionRow) => void;
 }) {
   const [amount, setAmount] = useState('');
   const [merchant, setMerchant] = useState('');
@@ -161,10 +165,14 @@ export default function TransactionDetailSheet({
   }
 
   function confirmDelete() {
-    Alert.alert('Delete this transaction?', `${transaction!.merchant} · ${formatMoney(transaction!.amount)}`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: deleteOutright },
-    ]);
+    void showConfirm({
+      title: 'Delete this transaction?',
+      message: `${transaction!.merchant} · ${formatMoney(transaction!.amount)}`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    }).then((ok) => {
+      if (ok) deleteOutright();
+    });
   }
 
   /**
@@ -173,14 +181,15 @@ export default function TransactionDetailSheet({
    * something, a one-off back-and-forth) that you just don't want counted.
    */
   function confirmDeleteCaptured() {
-    Alert.alert(
-      'Delete this transaction?',
-      'It stops counting toward your spending. You can bring it back from Settings › Ignored.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: excludeTransaction },
-      ]
-    );
+    void showConfirm({
+      title: 'Delete this transaction?',
+      message:
+        'It stops counting toward your spending. You can bring it back from Settings › Ignored.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    }).then((ok) => {
+      if (ok) excludeTransaction();
+    });
   }
 
   /**
@@ -189,15 +198,19 @@ export default function TransactionDetailSheet({
    * reads the same regardless of where it was found from.
    */
   function confirmReport() {
-    Alert.alert(
-      'Report this transaction',
-      `Should Pinch keep reading messages from "${transaction!.merchant}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Just this one', onPress: excludeTransaction },
-        { text: 'Block sender', style: 'destructive', onPress: excludeAndBlock },
-      ]
-    );
+    void showDialog({
+      title: 'Report this transaction',
+      message: `Should Pinch keep reading messages from "${transaction!.merchant}"?`,
+      actions: [
+        { label: 'Cancel', value: 'cancel', variant: 'ghost' },
+        { label: 'Just this one', value: 'once', variant: 'secondary' },
+        { label: 'Block sender', value: 'block', variant: 'danger' },
+      ],
+      dismissValue: 'cancel',
+    }).then((choice) => {
+      if (choice === 'once') excludeTransaction();
+      if (choice === 'block') excludeAndBlock();
+    });
   }
 
   return (
@@ -274,6 +287,18 @@ export default function TransactionDetailSheet({
               />
             ) : null}
           </View>
+
+          {onLinkReimbursement && db.canBeReimbursement(transaction) ? (
+            <>
+              <Button
+                label={transaction.kind === 'SETTLE_IN' ? 'What this paid back' : 'This paid me back for…'}
+                onPress={() => onLinkReimbursement(transaction)}
+              />
+              <Text style={styles.loanHint}>
+                Pick what it covered and the two show as one line at what was actually yours.
+              </Text>
+            </>
+          ) : null}
 
           {/* Lending or borrowing your own transfer between accounts is not a
               real debt — hidden for a transfer leg rather than reachable and

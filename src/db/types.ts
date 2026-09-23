@@ -76,6 +76,8 @@ export interface IOURow {
   amount: number;
   reason: string | null;
   outing_id: number | null;
+  /** The payment whose reimbursement link created this IOU; NULL for any other IOU. */
+  origin_transaction_id?: number | null;
   created_at: string;
 }
 

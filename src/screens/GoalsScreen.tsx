@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { showConfirm, showMessage } from '../components/Dialog';
+import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { GoalProgress } from '../db/repos/goals';
@@ -413,28 +414,23 @@ function ManageGoalSheet({
   }
 
   function confirmDelete() {
-    Alert.alert(
-      'Delete this goal?',
-      `"${goal!.name}" and everything saved into it (${formatMoney(goal!.savedAmount)}) will be removed. This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await db.deleteGoal(goal!.id);
-              onSaved();
-            } catch (error) {
-              Alert.alert(
-                'Could not delete',
-                error instanceof Error ? error.message : 'Something went wrong.'
-              );
-            }
-          },
-        },
-      ]
-    );
+    void showConfirm({
+      title: 'Delete this goal?',
+      message: `"${goal!.name}" and everything saved into it (${formatMoney(goal!.savedAmount)}) will be removed. This cannot be undone.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    }).then(async (ok) => {
+      if (!ok) return;
+      try {
+        await db.deleteGoal(goal!.id);
+        onSaved();
+      } catch (error) {
+        await showMessage(
+          'Could not delete',
+          error instanceof Error ? error.message : 'Something went wrong.'
+        );
+      }
+    });
   }
 
   if (editing) {

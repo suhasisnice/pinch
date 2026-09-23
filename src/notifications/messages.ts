@@ -19,7 +19,11 @@ export type NotificationType =
   | 'GOAL_MILESTONE'
   | 'STREAK'
   | 'SETTLE_REMINDER'
-  | 'DAY_RESET';
+  | 'DAY_RESET'
+  /** A captured payment waiting to be confirmed before it counts. */
+  | 'TXN_CONFIRM'
+  /** A logged payment the classifier could not put in a category. */
+  | 'CATEGORY_PROMPT';
 
 export type Tier = 'FRESH' | 'STEADY' | 'CLOSE' | 'OVER' | 'WRECKED';
 
@@ -243,4 +247,6 @@ export const TITLES: Record<NotificationType, string> = {
   STREAK: 'Streak',
   SETTLE_REMINDER: 'Someone owes you',
   DAY_RESET: 'New day',
+  TXN_CONFIRM: 'Confirm this?',
+  CATEGORY_PROMPT: 'What was this?',
 };

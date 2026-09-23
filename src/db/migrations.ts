@@ -663,6 +663,31 @@ const V14_CONTACT_ALIASES: Migration = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// v15 — "this money paid me back for those."
+//
+// Linking a reimbursement to the spends it covers is recorded with the
+// machinery that already exists: an IOU against each spend, settled by the
+// incoming payment. No row is deleted — both movements happened, and the
+// bank-balance check depends on every one of them — the ledger just shows
+// the linked set as one net line.
+//
+// What did not exist is a way to undo it cleanly. An IOU the user made by
+// splitting a bill must survive an unlink; one the link itself invented to
+// have something to settle must not. This column is that distinction: it
+// names the payment whose linking created the IOU, and is NULL for every
+// IOU made any other way.
+// ---------------------------------------------------------------------------
+const V15_REIMBURSEMENT_LINKS: Migration = {
+  version: 15,
+  name: 'reimbursement_links',
+  statements: [
+    `ALTER TABLE IOUs ADD COLUMN origin_transaction_id INTEGER REFERENCES Transactions(id) ON DELETE CASCADE;`,
+    `CREATE INDEX IF NOT EXISTS idx_iou_origin ON IOUs(origin_transaction_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_settlement_tx ON Settlements(transaction_id);`,
+  ],
+};
+
 export const MIGRATIONS: Migration[] = [
   V1_INITIAL,
   V2_CONTACT_PHONE,
@@ -678,6 +703,7 @@ export const MIGRATIONS: Migration[] = [
   V12_RAW_EVENTS,
   V13_POSSIBLE_DUPLICATE,
   V14_CONTACT_ALIASES,
+  V15_REIMBURSEMENT_LINKS,
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

@@ -11,14 +11,24 @@ import TransactionDetailSheet from '../components/TransactionDetailSheet';
 import MarkAsLoanSheet from '../components/MarkAsLoanSheet';
 import SplitModal from '../components/SplitModal';
 import { RootStackParamList } from '../navigation/RootNavigator';
+import FilterSheet from '../components/FilterSheet';
+import ReimburseLinkSheet from '../components/ReimburseLinkSheet';
+import LinkedGroupRow from '../components/LinkedGroupRow';
+import { LedgerItem, ReimbursementLink, groupLinkedTransactions } from '../math/reimbursement';
+import {
+  EMPTY_FILTER,
+  TransactionFilter,
+  activeFilterCount,
+  applyTransactionFilter,
+  summariseFiltered,
+} from '../math/transactionFilter';
 
-type Filter = 'ALL' | 'OUT' | 'IN' | 'IGNORED';
-
-const FILTERS: Array<{ key: Filter; label: string }> = [
-  { key: 'ALL', label: 'All' },
-  { key: 'OUT', label: 'Debited' },
-  { key: 'IN', label: 'Credited' },
-  { key: 'IGNORED', label: 'Ignored' },
+/** The handful worth one tap; everything else lives in the filter sheet. */
+const QUICK_RANGES: Array<{ key: TransactionFilter['range']; label: string }> = [
+  { key: 'ALL', label: 'All time' },
+  { key: 'TODAY', label: 'Today' },
+  { key: 'WEEK', label: '7 days' },
+  { key: 'MONTH', label: 'This month' },
 ];
 
 /**
@@ -31,28 +41,39 @@ const FILTERS: Array<{ key: Filter; label: string }> = [
 export default function TransactionsScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'Transactions'>>();
   const [rows, setRows] = useState<TransactionRow[] | null>(null);
-  const [ignored, setIgnored] = useState<TransactionRow[]>([]);
-  const [filter, setFilter] = useState<Filter>('ALL');
-  const [query, setQuery] = useState('');
+  const [owedByTx, setOwedByTx] = useState<Map<number, number>>(new Map());
+  const [period, setPeriod] = useState<{ start: string; end: string } | null>(null);
+  const [filter, setFilter] = useState<TransactionFilter>({
+    ...EMPTY_FILTER,
+    // Insights' drill-down ("View food spending →") arrives with a category
+    // already chosen.
+    categories: route.params?.category ? [route.params.category] : [],
+  });
+  const [filterVisible, setFilterVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [detailFor, setDetailFor] = useState<TransactionRow | null>(null);
   const [loanFor, setLoanFor] = useState<TransactionRow | null>(null);
   const [splitFor, setSplitFor] = useState<TransactionRow | null>(null);
-  // Insights' drill-down ("View food spending →") arrives with a category
-  // already chosen; kept clearable rather than baked into `filter` so the
-  // existing ALL/OUT/IN/IGNORED chips stay independent of it.
-  const [categoryFilter, setCategoryFilter] = useState<string | null>(route.params?.category ?? null);
+  const [linkFor, setLinkFor] = useState<TransactionRow | null>(null);
+  const [links, setLinks] = useState<ReimbursementLink[]>([]);
 
   const load = useCallback(async () => {
-    const [all, excluded] = await Promise.all([
+    // One list, filtered in memory. getAllTransactions already carries the
+    // excluded ones with their excluded_at set, which is what the filter
+    // reads — so there is no second query and no way for the two lists to
+    // disagree about what is ignored.
+    const [all, owed, currentPeriod, linked] = await Promise.all([
       db.getAllTransactions(),
-      db.getExcludedTransactions(),
+      db.getOpenReceivableByTransaction(),
+      db.getCurrentBudgetPeriod(),
+      db.getReimbursementLinks(),
     ]);
-    // getAllTransactions has no opinion about exclusions, so filter here and
-    // keep the ignored ones for their own tab.
-    const excludedIds = new Set(excluded.map((t) => t.id));
-    setRows(all.filter((t) => !excludedIds.has(t.id)));
-    setIgnored(excluded);
+    setRows(all);
+    setLinks(linked);
+    setOwedByTx(owed);
+    setPeriod(
+      currentPeriod ? { start: currentPeriod.startsOn, end: currentPeriod.endsOn } : null
+    );
   }, []);
 
   useFocusEffect(
@@ -67,27 +88,29 @@ export default function TransactionsScreen() {
     setRefreshing(false);
   }, [load]);
 
-  const visible = useMemo(() => {
-    const source = filter === 'IGNORED' ? ignored : (rows ?? []);
-    const needle = query.trim().toLowerCase();
+  const visible = useMemo(
+    () =>
+      applyTransactionFilter(rows ?? [], filter, {
+        now: new Date(),
+        periodStart: period?.start ?? null,
+        periodEnd: period?.end ?? null,
+        owedByTransaction: owedByTx,
+      }),
+    [rows, filter, period, owedByTx]
+  );
 
-    return source.filter((tx) => {
-      if (filter === 'OUT' && tx.direction !== 'DEBIT') return false;
-      if (filter === 'IN' && tx.direction !== 'CREDIT') return false;
-      if (categoryFilter && tx.category !== categoryFilter) return false;
-      if (needle && !tx.merchant.toLowerCase().includes(needle)) return false;
-      return true;
-    });
-  }, [rows, ignored, filter, query, categoryFilter]);
-
+  // A repayment and what it paid back fold into one line at the net, filed
+  // under the day it was squared up. Only what the filter is showing takes
+  // part — see groupLinkedTransactions.
   const grouped = useMemo(() => {
-    const byDay = new Map<string, TransactionRow[]>();
-    for (const tx of visible) {
-      const day = tx.occurred_at.slice(0, 10);
-      byDay.set(day, [...(byDay.get(day) ?? []), tx]);
+    const byDay = new Map<string, LedgerItem[]>();
+    for (const item of groupLinkedTransactions(visible, links)) {
+      const at = item.type === 'group' ? item.occurredAt : item.transaction.occurred_at;
+      const day = at.slice(0, 10);
+      byDay.set(day, [...(byDay.get(day) ?? []), item]);
     }
     return [...byDay.entries()];
-  }, [visible]);
+  }, [visible, links]);
 
   if (!rows) {
     return (
@@ -97,10 +120,8 @@ export default function TransactionsScreen() {
     );
   }
 
-  const total = visible.reduce(
-    (sum, tx) => sum + (tx.direction === 'DEBIT' ? tx.amount : -tx.amount),
-    0
-  );
+  const totals = summariseFiltered(visible);
+  const activeCount = activeFilterCount(filter);
 
   return (
     <Screen
@@ -110,43 +131,46 @@ export default function TransactionsScreen() {
     >
       <ScreenTitle
         title="Transactions"
-        subtitle={`${visible.length} shown · net ${formatMoney(Math.abs(total))} ${total >= 0 ? 'out' : 'in'}`}
+        subtitle={`${totals.count} shown · net ${formatMoney(Math.abs(totals.net))} ${totals.net >= 0 ? 'out' : 'in'}`}
       />
 
       <View style={styles.filterRow}>
-        {FILTERS.map((option) => (
+        {QUICK_RANGES.map((option) => (
           <Chip
             key={option.key}
             label={option.label}
-            selected={filter === option.key}
-            onPress={() => setFilter(option.key)}
-            color={option.key === 'IGNORED' ? palette.warning : palette.accent}
+            selected={filter.range === option.key}
+            onPress={() => setFilter({ ...filter, range: option.key })}
           />
         ))}
+        {/* Carries the count, so a filtered list never looks like an empty one. */}
+        <Chip
+          label={activeCount > 0 ? `Filters · ${activeCount}` : 'Filters'}
+          selected={activeCount > 0}
+          color={palette.info}
+          onPress={() => setFilterVisible(true)}
+        />
       </View>
 
-      {categoryFilter ? (
-        <View style={styles.filterRow}>
-          <Chip label={`${categoryFilter} ✕`} selected color={palette.info} onPress={() => setCategoryFilter(null)} />
-        </View>
-      ) : null}
+      <Field
+        label="Search"
+        value={filter.query}
+        onChangeText={(text) => setFilter({ ...filter, query: text })}
+        placeholder="Merchant name"
+      />
 
-      <Field label="Search" value={query} onChangeText={setQuery} placeholder="Merchant name" />
-
-      {filter === 'IGNORED' ? (
-        <Text style={styles.note}>
-          Removed from your totals. Open one to put it back.
-        </Text>
+      {filter.showIgnored ? (
+        <Text style={styles.note}>Removed from your totals. Open one to put it back.</Text>
       ) : null}
 
       {visible.length === 0 ? (
         <Card>
           <EmptyState
-            icon={filter === 'IGNORED' ? 'check' : 'empty'}
-            title={filter === 'IGNORED' ? 'Nothing ignored' : 'No transactions'}
+            icon={filter.showIgnored ? 'check' : 'empty'}
+            title={filter.showIgnored ? 'Nothing ignored' : 'No transactions'}
             body={
-              query
-                ? 'Nothing matches that search.'
+              activeCount > 0
+                ? 'Nothing matches these filters. Clear a few to widen the search.'
                 : 'Captured payments land here automatically, or add one by hand from Today.'
             }
           />
@@ -155,26 +179,32 @@ export default function TransactionsScreen() {
         grouped.map(([day, items]) => (
           <Card key={day}>
             <Text style={styles.dayLabel}>{formatDay(day)}</Text>
-            {items.map((tx) => (
-              <Row
-                key={tx.id}
-                left={<Dot color={categoryColor(tx.category)} />}
-                title={tx.merchant}
-                subtitle={[
-                  tx.category ?? 'Uncategorised',
-                  tx.source === 'MANUAL' ? 'by hand' : tx.source.toLowerCase(),
-                ].join(' · ')}
-                onPress={() => setDetailFor(tx)}
-                right={
-                  <Text
-                    style={[styles.amount, tx.direction === 'CREDIT' && { color: palette.accent }]}
-                  >
-                    {tx.direction === 'CREDIT' ? '+' : '−'}
-                    {formatMoney(tx.amount)}
-                  </Text>
-                }
-              />
-            ))}
+            {items.map((item) => {
+              if (item.type === 'group') {
+                return <LinkedGroupRow key={`g${item.key}`} group={item} onOpen={setDetailFor} />;
+              }
+              const tx = item.transaction;
+              return (
+                <Row
+                  key={tx.id}
+                  left={<Dot color={categoryColor(tx.category)} />}
+                  title={tx.merchant}
+                  subtitle={[
+                    tx.category ?? 'Uncategorised',
+                    tx.source === 'MANUAL' ? 'by hand' : tx.source.toLowerCase(),
+                  ].join(' · ')}
+                  onPress={() => setDetailFor(tx)}
+                  right={
+                    <Text
+                      style={[styles.amount, tx.direction === 'CREDIT' && { color: palette.accent }]}
+                    >
+                      {tx.direction === 'CREDIT' ? '+' : '−'}
+                      {formatMoney(tx.amount)}
+                    </Text>
+                  }
+                />
+              );
+            })}
           </Card>
         ))
       )}
@@ -191,6 +221,19 @@ export default function TransactionsScreen() {
           setDetailFor(null);
           setLoanFor(tx);
         }}
+        onLinkReimbursement={(tx) => {
+          setDetailFor(null);
+          setLinkFor(tx);
+        }}
+      />
+
+      <ReimburseLinkSheet
+        transaction={linkFor}
+        onClose={() => setLinkFor(null)}
+        onSaved={() => {
+          setLinkFor(null);
+          load();
+        }}
       />
 
       <MarkAsLoanSheet
@@ -200,6 +243,13 @@ export default function TransactionsScreen() {
           setLoanFor(null);
           load();
         }}
+      />
+
+      <FilterSheet
+        visible={filterVisible}
+        filter={filter}
+        onChange={setFilter}
+        onClose={() => setFilterVisible(false)}
       />
 
       <SplitModal
