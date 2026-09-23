@@ -10,7 +10,7 @@ conversation is compacted.
 | 1. Research + audit + plan (this doc) | done |
 | 2. System-level refinements (tokens, kit, money typography) | done — 653/653 tests, typecheck clean. `Money.tsx` (MoneyAmount, used by AnimatedMoney), U+2212 minus in formatMoney, TABULAR on type tiers, spacing.gutter 20 + 24px section gap, no card shadow, Field focus ring, typographic EmptyState, SectionHeader + Divider, tab bar pill removed, 22 uppercase eyebrows → typography.sectionLabel, heroLabel sentence case |
 | 3. Today hierarchy | done — hero first, uncarded, left-aligned 48px; review banner icon chevron; Today's spending as a SectionHeader section; sentence-case microcopy. 653/653, typecheck clean. Not visually verified (no emulator) |
-| 4. Verify (tests, typecheck), commit, build 0.9.8, copy to phone keeping old APKs | pending |
+| 4. Verify (tests, typecheck), commit, build 0.9.8, copy to phone keeping old APKs | done — commit dae8423, 653/653, typecheck clean; fast path (no prebuild) built in 1m46s, `Pinch-0.9.8.apk` (27.9 MB) copied to Download; 0.9.7 left in place |
 
 Queued after this pass (not part of it): Insights restructure — see memory
 `pinch-work-queue` (approved items 1, 2, 6).
