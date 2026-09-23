@@ -283,10 +283,8 @@ const styles = StyleSheet.create({
   filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   note: { ...typography.caption, color: palette.textMuted },
   dayLabel: {
-    ...typography.micro,
+    ...typography.sectionLabel,
     color: palette.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
     marginBottom: spacing.xs,
   },
   amount: { ...typography.bodyBold, color: palette.textPrimary },

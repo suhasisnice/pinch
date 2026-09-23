@@ -332,10 +332,8 @@ const styles = StyleSheet.create({
   toggleRow: { flexDirection: 'row', gap: spacing.sm },
   group: { gap: spacing.sm },
   groupLabel: {
-    ...typography.micro,
+    ...typography.sectionLabel,
     color: palette.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

@@ -297,10 +297,8 @@ const styles = StyleSheet.create({
   },
   figure: { flex: 1, alignItems: 'center', gap: 2 },
   figureLabel: {
-    ...typography.micro,
+    ...typography.sectionLabel,
     color: palette.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   figureValue: { ...typography.bodyBold, color: palette.textPrimary },
   figureStrong: { ...typography.cardTitle, color: palette.textPrimary },
@@ -310,10 +308,8 @@ const styles = StyleSheet.create({
   meterText: { ...typography.caption, color: palette.textSecondary, textAlign: 'center' },
 
   groupLabel: {
-    ...typography.micro,
+    ...typography.sectionLabel,
     color: palette.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
     marginTop: spacing.sm,
   },
   empty: { ...typography.caption, color: palette.textMuted, textAlign: 'center' },

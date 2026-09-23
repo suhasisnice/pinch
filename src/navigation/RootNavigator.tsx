@@ -1,5 +1,4 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
 
 import { NavigationContainer, DarkTheme, Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -13,7 +12,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 import ReviewScreen from '../screens/ReviewScreen';
 import TransactionsScreen from '../screens/TransactionsScreen';
 import Icon, { IconName } from '../components/Icon';
-import { palette, radii, typography } from '../theme/theme';
+import { palette, typography } from '../theme/theme';
 
 export type RootStackParamList = {
   Tabs: undefined;
@@ -72,19 +71,16 @@ function Tabs() {
           paddingTop: 8,
         },
         tabBarLabelStyle: { ...typography.micro, fontSize: 11 },
-        // MD3's navigation bar marks the active destination with a filled
-        // pill behind the icon rather than by tinting the icon alone. It
-        // reads at a glance in a way a colour change on a 21px glyph does
-        // not, and it is the detail that makes a tab bar look like this
-        // design language rather than any other.
+        // Active is the green glyph and a white label — no pill behind it.
+        // The pill was Material 3's signature; this app's language is
+        // Spotify's, where the bar is quiet and state is carried by colour
+        // and weight alone.
         tabBarIcon: ({ focused }) => (
-          <View style={[styles.tabIcon, focused && styles.tabIconActive]}>
-            <Icon
-              name={TAB_ICONS[route.name as keyof TabParamList]}
-              size={20}
-              color={focused ? palette.accent : palette.textMuted}
-            />
-          </View>
+          <Icon
+            name={TAB_ICONS[route.name as keyof TabParamList]}
+            size={22}
+            color={focused ? palette.accent : palette.textMuted}
+          />
         ),
       })}
     >
@@ -125,13 +121,4 @@ export default function RootNavigator() {
   );
 }
 
-const styles = StyleSheet.create({
-  tabIcon: {
-    width: 56,
-    height: 30,
-    borderRadius: radii.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabIconActive: { backgroundColor: palette.accentMuted },
-});
+

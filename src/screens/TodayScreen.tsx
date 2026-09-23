@@ -13,7 +13,7 @@ import { canIAfford, daysUntilBroke, shouldRaiseDiscrepancy } from '../math/budg
 import { TransactionRow } from '../db/types';
 import { formatMoney, formatRelative } from '../utils/format';
 import { accentForState, categoryColor, layer, palette, radii, spacing, typography } from '../theme/theme';
-import {
+import { SectionHeader,
   Button,
   Card,
   CardTitle,
@@ -165,12 +165,54 @@ export default function TodayScreen() {
         </Card>
       ) : null}
 
+      {/* The number. Everything else on this screen explains it — so it comes
+          first, on the page itself rather than in a box like everything else,
+          with room around it. */}
+      <FadeSlideIn>
+        <Pressable
+          onPress={() => setBreakdownVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`Safe to spend today, ${formatMoney(Math.max(0, snapshot.today.remainingToday))}. How this is worked out`}
+          style={({ pressed }) => [styles.hero, pressed && styles.heroPressed]}
+        >
+          <Text style={[styles.heroLabel, { color: accent }]}>Safe to spend today</Text>
+          <AnimatedMoney
+            amount={Math.max(0, snapshot.today.remainingToday)}
+            style={[styles.heroAmount, { color: accent }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+          />
+          <Text style={styles.heroSub}>
+            {formatMoney(snapshot.today.spentToday)} spent of {formatMoney(snapshot.today.dailyLimit)}
+          </Text>
+          <View style={styles.heroBar}>
+            <ProgressBar fraction={snapshot.today.usedFraction} color={accent} height={6} />
+          </View>
+          {snapshot.today.state === 'OVER' ? (
+            <Text style={[styles.heroNote, { color: palette.danger }]}>
+              {formatMoney(-snapshot.today.remainingToday)} over today. Tomorrow starts fresh.
+            </Text>
+          ) : snapshot.streakDays > 0 ? (
+            <View style={styles.streakRow}>
+              <Icon name="streak" size={14} color={palette.warning} />
+              <Text style={styles.heroNote}>
+                {snapshot.streakDays} {snapshot.streakDays === 1 ? 'day' : 'days'} under budget in a row
+              </Text>
+            </View>
+          ) : null}
+          <View style={styles.heroExplainRow}>
+            <Text style={styles.heroExplain}>How this is worked out</Text>
+            <Icon name="chevronRight" size={14} color={palette.textSecondary} />
+          </View>
+        </Pressable>
+      </FadeSlideIn>
+
       {snapshot.pendingCaptures > 0 ? (
         <Card style={styles.reviewBanner} onPress={() => navigation.navigate('Review')}>
           <Text style={styles.reviewText}>
             {snapshot.pendingCaptures} message{snapshot.pendingCaptures === 1 ? '' : 's'} to review
           </Text>
-          <Text style={styles.reviewChevron}>›</Text>
+          <Icon name="chevronRight" size={18} color={palette.accent} />
         </Card>
       ) : null}
 
@@ -213,35 +255,6 @@ export default function TodayScreen() {
       </Card>
       </FadeSlideIn>
 
-      {/* The number. Everything else on this screen explains it. */}
-      <FadeSlideIn>
-      <Card style={styles.hero} onPress={() => setBreakdownVisible(true)}>
-        <Text style={[styles.heroLabel, { color: accent }]}>Safe to spend today</Text>
-        <AnimatedMoney
-          amount={Math.max(0, snapshot.today.remainingToday)}
-          style={[styles.heroAmount, { color: accent }]}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-        />
-        <Text style={styles.heroSub}>
-          of {formatMoney(snapshot.today.dailyLimit)} · {formatMoney(snapshot.today.spentToday)} spent
-        </Text>
-        <View style={styles.heroBar}>
-          <ProgressBar fraction={snapshot.today.usedFraction} color={accent} height={10} />
-        </View>
-        <Text style={styles.heroExplain}>tap to see how this is worked out</Text>
-        {snapshot.today.state === 'OVER' ? (
-          <Text style={[styles.heroNote, { color: palette.danger }]}>
-            {formatMoney(-snapshot.today.remainingToday)} over. tomorrow resets.
-          </Text>
-        ) : snapshot.streakDays > 0 ? (
-          <View style={styles.streakRow}>
-            <Icon name="streak" size={14} color={palette.warning} />
-            <Text style={styles.heroNote}>{snapshot.streakDays}-day streak under budget</Text>
-          </View>
-        ) : null}
-      </Card>
-      </FadeSlideIn>
 
       {/* The question people actually have. */}
       <FadeSlideIn delay={70}>
@@ -293,16 +306,12 @@ export default function TodayScreen() {
       </FadeSlideIn>
 
       <FadeSlideIn delay={210}>
-      <Card>
-        <CardTitle
-          right={
-            <Text style={styles.link} onPress={() => navigation.navigate('Transactions')}>
-              See all
-            </Text>
-          }
-        >
-          Today's spending
-        </CardTitle>
+      <View>
+        <SectionHeader
+          title="Today's spending"
+          action="See all"
+          onAction={() => navigation.navigate('Transactions')}
+        />
         {today.length === 0 ? (
           <EmptyState
             icon="empty"
@@ -351,7 +360,7 @@ export default function TodayScreen() {
             );
           })
         )}
-      </Card>
+      </View>
       </FadeSlideIn>
 
       {brokeIn !== null && brokeIn < snapshot.daysRemaining ? (
@@ -509,30 +518,25 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'flex-start' },
   gear: { paddingTop: 4, paddingLeft: spacing.sm },
 
-  // The one container in the app that gets the extra-extra-large radius.
-  // MD3 reserves that shape for the thing a screen is actually about, and
-  // on this screen that is unambiguous: the number.
+  // No container: the figure sits on the page, left-aligned like the title
+  // above it, and wins by size and space alone.
   hero: {
-    alignItems: 'center',
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.lg,
-    gap: 2,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
     borderRadius: radii.card,
-    backgroundColor: palette.surface,
-    overflow: 'hidden',
   },
+  heroPressed: { opacity: 0.72 },
   heroLabel: { ...typography.heroLabel },
-  heroAmount: { ...typography.hero, marginTop: spacing.xs },
-  heroSub: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
+  heroAmount: { ...typography.hero, fontSize: 48, lineHeight: 54, letterSpacing: -1.5, marginTop: 2 },
+  heroSub: { ...typography.body, color: palette.textSecondary, marginTop: 2 },
   heroBar: { width: '100%', marginTop: spacing.md },
   heroNote: { ...typography.caption, color: palette.textSecondary },
-  heroExplain: { ...typography.micro, color: palette.textMuted, marginTop: spacing.sm },
+  heroExplainRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: spacing.md },
+  heroExplain: { ...typography.caption, fontWeight: '600', color: palette.textSecondary },
 
   availableLabel: {
-    ...typography.micro,
+    ...typography.sectionLabel,
     color: palette.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   availableAmount: { ...typography.heroCompact, color: palette.textPrimary, marginTop: 4 },
   protectedNote: { ...typography.caption, color: palette.textMuted, marginTop: 2 },
@@ -544,7 +548,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   consistencyText: { ...typography.caption, color: palette.warning, flex: 1, lineHeight: 17 },
-  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: spacing.sm },
+  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: spacing.md },
 
   verdict: { marginTop: spacing.sm, gap: 4 },
   verdictHead: { ...typography.cardTitle },
@@ -557,7 +561,6 @@ const styles = StyleSheet.create({
   txAmount: { ...typography.bodyBold, color: palette.textPrimary },
   txOwed: { ...typography.micro, color: palette.accent },
   txReimburse: { ...typography.micro, color: palette.textMuted },
-  link: { ...typography.caption, color: palette.accent },
 
   // A tonal container rather than an outlined one: in MD3 the fill is what
   // says "this is a different kind of thing", and a coloured hairline around
@@ -572,7 +575,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   reviewText: { ...typography.bodyBold, color: palette.accent },
-  reviewChevron: { color: palette.accent, fontSize: 22 },
 
   projection: { ...typography.body, color: palette.textSecondary, lineHeight: 20 },
 

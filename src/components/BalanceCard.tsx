@@ -167,10 +167,8 @@ const styles = StyleSheet.create({
   card: { gap: 2 },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   label: {
-    ...typography.micro,
+    ...typography.sectionLabel,
     color: palette.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   amount: { ...typography.heroCompact, fontSize: 30, color: palette.textPrimary, marginTop: 2 },
   empty: { ...typography.body, color: palette.textMuted, marginTop: spacing.xs },

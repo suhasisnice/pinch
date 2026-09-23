@@ -351,10 +351,8 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   },
   rawLabel: {
-    ...typography.micro,
+    ...typography.sectionLabel,
     color: palette.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
     marginBottom: 4,
   },
   rawText: { ...typography.caption, color: palette.textSecondary, lineHeight: 18 },
@@ -367,10 +365,8 @@ const styles = StyleSheet.create({
 
   group: { gap: spacing.sm },
   groupLabel: {
-    ...typography.micro,
+    ...typography.sectionLabel,
     color: palette.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

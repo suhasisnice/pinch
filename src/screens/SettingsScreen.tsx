@@ -654,10 +654,8 @@ const styles = StyleSheet.create({
   ok: { ...typography.bodyBold, color: palette.accent },
   undo: { ...typography.caption, color: palette.accent, fontWeight: '700' },
   groupLabel: {
-    ...typography.micro,
+    ...typography.sectionLabel,
     color: palette.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
     marginTop: spacing.md,
     marginBottom: 2,
   },

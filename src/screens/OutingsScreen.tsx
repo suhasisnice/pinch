@@ -580,10 +580,8 @@ function OutingDetailSheet({
 
 const styles = StyleSheet.create({
   sectionLabel: {
-    ...typography.micro,
+    ...typography.sectionLabel,
     color: palette.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
     marginTop: spacing.xs,
   },
 
@@ -613,7 +611,7 @@ const styles = StyleSheet.create({
 
   detailTotals: { flexDirection: 'row', gap: spacing.sm },
   detailStat: { flex: 1, alignItems: 'center', gap: 2 },
-  detailStatLabel: { ...typography.micro, color: palette.textSecondary, textTransform: 'uppercase', letterSpacing: 1 },
+  detailStatLabel: { ...typography.sectionLabel, color: palette.textSecondary },
   detailStatValue: { ...typography.bodyBold, fontSize: 17, color: palette.textPrimary },
 
   reserveRow: { gap: spacing.sm },
@@ -621,10 +619,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
 
   groupLabel: {
-    ...typography.micro,
+    ...typography.sectionLabel,
     color: palette.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
     marginBottom: spacing.xs,
   },
   itemRight: { alignItems: 'flex-end', gap: 4 },

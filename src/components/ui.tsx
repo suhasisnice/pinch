@@ -306,7 +306,7 @@ export function Field({
         }}
         style={[
           styles.input,
-          focused && { borderBottomColor: palette.accent },
+          focused && { borderColor: palette.accent },
           inputProps.style,
         ]}
       />
@@ -382,9 +382,10 @@ export function EmptyState({
 }) {
   return (
     <View style={styles.empty}>
-      <View style={styles.emptyIcon}>
-        <Icon name={icon} size={26} color={palette.accent} />
-      </View>
+      {/* A quiet glyph, not a badge. An icon in a tinted circle is the stock
+          empty state of every generated template; here the words do the
+          work and the icon only sets the subject. */}
+      <Icon name={icon} size={24} color={palette.textMuted} />
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyBody}>{body}</Text>
       {action ? <View style={styles.emptyAction}>{action}</View> : null}
@@ -493,6 +494,40 @@ export function Row({
   );
 }
 
+/**
+ * A section heading that sits on the page, not inside a box. Most of what a
+ * screen shows is a list with a name; wrapping each in a card is the
+ * "card per concept" look the spec warns against.
+ */
+export function SectionHeader({
+  title,
+  action,
+  onAction,
+}: {
+  title: string;
+  /** A short text action on the right, e.g. "See all". */
+  action?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle} accessibilityRole="header">
+        {title}
+      </Text>
+      {action && onAction ? (
+        <Pressable onPress={onAction} hitSlop={12} accessibilityRole="button" accessibilityLabel={action}>
+          <Text style={styles.sectionAction}>{action}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+/** A hairline between rows of one list. */
+export function Divider() {
+  return <View style={styles.divider} />;
+}
+
 export function Dot({ color, size = 10 }: { color: string; size?: number }) {
   return (
     <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }} />
@@ -501,19 +536,28 @@ export function Dot({ color, size = 10 }: { color: string; size?: number }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.background },
-  scrollContent: { padding: spacing.md, paddingBottom: spacing.xxl * 2, gap: spacing.md },
+  // The spec's 20px gutter, and 24px between sections so a screen reads as
+  // a few distinct blocks rather than one even stack. Things that belong
+  // together stay close inside their own section (8px), which is what makes
+  // the larger gap between sections legible as structure.
+  scrollContent: {
+    paddingHorizontal: spacing.gutter,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxl * 2,
+    gap: spacing.lg,
+  },
 
   titleBlock: { marginBottom: spacing.xs },
   screenTitle: { ...typography.screenTitle, color: palette.textPrimary },
   screenSubtitle: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
 
-  // Tonal separation, not a border: MD3 leans on the surface stepping up a
-  // tone rather than drawing a line around everything.
+  // Tonal separation only. A drop shadow on #121212 is invisible except as
+  // a smudge along the bottom edge, and the spec asks for contrast between
+  // surfaces over shadows.
   card: {
     backgroundColor: palette.surface,
     borderRadius: radii.card,
     padding: spacing.md,
-    ...elevation.level1,
   },
 
   cardTitleRow: {
@@ -568,25 +612,21 @@ const styles = StyleSheet.create({
   chipLabel: { ...typography.micro, color: palette.textSecondary },
 
   field: { gap: 6 },
-  fieldLabel: {
-    ...typography.micro,
-    color: palette.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  // Rounded at the top, square at the bottom, underlined: the MD3 filled
-  // text field. The asymmetry is the whole signature — rounding all four
-  // corners turns it back into a generic box.
+  // Sentence case, weight for hierarchy. Capitals with wide tracking on
+  // every label is the default of every template; the spec only asks for
+  // uppercase on button labels.
+  fieldLabel: { ...typography.caption, fontWeight: '600', color: palette.textSecondary },
+  // A filled, softly rounded well that takes a green ring while focused —
+  // Spotify's search field, not the MD3 underline it replaces.
   input: {
     backgroundColor: palette.surfaceElevated,
-    borderTopLeftRadius: radii.input,
-    borderTopRightRadius: radii.input,
+    borderRadius: radii.input,
+    borderWidth: 1,
+    borderColor: 'transparent',
     paddingHorizontal: spacing.md,
     paddingVertical: 14,
     color: palette.textPrimary,
     fontSize: 16,
-    borderBottomWidth: 2,
-    borderBottomColor: palette.border,
   },
   fieldHint: { ...typography.micro, color: palette.textMuted },
 
@@ -596,15 +636,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  empty: { alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm },
-  emptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: palette.accentMuted,
-  },
+  empty: { alignItems: 'center', paddingVertical: spacing.lg, gap: spacing.sm },
   emptyTitle: { ...typography.cardTitle, color: palette.textPrimary },
   emptyBody: {
     ...typography.body,
@@ -647,6 +679,16 @@ const styles = StyleSheet.create({
   sheetContent: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, gap: spacing.md },
 
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: spacing.sm },
+
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  sectionTitle: { ...typography.cardTitle, color: palette.textPrimary },
+  sectionAction: { ...typography.caption, fontWeight: '600', color: palette.textSecondary },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: palette.border },
   rowLeft: { width: 38, alignItems: 'center' },
   rowBody: { flex: 1, gap: 2 },
   rowTitle: { ...typography.bodyBold, color: palette.textPrimary },

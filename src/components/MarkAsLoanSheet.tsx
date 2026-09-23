@@ -178,10 +178,8 @@ const styles = StyleSheet.create({
   intro: { ...typography.body, color: palette.textSecondary, lineHeight: 20 },
   quickBlock: { gap: spacing.sm },
   quickLabel: {
-    ...typography.micro,
+    ...typography.sectionLabel,
     color: palette.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

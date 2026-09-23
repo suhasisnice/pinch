@@ -188,6 +188,12 @@ export const spacing = {
   lg: 24,
   xl: 32,
   xxl: 48,
+  /**
+   * Side padding for a whole screen. SPOTIFY_FINANCE_UI_PROMPT.md asks for
+   * 20–24px; content used to sit at 16, which is what made every screen
+   * feel slightly crammed against the glass.
+   */
+  gutter: 20,
 } as const;
 
 /**
@@ -236,15 +242,28 @@ export const elevation = {
  * `docs/phases/PHASE_0_DESIGN_SYSTEM.md` §3 before shipping this without a
  * visual pass on the densest lists (Transactions, Insights).
  */
+/**
+ * Every digit the same width, so amounts line up down a list and a figure
+ * counting to a new value holds still instead of shuffling sideways.
+ *
+ * Android's Roboto already draws equal-width digits by default, so today
+ * this mostly states intent — but it is what keeps the numbers right the
+ * moment a typeface with proportional figures is swapped in, which is the
+ * common case for anything other than the system font.
+ */
+const TABULAR = { fontVariant: ['tabular-nums'] as Array<'tabular-nums'> };
+
 export const typography = {
   /** Large money amount (32–44px in the spec). */
   hero: {
+    ...TABULAR,
     fontSize: 40,
     fontWeight: '700' as const,
     letterSpacing: -1,
     lineHeight: 46,
   },
   heroCompact: {
+    ...TABULAR,
     fontSize: 32,
     fontWeight: '700' as const,
     letterSpacing: -0.5,
@@ -252,6 +271,7 @@ export const typography = {
   },
   /** Extra tier for a big secondary stat (Insights) — not spec-named, kept between `cardTitle` and `hero`. */
   display: {
+    ...TABULAR,
     fontSize: 28,
     fontWeight: '700' as const,
     letterSpacing: -0.3,
@@ -263,31 +283,50 @@ export const typography = {
     letterSpacing: -0.2,
     lineHeight: 30,
   },
+  /** The line naming a hero figure ("Safe to spend today"). */
   heroLabel: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '600' as const,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase' as const,
+    letterSpacing: 0.1,
+    lineHeight: 20,
+  },
+  /**
+   * The small name over a group of things — a section, a stat, a field.
+   * Sentence case, set apart by weight and colour rather than by capitals
+   * and wide tracking: the all-caps eyebrow on every block is one of the
+   * most recognisable marks of a generated interface, and the spec only asks
+   * for uppercase on button labels.
+   */
+  sectionLabel: {
+    ...TABULAR,
+    fontSize: 13,
+    fontWeight: '600' as const,
+    letterSpacing: 0.1,
+    lineHeight: 18,
   },
   /** Feature/section heading. */
   cardTitle: {
+    ...TABULAR,
     fontSize: 18,
     fontWeight: '600' as const,
     letterSpacing: 0.1,
   },
   body: {
+    ...TABULAR,
     fontSize: 16,
     fontWeight: '400' as const,
     letterSpacing: 0.15,
     lineHeight: 22,
   },
   bodyBold: {
+    ...TABULAR,
     fontSize: 16,
     fontWeight: '600' as const,
     letterSpacing: 0.1,
     lineHeight: 22,
   },
   caption: {
+    ...TABULAR,
     fontSize: 14,
     fontWeight: '400' as const,
     letterSpacing: 0.25,
@@ -295,6 +334,7 @@ export const typography = {
   },
   /** "Small bold" in the spec: 12px/700. */
   micro: {
+    ...TABULAR,
     fontSize: 12,
     fontWeight: '700' as const,
     letterSpacing: 0.5,
