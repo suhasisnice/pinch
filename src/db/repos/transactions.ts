@@ -669,6 +669,45 @@ export async function getBorneBetween(
   };
 }
 
+/**
+ * `getBorneBetween`, broken down by category: what left the account for each
+ * one, and how much of that was other people's share.
+ *
+ * A category ranked by what was paid puts the night you fronted for six
+ * people at the top of "where your money goes", when most of it was never
+ * yours. Ranked by `yours`, the list answers the question the user asked.
+ * Same filters as `getSpendByCategory`, so the paid figures agree with it.
+ */
+export async function getCategoryCost(
+  startIso: string,
+  endIso: string
+): Promise<Array<{ category: string; paid: number; splitAway: number; yours: number; count: number }>> {
+  const db = getAdapter();
+  const rows = await db.getAllAsync<{ category: string; paid: number; splitAway: number; count: number }>(
+    `SELECT COALESCE(t.category, 'Uncategorised') AS category,
+            SUM(t.amount) AS paid,
+            SUM(COALESCE(
+              (SELECT SUM(i.amount) FROM IOUs i
+                WHERE i.transaction_id = t.id AND i.direction = 'THEY_OWE_ME'), 0
+            )) AS splitAway,
+            COUNT(*) AS count
+     FROM Transactions t
+     WHERE t.kind = 'SPEND' AND t.excluded_at IS NULL AND t.transfer_pair_id IS NULL
+       AND t.non_spend_reason IS NULL
+       AND t.occurred_at >= ? AND t.occurred_at < ?
+     GROUP BY COALESCE(t.category, 'Uncategorised');`,
+    [startIso, endIso]
+  );
+
+  return rows
+    .map((row) => {
+      // An IOU larger than its bill is a data-entry mistake, not negative spending.
+      const splitAway = Math.min(row.splitAway ?? 0, row.paid);
+      return { ...row, splitAway, yours: row.paid - splitAway };
+    })
+    .sort((a, b) => b.yours - a.yours || b.paid - a.paid);
+}
+
 /** Records that a payment moved money rather than spending it. */
 export async function setNonSpendReason(id: number, reason: string | null): Promise<void> {
   const db = getAdapter();
