@@ -12,6 +12,9 @@ This is an **existing app being rehauled**, not a greenfield build. It already
 ships working budget, split, goals, outings, insights and automatic-ingestion
 code. Read before rewriting.
 
+To find a file, read `docs/CODEMAP.md` (one line per file, drafted by the local model) before
+searching the tree. It can be stale or wrong; the code wins. Local-model helpers: `docs/LOCAL_MODEL.md`.
+
 ## Specification hierarchy
 
 1. `docs/PRODUCT_SPEC.md` — product behaviour, financial rules, architecture, data model.
