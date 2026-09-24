@@ -36,6 +36,8 @@ class SmsReceiver : BroadcastReceiver() {
         for ((sender, body) in bySender) {
             val text = body.toString()
             if (text.isBlank()) continue
+            // Personal messages stop here; see FinancialSms.
+            if (!FinancialSms.isWorthKeeping(sender, text)) continue
 
             val entry = JSONObject().apply {
                 put("source", "SMS")
