@@ -133,7 +133,7 @@ export function averageDailySpend(daily: Array<{ day: string; total: number }>):
 export function computeStreak(
   daily: Array<{ day: string; total: number }>,
   dailyLimit: number,
-  today: string = new Date().toISOString().slice(0, 10)
+  today: string
 ): number {
   if (dailyLimit <= 0) return 0;
 

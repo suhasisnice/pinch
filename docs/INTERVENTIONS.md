@@ -60,3 +60,9 @@ This overrides the 0.9.14 "witty but kind" rule for reprimands only. Rules:
 `getBudgetSnapshot` divided a pool that already had today's spending taken out by the days left, today included, and then subtracted today's spending again. Mid-month, that made "left today" a few percent too low. On the last day of a period it was double: spending ₹100 dropped "left today" by ₹200.
 
 Today's limit is now the one the day started with: `(pool + spentToday) / daysRemaining`. Insights and the weekly recap use the same figure. Covered by `tests/todayLimit.test.ts`.
+
+## 0.9.20: spending filed under the day you lived
+
+`getDailySpend` and the monthly day count grouped spends by the first ten characters of `occurred_at`, which is the UTC date. In India that put everything between midnight and 5:30 AM on the day before. A late Saturday night showed up as Friday: it could break a streak that had actually held, and it skewed the weekday pattern and the Insights pace.
+
+The SQL now shifts by the phone's offset before it takes the date, and the streak and Insights' "today" use `localDay`. Today's ring, the week strip and the recovery missions already used local day ranges, so they didn't change. Covered by `tests/localDay.test.ts`, which pins the time zone to Asia/Kolkata.
