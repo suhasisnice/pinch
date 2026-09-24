@@ -708,6 +708,40 @@ export async function getCategoryCost(
     .sort((a, b) => b.yours - a.yours || b.paid - a.paid);
 }
 
+/**
+ * Each spend in a window with other people's share of it, for anything that
+ * needs to slice spending more than one way at once (the weekly recap cuts
+ * the same rows by day, category and merchant). Same filters as
+ * `getCategoryCost`, so the totals agree with it.
+ */
+export async function getSpendsWithShare(
+  startIso: string,
+  endIso: string
+): Promise<
+  Array<{ id: number; amount: number; splitAway: number; merchant: string; category: string | null; occurredAt: string }>
+> {
+  const db = getAdapter();
+  const rows = await db.getAllAsync<{
+    id: number;
+    amount: number;
+    splitAway: number | null;
+    merchant: string;
+    category: string | null;
+    occurredAt: string;
+  }>(
+    `SELECT t.id, t.amount, t.merchant, t.category, t.occurred_at AS occurredAt,
+            (SELECT SUM(i.amount) FROM IOUs i
+              WHERE i.transaction_id = t.id AND i.direction = 'THEY_OWE_ME') AS splitAway
+     FROM Transactions t
+     WHERE t.kind = 'SPEND' AND t.excluded_at IS NULL AND t.transfer_pair_id IS NULL
+       AND t.non_spend_reason IS NULL
+       AND t.occurred_at >= ? AND t.occurred_at < ?
+     ORDER BY t.occurred_at ASC;`,
+    [startIso, endIso]
+  );
+  return rows.map((row) => ({ ...row, splitAway: Math.min(row.splitAway ?? 0, row.amount) }));
+}
+
 /** Records that a payment moved money rather than spending it. */
 export async function setNonSpendReason(id: number, reason: string | null): Promise<void> {
   const db = getAdapter();
