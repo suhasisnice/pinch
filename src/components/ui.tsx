@@ -39,20 +39,27 @@ export function Screen({
   children,
   scroll = true,
   refreshControl,
+  underHeader = false,
 }: {
   children: React.ReactNode;
   scroll?: boolean;
   refreshControl?: React.ReactElement;
+  /**
+   * A stack screen whose navigation header already clears the status bar.
+   * Insetting again left a status-bar-sized gap under the back arrow.
+   */
+  underHeader?: boolean;
 }) {
+  const edges: Array<'top'> = underHeader ? [] : ['top'];
   if (!scroll) {
     return (
-      <SafeAreaView style={styles.screen} edges={['top']}>
+      <SafeAreaView style={styles.screen} edges={edges}>
         {children}
       </SafeAreaView>
     );
   }
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
+    <SafeAreaView style={styles.screen} edges={edges}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -69,11 +76,38 @@ export function Screen({
   );
 }
 
-export function ScreenTitle({ title, subtitle }: { title: string; subtitle?: string }) {
+/**
+ * The screen's name, and at most one action beside it.
+ *
+ * The action sits here, small, rather than as a full-width green pill above
+ * the content: a tab whose first and loudest element is "create another"
+ * leads with the least common task. It stays the primary colour, so it is
+ * still the obvious thing to tap when that is what you came for.
+ */
+export function ScreenTitle({
+  title,
+  subtitle,
+  action,
+}: {
+  title: string;
+  subtitle?: string;
+  action?: { label: string; onPress: () => void; icon?: IconName };
+}) {
   return (
-    <View style={styles.titleBlock}>
-      <Text style={styles.screenTitle}>{title}</Text>
-      {subtitle ? <Text style={styles.screenSubtitle}>{subtitle}</Text> : null}
+    <View style={[styles.titleBlock, action && styles.titleRow]}>
+      <View style={styles.titleText}>
+        <Text style={styles.screenTitle}>{title}</Text>
+        {subtitle ? <Text style={styles.screenSubtitle}>{subtitle}</Text> : null}
+      </View>
+      {action ? (
+        <Button
+          label={action.label}
+          icon={action.icon ?? 'add'}
+          onPress={action.onPress}
+          size="small"
+          variant="tonal"
+        />
+      ) : null}
     </View>
   );
 }
@@ -136,6 +170,7 @@ export function Button({
   disabled = false,
   icon,
   style,
+  size = 'regular',
 }: {
   label: string;
   onPress: () => void;
@@ -143,6 +178,8 @@ export function Button({
   disabled?: boolean;
   icon?: IconName;
   style?: ViewStyle;
+  /** 'small' is for a header action beside a screen title. */
+  size?: 'regular' | 'small';
 }) {
   const press = usePressScale();
 
@@ -168,10 +205,18 @@ export function Button({
     // Spec: "Secondary: Dark pill" — a neutral dark surface, not a tint of
     // the one accent (that would read as a second, weaker green button).
     tonal: palette.textPrimary,
-    outlined: palette.accent,
-    text: palette.accent,
-    danger: palette.onDanger,
+    outlined: palette.textPrimary,
+    // Green is state and the primary action, not the colour of every
+    // tappable word — a text button is quiet by design.
+    text: palette.textPrimary,
+    // Red on its own muted red, so it reads as a live destructive action
+    // rather than a disabled one.
+    danger: palette.danger,
   }[resolved];
+
+  // The spec reserves capitals for the primary action. Every other button in
+  // sentence case is what keeps a sheet with four actions from shouting.
+  const labelStyle = resolved === 'filled' ? styles.buttonLabel : styles.buttonLabelQuiet;
 
   // The caller's style carries layout (a flex:1 in a button row), so it rides
   // on the wrapper; the visual styles stay on the pressable that is scaling.
@@ -188,12 +233,15 @@ export function Button({
         style={({ pressed }) => [
           styles.button,
           containerStyle,
+          size === 'small' && styles.buttonSmall,
           pressed && { backgroundColor: layer(labelColor, stateLayer.press) },
           disabled && styles.buttonDisabled,
         ]}
       >
-        {icon ? <Icon name={icon} size={18} color={labelColor} /> : null}
-        <Text style={[styles.buttonLabel, { color: labelColor }]}>{label}</Text>
+        {icon ? <Icon name={icon} size={size === 'small' ? 16 : 18} color={labelColor} /> : null}
+        <Text style={[labelStyle, size === 'small' && styles.buttonLabelSmall, { color: labelColor }]}>
+          {label}
+        </Text>
       </Pressable>
     </Animated.View>
   );
@@ -253,10 +301,10 @@ export function Chip({
   onPress?: () => void;
   color?: string;
 }) {
-  const selectedBackground = color ?? palette.accentMuted;
+  const selectedBackground = color ?? palette.accent;
   // A caller-supplied tint can be any colour, so the label is measured
   // against it rather than assumed. See onColor in theme.ts.
-  const selectedLabel = color ? onColor(color) : palette.accent;
+  const selectedLabel = color ? onColor(color) : palette.onAccent;
 
   return (
     <Pressable
@@ -266,14 +314,65 @@ export function Chip({
       accessibilityState={{ selected }}
       style={({ pressed }) => [
         styles.chip,
-        selected && { backgroundColor: selectedBackground, borderColor: 'transparent' },
-        pressed && { backgroundColor: layer(palette.accent, stateLayer.press) },
+        selected && { backgroundColor: selectedBackground },
+        pressed && { opacity: 0.7 },
       ]}
     >
-      <Text style={[styles.chipLabel, selected && { color: selectedLabel, fontWeight: '500' }]}>
+      <Text style={[styles.chipLabel, selected && { color: selectedLabel }]}>
         {label}
       </Text>
     </Pressable>
+  );
+}
+
+/**
+ * A row of filter chips that scrolls sideways instead of wrapping onto a
+ * second line — one line of options, the way every music app does it.
+ */
+export function ChipRow({ children }: { children: React.ReactNode }) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.chipScroll}
+      contentContainerStyle={styles.chipScrollContent}
+    >
+      {children}
+    </ScrollView>
+  );
+}
+
+/** A search well: the magnifier says what it is, so it needs no label. */
+export function SearchBar({
+  value,
+  onChangeText,
+  placeholder = 'Search',
+}: {
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder?: string;
+}) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <View style={[styles.search, focused && { borderColor: palette.accent }]}>
+      <Icon name="search" size={18} color={palette.textMuted} />
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={palette.textMuted}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={styles.searchInput}
+        returnKeyType="search"
+        accessibilityLabel={placeholder}
+      />
+      {value.length > 0 ? (
+        <Pressable onPress={() => onChangeText('')} hitSlop={10} accessibilityRole="button" accessibilityLabel="Clear search">
+          <Icon name="close" size={16} color={palette.textMuted} />
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -565,6 +664,60 @@ export function Group({
   );
 }
 
+/**
+ * A person, as their initials on a round tile. People get a face, things get
+ * an icon: the shape alone tells a contact row from a merchant row.
+ */
+export function Avatar({ name, size = 38 }: { name: string; size?: number }) {
+  const initials =
+    name
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((word) => word[0]?.toUpperCase() ?? '')
+      .join('') || '?';
+  return (
+    <View
+      style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}
+      accessibilityElementsHidden
+      importantForAccessibility="no"
+    >
+      <Text style={[styles.avatarText, { fontSize: Math.round(size * 0.36) }]}>{initials}</Text>
+    </View>
+  );
+}
+
+/**
+ * Two figures side by side on one surface, split by a hairline — for a pair
+ * that is read together ("owed to you" / "you owe"), which as two separate
+ * cards looked like two unrelated things.
+ */
+export function StatPair({
+  items,
+}: {
+  items: Array<{ label: string; value: string; color?: string }>;
+}) {
+  return (
+    <View style={styles.statPair}>
+      {items.map((item, index) => (
+        <React.Fragment key={item.label}>
+          {index > 0 ? <View style={styles.statDivider} /> : null}
+          <View style={styles.statCell}>
+            <Text style={styles.statLabel}>{item.label}</Text>
+            <Text
+              style={[styles.statValue, item.color ? { color: item.color } : null]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {item.value}
+            </Text>
+          </View>
+        </React.Fragment>
+      ))}
+    </View>
+  );
+}
+
 /** A hairline between rows of one list. */
 export function Divider() {
   return <View style={styles.divider} />;
@@ -590,6 +743,8 @@ const styles = StyleSheet.create({
   },
 
   titleBlock: { marginBottom: spacing.xs },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  titleText: { flex: 1 },
   screenTitle: { ...typography.screenTitle, color: palette.textPrimary },
   screenSubtitle: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
 
@@ -632,6 +787,9 @@ const styles = StyleSheet.create({
   buttonDanger: { backgroundColor: palette.dangerMuted },
   buttonDisabled: { opacity: 0.38 },
   buttonLabel: { ...typography.label },
+  buttonLabelQuiet: { ...typography.bodyBold, fontSize: 15, letterSpacing: 0.1 },
+  buttonSmall: { minHeight: 36, paddingVertical: 7, paddingHorizontal: spacing.md, gap: 6 },
+  buttonLabelSmall: { fontSize: 13 },
 
   // 48px, not MD3's standard 56 — "compact," per the spec's icon-action language.
   fab: {
@@ -645,13 +803,24 @@ const styles = StyleSheet.create({
 
   chip: {
     paddingVertical: 8,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 14,
     borderRadius: radii.pill,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: palette.border,
+    backgroundColor: palette.surfaceElevated,
   },
-  chipLabel: { ...typography.micro, color: palette.textSecondary },
+  chipLabel: { ...typography.caption, fontWeight: '600', color: palette.textPrimary },
+  chipScroll: { flexGrow: 0, marginHorizontal: -spacing.gutter },
+  chipScrollContent: { gap: spacing.sm, paddingHorizontal: spacing.gutter },
+  search: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: palette.surfaceElevated,
+    borderRadius: radii.input,
+    paddingHorizontal: spacing.md,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  searchInput: { flex: 1, color: palette.textPrimary, fontSize: 16, paddingVertical: 12 },
 
   field: { gap: 6 },
   // Sentence case, weight for hierarchy. Capitals with wide tracking on
@@ -670,7 +839,7 @@ const styles = StyleSheet.create({
     color: palette.textPrimary,
     fontSize: 16,
   },
-  fieldHint: { ...typography.micro, color: palette.textMuted },
+  fieldHint: { ...typography.caption, color: palette.textMuted },
 
   progressTrack: {
     width: '100%',
@@ -716,7 +885,7 @@ const styles = StyleSheet.create({
   },
   sheetTitle: { ...typography.display, fontSize: 24, lineHeight: 32, color: palette.textPrimary },
   sheetCloseHit: { paddingVertical: 6, paddingHorizontal: spacing.sm, borderRadius: radii.pill },
-  sheetClose: { ...typography.label, color: palette.accent },
+  sheetClose: { ...typography.bodyBold, color: palette.textPrimary },
   sheetScroll: { flexGrow: 0 },
   sheetContent: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, gap: spacing.md },
 
@@ -739,6 +908,22 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   groupFooter: { ...typography.caption, color: palette.textMuted, paddingHorizontal: spacing.xs, marginTop: 2 },
+  avatar: {
+    backgroundColor: palette.surfaceElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { fontWeight: '700', color: palette.textPrimary, letterSpacing: 0.3 },
+  statPair: {
+    flexDirection: 'row',
+    backgroundColor: palette.surface,
+    borderRadius: radii.card,
+    paddingVertical: spacing.md,
+  },
+  statDivider: { width: StyleSheet.hairlineWidth, backgroundColor: palette.border },
+  statCell: { flex: 1, paddingHorizontal: spacing.md, gap: 2 },
+  statLabel: { ...typography.caption, color: palette.textSecondary },
+  statValue: { ...typography.heroCompact, fontSize: 26, lineHeight: 32, color: palette.textPrimary },
   rowLeft: { width: 38, alignItems: 'center' },
   rowBody: { flex: 1, gap: 2 },
   rowTitle: { ...typography.bodyBold, color: palette.textPrimary },

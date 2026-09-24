@@ -80,15 +80,17 @@ export default function GoalsScreen() {
 
   return (
     <Screen refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.textSecondary} />}>
-      <ScreenTitle title="Savings" subtitle="Saving happens first, spending is what's left" />
+      <ScreenTitle
+        title="Savings"
+        subtitle="Saved first, spent after"
+        action={{ label: 'New goal', onPress: () => setCreateVisible(true) }}
+      />
 
       {goals.length > 0 ? (
         <Card>
           <Text style={styles.reserveLabel}>Held back from spending this period</Text>
           <Text style={styles.reserveAmount}>{formatMoney(totalReserved)}</Text>
-          <Text style={styles.reserveNote}>
-            Already taken out of your daily number.
-          </Text>
+          <Text style={styles.reserveNote}>Already out of your daily number.</Text>
           {reserveCapped ? (
             <Text style={styles.reserveCapped}>
               Goals asked for over half your allowance, so they're paced slower. Lower a target
@@ -109,8 +111,6 @@ export default function GoalsScreen() {
           </Text>
         </Card>
       ) : null}
-
-      <Button label="New goal" onPress={() => setCreateVisible(true)} />
 
       {goals.length === 0 ? (
         <Card>
@@ -189,7 +189,7 @@ function GoalCard({
   return (
     <Card onPress={onOpen}>
       <View style={styles.goalHead}>
-        <LabelIconBadge label={goal.emoji} color={palette.info} />
+        <LabelIconBadge label={goal.emoji} />
         <View style={styles.goalHeadText}>
           <Text style={styles.goalName}>{goal.name}</Text>
           <Text style={styles.goalMeta}>
@@ -201,39 +201,36 @@ function GoalCard({
               : ''}
           </Text>
         </View>
-        <Text style={[styles.goalPercent, goal.isComplete && { color: palette.accent }]}>
-          {Math.round(goal.fraction * 100)}%
-        </Text>
+        <Text style={styles.goalPercent}>{Math.round(goal.fraction * 100)}%</Text>
       </View>
-
-      {status ? (
-        <Text style={[styles.statusLabel, status === 'BEHIND' && { color: palette.warning }]}>
-          {status === 'ON_TRACK' ? 'ON TRACK' : 'BEHIND SCHEDULE'}
-        </Text>
-      ) : null}
 
       <ProgressBar
         fraction={goal.fraction}
-        color={goal.isComplete ? palette.accent : overdue ? palette.warning : palette.info}
-        height={10}
+        color={overdue || status === 'BEHIND' ? palette.warning : palette.accent}
+        height={6}
       />
 
       {goal.isComplete ? (
         <Text style={styles.goalDone}>Fully funded. Go get it.</Text>
       ) : (
         <Text style={styles.goalPace}>
+          {status ? (
+            <Text style={status === 'BEHIND' ? styles.statusBehind : styles.statusOn}>
+              {status === 'ON_TRACK' ? 'On track' : 'Behind'}
+              {' · '}
+            </Text>
+          ) : null}
           {formatMoney(perDay)}/day to finish{daysLeft !== null ? ' on time' : ''}
-          {projectedCompletion ? ` · about ${monthYear(projectedCompletion)} at this rate` : ''}
+          {projectedCompletion ? ` · by ${monthYear(projectedCompletion)}` : ''}
         </Text>
       )}
 
       <View style={styles.goalActions}>
-        <Button label="Add money or edit" variant="secondary" onPress={onOpen} style={styles.flex} />
+        <Button label="Add money" icon="add" variant="tonal" size="small" onPress={onOpen} />
         <Chip
           label={isRoundUp ? 'Round-ups on' : 'Round-ups'}
           selected={isRoundUp}
           onPress={onToggleRoundUp}
-          color={palette.info}
         />
       </View>
     </Card>
@@ -320,7 +317,7 @@ function IconPicker({ value, onChange }: { value: string; onChange: (next: strin
           <Icon
             name={choice}
             size={20}
-            color={value === choice ? palette.info : palette.textMuted}
+            color={value === choice ? palette.textPrimary : palette.textMuted}
           />
         </Pressable>
       ))}
@@ -504,8 +501,8 @@ function ManageGoalSheet({
 }
 
 const styles = StyleSheet.create({
-  reserveLabel: { ...typography.sectionLabel, color: palette.textSecondary },
-  reserveAmount: { ...typography.heroCompact, color: palette.info, marginTop: 4 },
+  reserveLabel: { ...typography.caption, color: palette.textSecondary },
+  reserveAmount: { ...typography.heroCompact, color: palette.textPrimary, marginTop: 2 },
   reserveNote: { ...typography.caption, color: palette.textMuted, marginTop: spacing.xs, lineHeight: 17 },
   reserveCapped: {
     ...typography.caption,
@@ -514,16 +511,13 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
 
-  goalHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  goalHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   goalHeadText: { flex: 1 },
   goalName: { ...typography.cardTitle, color: palette.textPrimary },
   goalMeta: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
-  goalPercent: { ...typography.bodyBold, fontSize: 17, color: palette.info },
-  statusLabel: {
-    ...typography.sectionLabel,
-    color: palette.accent,
-    marginBottom: spacing.sm,
-  },
+  goalPercent: { ...typography.bodyBold, color: palette.textSecondary },
+  statusOn: { color: palette.accent, fontWeight: '600' },
+  statusBehind: { color: palette.warning, fontWeight: '600' },
   goalPace: { ...typography.caption, color: palette.textSecondary, marginTop: spacing.sm },
   goalDone: { ...typography.caption, color: palette.accent, marginTop: spacing.sm },
   goalActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md },
@@ -540,7 +534,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.border,
   },
-  iconChoiceOn: { borderColor: palette.info, backgroundColor: layer(palette.info, 0.14) },
-  dangerNote: { ...typography.micro, color: palette.textMuted, textAlign: 'center' },
+  iconChoiceOn: { borderColor: palette.accent, backgroundColor: palette.accentMuted },
+  dangerNote: { ...typography.caption, color: palette.textMuted, textAlign: 'center' },
   contributeMeta: { ...typography.body, color: palette.textSecondary, textAlign: 'center' },
 });

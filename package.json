@@ -21,7 +21,10 @@
     "apk": "npm run android:sdk && node scripts/android-sync.js && node scripts/gradle.js assembleRelease",
     "apk:clean": "npm run native:prebuild && node scripts/gradle.js assembleRelease",
     "postapk": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/copy-to-phone.ps1",
-    "postapk:clean": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/copy-to-phone.ps1"
+    "postapk:clean": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/copy-to-phone.ps1",
+    "prepreview": "node -e \"require('fs').mkdirSync('public',{recursive:true});require('fs').copyFileSync('node_modules/sql.js/dist/sql-wasm.wasm','public/sql-wasm.wasm')\"",
+    "preview": "expo start --web --port 8090",
+    "shoot": "node scripts/shoot.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.0.3",
@@ -44,11 +47,14 @@
     "react-native-svg": "15.2.0"
   },
   "devDependencies": {
+    "@expo/metro-runtime": "~3.2.1",
     "@types/jest": "^29.5.12",
     "@types/react": "~18.2.79",
     "@types/sql.js": "^1.4.11",
     "babel-preset-expo": "~11.0.0",
     "jest": "^29.7.0",
+    "react-dom": "^18.2.0",
+    "react-native-web": "^0.19.13",
     "sql.js": "^1.11.0",
     "ts-jest": "^29.2.5",
     "typescript": "~5.3.3"

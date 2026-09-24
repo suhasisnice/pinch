@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
   },
   rowText: { flex: 1 },
   rowLabel: { ...typography.body, color: palette.textPrimary },
-  rowWindow: { ...typography.micro, color: palette.textMuted, marginTop: 1 },
+  rowWindow: { ...typography.caption, color: palette.textMuted, marginTop: 1 },
   rowAmount: { ...typography.bodyBold },
 
   total: {
@@ -184,5 +184,5 @@ const styles = StyleSheet.create({
   },
   noteText: { ...typography.caption, color: palette.warning, flex: 1, lineHeight: 17 },
 
-  footnote: { ...typography.micro, color: palette.textMuted, lineHeight: 15 },
+  footnote: { ...typography.caption, color: palette.textMuted },
 });

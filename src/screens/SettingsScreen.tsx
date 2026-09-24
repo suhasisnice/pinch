@@ -92,7 +92,7 @@ export default function SettingsScreen() {
 
   if (!notifications) {
     return (
-      <Screen scroll={false}>
+      <Screen underHeader scroll={false}>
         <Loading />
       </Screen>
     );
@@ -311,7 +311,7 @@ export default function SettingsScreen() {
   }
 
   return (
-    <Screen>
+    <Screen underHeader>
       <ScreenTitle title="Settings" />
 
       <Group title="Budget" footer="Starts today — set it when your allowance lands.">
@@ -650,7 +650,7 @@ function Toggle({
 
 const styles = StyleSheet.create({
   version: {
-    ...typography.micro,
+    ...typography.caption,
     color: palette.textMuted,
     textAlign: 'center',
     marginTop: spacing.md,
@@ -676,5 +676,5 @@ const styles = StyleSheet.create({
   },
   toggleText: { flex: 1 },
   toggleLabel: { ...typography.body, color: palette.textPrimary },
-  toggleHint: { ...typography.micro, color: palette.textMuted, marginTop: 2 },
+  toggleHint: { ...typography.caption, color: palette.textMuted, marginTop: 2 },
 });

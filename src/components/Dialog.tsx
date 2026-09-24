@@ -170,5 +170,5 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   itemLabel: { ...typography.bodyBold, color: palette.textPrimary },
-  itemDetail: { ...typography.micro, color: palette.textMuted, lineHeight: 16 },
+  itemDetail: { ...typography.caption, color: palette.textMuted },
 });

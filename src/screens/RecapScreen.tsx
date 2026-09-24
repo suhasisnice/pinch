@@ -60,7 +60,11 @@ export async function loadWeeklyRecap(now: Date = new Date()): Promise<WeeklyRec
  */
 export default function RecapScreen() {
   const navigation = useNavigation<any>();
-  const { width } = useWindowDimensions();
+  const window = useWindowDimensions();
+  // The pager's own width, not the window's: they differ on a foldable, in
+  // split screen, and in the web preview's phone frame, and a page one
+  // pixel wider than its pager cuts the text off the right edge.
+  const [width, setWidth] = useState(window.width);
   const scroller = useRef<ScrollView>(null);
   const [recap, setRecap] = useState<WeeklyRecap | null | undefined>(undefined);
   const [index, setIndex] = useState(0);
@@ -131,6 +135,7 @@ export default function RecapScreen() {
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={onSettle}
+        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
         style={styles.flex}
       >
         {slides.map((slide, i) => (

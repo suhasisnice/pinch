@@ -343,7 +343,7 @@ const styles = StyleSheet.create({
     gap: 4,
     marginTop: 2,
   },
-  sourceText: { ...typography.micro, color: palette.textMuted },
+  sourceText: { ...typography.caption, color: palette.textMuted },
 
   rawBox: {
     backgroundColor: palette.surfaceElevated,
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
 
   excludeBlock: { gap: spacing.sm, alignItems: 'center' },
-  loanHint: { ...typography.micro, color: palette.textMuted, lineHeight: 15 },
+  loanHint: { ...typography.caption, color: palette.textMuted },
 
   group: { gap: spacing.sm },
   groupLabel: {

@@ -251,5 +251,5 @@ const styles = StyleSheet.create({
   preview: { alignItems: 'center', gap: 2, paddingVertical: spacing.sm },
   previewBack: { ...typography.cardTitle, color: palette.accent },
   previewMine: { ...typography.caption, color: palette.textSecondary },
-  previewEach: { ...typography.micro, color: palette.textMuted, marginTop: 2 },
+  previewEach: { ...typography.caption, color: palette.textMuted, marginTop: 2 },
 });

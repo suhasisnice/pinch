@@ -3,9 +3,21 @@ import { RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useFocusEffect, useRoute } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { TransactionRow } from '../db/types';
-import { formatMoney } from '../utils/format';
+import { formatMoney, formatTime } from '../utils/format';
 import { categoryColor, palette, spacing, typography } from '../theme/theme';
-import { Card, Chip, Dot, EmptyState, Field, Loading, Row, Screen, ScreenTitle } from '../components/ui';
+import {
+  Card,
+  Chip,
+  ChipRow,
+  Dot,
+  EmptyState,
+  Group,
+  Loading,
+  Row,
+  Screen,
+  ScreenTitle,
+  SearchBar,
+} from '../components/ui';
 import Icon from '../components/Icon';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
 import MarkAsLoanSheet from '../components/MarkAsLoanSheet';
@@ -106,7 +118,7 @@ export default function TransactionsScreen() {
     const byDay = new Map<string, LedgerItem[]>();
     for (const item of groupLinkedTransactions(visible, links)) {
       const at = item.type === 'group' ? item.occurredAt : item.transaction.occurred_at;
-      const day = at.slice(0, 10);
+      const day = localDay(at);
       byDay.set(day, [...(byDay.get(day) ?? []), item]);
     }
     return [...byDay.entries()];
@@ -114,7 +126,7 @@ export default function TransactionsScreen() {
 
   if (!rows) {
     return (
-      <Screen scroll={false}>
+      <Screen underHeader scroll={false}>
         <Loading />
       </Screen>
     );
@@ -124,7 +136,7 @@ export default function TransactionsScreen() {
   const activeCount = activeFilterCount(filter);
 
   return (
-    <Screen
+    <Screen underHeader
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.textSecondary} />
       }
@@ -134,7 +146,7 @@ export default function TransactionsScreen() {
         subtitle={`${totals.count} shown · net ${formatMoney(Math.abs(totals.net))} ${totals.net >= 0 ? 'out' : 'in'}`}
       />
 
-      <View style={styles.filterRow}>
+      <ChipRow>
         {QUICK_RANGES.map((option) => (
           <Chip
             key={option.key}
@@ -147,16 +159,14 @@ export default function TransactionsScreen() {
         <Chip
           label={activeCount > 0 ? `Filters · ${activeCount}` : 'Filters'}
           selected={activeCount > 0}
-          color={palette.info}
           onPress={() => setFilterVisible(true)}
         />
-      </View>
+      </ChipRow>
 
-      <Field
-        label="Search"
+      <SearchBar
         value={filter.query}
         onChangeText={(text) => setFilter({ ...filter, query: text })}
-        placeholder="Merchant name"
+        placeholder="Search merchants"
       />
 
       {filter.showIgnored ? (
@@ -177,8 +187,7 @@ export default function TransactionsScreen() {
         </Card>
       ) : (
         grouped.map(([day, items]) => (
-          <Card key={day}>
-            <Text style={styles.dayLabel}>{formatDay(day)}</Text>
+          <Group key={day} title={formatDay(day)}>
             {items.map((item) => {
               if (item.type === 'group') {
                 return <LinkedGroupRow key={`g${item.key}`} group={item} onOpen={setDetailFor} />;
@@ -191,7 +200,7 @@ export default function TransactionsScreen() {
                   title={tx.merchant}
                   subtitle={[
                     tx.category ?? 'Uncategorised',
-                    tx.source === 'MANUAL' ? 'by hand' : tx.source.toLowerCase(),
+                    tx.source === 'MANUAL' ? 'added by hand' : formatTime(tx.occurred_at),
                   ].join(' · ')}
                   onPress={() => setDetailFor(tx)}
                   right={
@@ -205,7 +214,7 @@ export default function TransactionsScreen() {
                 />
               );
             })}
-          </Card>
+          </Group>
         ))
       )}
 
@@ -266,26 +275,31 @@ export default function TransactionsScreen() {
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/**
+ * The phone's own calendar day, as YYYY-MM-DD. Slicing the ISO string gave
+ * the UTC day, which filed a 1 am payment in India under the day before.
+ */
+function localDay(iso: string | Date): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 function formatDay(day: string): string {
-  const today = new Date().toISOString().slice(0, 10);
-  if (day === today) return 'Today';
+  if (day === localDay(new Date())) return 'Today';
 
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  if (day === yesterday.toISOString().slice(0, 10)) return 'Yesterday';
+  if (day === localDay(yesterday)) return 'Yesterday';
 
-  const [year, month, date] = day.split('-');
-  return `${Number(date)} ${MONTHS[Number(month) - 1]} ${year}`;
+  const [year, month, date] = day.split('-').map(Number);
+  const d = new Date(year, month - 1, date);
+  const label = `${WEEKDAYS[d.getDay()]}, ${date} ${MONTHS[month - 1]}`;
+  return year === new Date().getFullYear() ? label : `${label} ${year}`;
 }
 
 const styles = StyleSheet.create({
-  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   note: { ...typography.caption, color: palette.textMuted },
-  dayLabel: {
-    ...typography.sectionLabel,
-    color: palette.textSecondary,
-    marginBottom: spacing.xs,
-  },
   amount: { ...typography.bodyBold, color: palette.textPrimary },
 });
