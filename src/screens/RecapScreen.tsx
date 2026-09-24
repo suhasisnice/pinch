@@ -46,7 +46,7 @@ export async function loadWeeklyRecap(now: Date = new Date()): Promise<WeeklyRec
     spends,
     previousWeekYours:
       previous.length > 0 ? previous.reduce((sum, s) => sum + s.amount - s.splitAway, 0) : null,
-    dailyLimit: snapshot.budget.dailyLimit,
+    dailyLimit: snapshot.today.dailyLimit,
   });
 }
 

@@ -11,6 +11,7 @@ import {
   splitPromptMessage,
   streakMessage,
 } from './messages';
+import { roast } from './roasts';
 
 export interface PlannedNotification {
   type: NotificationType;
@@ -45,6 +46,15 @@ export interface NotificationSettings {
   confirmBeforeLogging: boolean;
   /** Ask for a category when a logged payment could not be given one. */
   categoryPromptsEnabled: boolean;
+  /**
+   * Reprimands in the savage voice (0.9.19, the user's choice). Off falls
+   * back to the firm lines — same facts, no roast.
+   */
+  roastMe: boolean;
+  /** Recovery missions, callouts and cap warnings (docs/INTERVENTIONS.md). */
+  interventionsEnabled: boolean;
+  /** Heads-ups before a risky window and on payday. */
+  headsUpEnabled: boolean;
 }
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
@@ -61,6 +71,9 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   splitPromptThreshold: 300,
   confirmBeforeLogging: true,
   categoryPromptsEnabled: true,
+  roastMe: true,
+  interventionsEnabled: true,
+  headsUpEnabled: true,
 };
 
 /** Per-type caps and cooldowns. A nudge that fires too often becomes wallpaper. */
@@ -77,6 +90,12 @@ const LIMITS: Record<NotificationType, { maxPerDay: number; cooldownMinutes: num
   // Rate-limiting them would silently drop real work on a busy day.
   TXN_CONFIRM: { maxPerDay: Number.MAX_SAFE_INTEGER, cooldownMinutes: 0 },
   CATEGORY_PROMPT: { maxPerDay: Number.MAX_SAFE_INTEGER, cooldownMinutes: 0 },
+  // Interventions (0.9.19). Each is also de-duplicated by what it is about
+  // (interventionService's log), so these are only a ceiling.
+  RECOVERY: { maxPerDay: 2, cooldownMinutes: 0 },
+  CAP: { maxPerDay: 4, cooldownMinutes: 0 },
+  CALLOUT: { maxPerDay: 2, cooldownMinutes: 60 },
+  HEADS_UP: { maxPerDay: 2, cooldownMinutes: 0 },
 };
 
 /** Categories where paying for the group is the norm. */
@@ -178,7 +197,12 @@ export function planForTransaction(ctx: TransactionEventContext): PlannedNotific
     lastSentAt: { ...history.lastSentAt },
   };
 
-  const take = (type: NotificationType, tier: string, body: string, payload?: Record<string, unknown>) => {
+  const take = (
+    type: NotificationType,
+    tier: string,
+    body: string,
+    payload?: Record<string, unknown>
+  ) => {
     if (!body) return;
     if (!canSend(type, now, running, settings)) return;
     planned.push({ type, tier, title: TITLES[type], body, payload });
@@ -205,22 +229,38 @@ export function planForTransaction(ctx: TransactionEventContext): PlannedNotific
     const severity =
       ctx.today.usedFraction >= 1.5 ? 'DIRE' : ctx.today.usedFraction >= 1.2 ? 'BAD' : 'MILD';
     const goal = ctx.goalsCrossed[0];
+    const recent = history.recentBodies.OVERSPEND ?? [];
     take(
       'OVERSPEND',
       severity,
-      overspendMessage(
-        severity,
-        { ...base, goalName: goal?.name },
-        history.recentBodies.OVERSPEND ?? [],
-        ctx.random
-      ),
+      // Savage by default (0.9.19, the user's choice); "Roast me" off keeps
+      // the original, gentler lines.
+      settings.roastMe
+        ? roast(
+            'OVERSPEND',
+            'SAVAGE',
+            {
+              amount: ctx.amount,
+              merchant: ctx.merchant,
+              overBy: base.overBy,
+              goalName: goal?.name,
+            },
+            recent,
+            ctx.random
+          )
+        : overspendMessage(severity, { ...base, goalName: goal?.name }, recent, ctx.random),
       { transactionId: ctx.transactionId }
     );
   } else if (settings.pulseEnabled) {
     const tier = tierForToday(ctx.today);
-    take('TXN_PULSE', tier, pulseMessage(tier, base, history.recentBodies.TXN_PULSE ?? [], ctx.random), {
-      transactionId: ctx.transactionId,
-    });
+    take(
+      'TXN_PULSE',
+      tier,
+      pulseMessage(tier, base, history.recentBodies.TXN_PULSE ?? [], ctx.random),
+      {
+        transactionId: ctx.transactionId,
+      }
+    );
   }
 
   // 2. Split prompt — only where fronting for the group is plausible.
@@ -248,7 +288,12 @@ export function planForTransaction(ctx: TransactionEventContext): PlannedNotific
         kind,
         goalMessage(
           kind,
-          { goalName: goal.name, goalEmoji: goal.emoji, percent: goal.percent, amount: goal.remaining },
+          {
+            goalName: goal.name,
+            goalEmoji: goal.emoji,
+            percent: goal.percent,
+            amount: goal.remaining,
+          },
           history.recentBodies.GOAL_MILESTONE ?? [],
           ctx.random
         ),

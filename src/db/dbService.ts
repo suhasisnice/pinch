@@ -18,3 +18,4 @@ export * from './repos/rawEvents';
 export * from './repos/reimbursements';
 export * from './repos/holdings';
 export * from './repos/progress';
+export * from './repos/caps';

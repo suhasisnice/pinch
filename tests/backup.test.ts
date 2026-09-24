@@ -121,6 +121,7 @@ describe('erase everything', () => {
     await db.createHolding({ name: 'Nifty 50', kind: 'MUTUAL_FUND', sipAmount: 1000, sipDay: 5 });
     await db.recordNetWorth(12000, new Date());
     await db.markMilestone('FIRST_1K', new Date());
+    await db.setSpendCap('MERCHANT', 'Swiggy', 600);
 
     await db.resetData({
       ledger: true,

@@ -44,7 +44,8 @@ export async function resetData(options: ResetOptions): Promise<void> {
       `DELETE FROM BalanceSnapshots;`,
       `DELETE FROM CategoryTokenWeights;`,
       `DELETE FROM NetWorthSnapshots;`,
-      `DELETE FROM Milestones;`
+      `DELETE FROM Milestones;`,
+      `DELETE FROM SpendCaps;`
     );
   }
 

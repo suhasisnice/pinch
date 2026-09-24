@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DEFAULT_NOTIFICATION_SETTINGS, NotificationSettings } from '../notifications/engine';
 import type { PayPlan } from '../math/payday';
+import type { Mission } from '../math/recovery';
 
 const ALLOWANCE_KEY = 'pinch.monthlyAllowance';
 const NOTIFICATION_KEY = 'pinch.notificationSettings';
@@ -136,6 +137,48 @@ export async function setPayPlan(plan: PayPlan): Promise<void> {
   await AsyncStorage.setItem(PAY_PLAN_KEY, JSON.stringify(plan));
 }
 
+const RECOVERY_KEY = 'pinch.recovery';
+
+/** The one recovery mission, if any (see math/recovery.ts). */
+export async function getRecoveryMission(): Promise<Mission | null> {
+  const stored = await AsyncStorage.getItem(RECOVERY_KEY);
+  if (!stored) return null;
+  try {
+    return JSON.parse(stored) as Mission;
+  } catch {
+    return null;
+  }
+}
+
+export async function setRecoveryMission(mission: Mission | null): Promise<void> {
+  if (mission) await AsyncStorage.setItem(RECOVERY_KEY, JSON.stringify(mission));
+  else await AsyncStorage.removeItem(RECOVERY_KEY);
+}
+
+const INTERVENTION_LOG_KEY = 'pinch.interventionLog';
+
+/**
+ * Which one-off interventions have already been said, so a callout or a
+ * mission's start is announced once rather than on every payment. Keys are
+ * free-form ("callout:2026-W39:swiggy"); old ones are dropped after 60.
+ */
+export async function getInterventionLog(): Promise<string[]> {
+  const stored = await AsyncStorage.getItem(INTERVENTION_LOG_KEY);
+  if (!stored) return [];
+  try {
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function addInterventionLog(key: string): Promise<void> {
+  const log = await getInterventionLog();
+  if (log.includes(key)) return;
+  await AsyncStorage.setItem(INTERVENTION_LOG_KEY, JSON.stringify([...log, key].slice(-60)));
+}
+
 const APP_LOCK_KEY = 'pinch.appLock';
 
 /** Whether opening Pinch asks for the phone's fingerprint, face or PIN. */
@@ -155,6 +198,8 @@ export async function setAppLock(on: boolean): Promise<void> {
  */
 export async function clearPersonalSettings(): Promise<void> {
   await AsyncStorage.multiRemove([
+    RECOVERY_KEY,
+    INTERVENTION_LOG_KEY,
     ROUNDUP_KEY,
     DISMISSED_GAP_KEY,
     CUSHION_KEY,

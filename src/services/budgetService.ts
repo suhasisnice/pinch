@@ -204,18 +204,23 @@ export async function getBudgetSnapshot(
 
   const spentToday = await db.getGrossSpendBetween(startOfDayIso(now), endOfDayIso(now));
   const daily = await db.getDailySpend(period.startsOn, period.endsOn);
+  // Today's limit is the one the day started with. The pool already has
+  // today's spending taken out, so dividing it by the days left (today
+  // included) and then subtracting today's spending again charged every
+  // rupee spent today twice: slightly mid-month, double on the last day.
+  const dayStartLimit = (budget.spendablePool + spentToday) / Math.max(1, period.daysRemaining);
 
   const bankBalance = balanceState.projected;
 
   return {
     budget,
-    today: computeToday(budget.dailyLimit, spentToday),
+    today: computeToday(dayStartLimit, spentToday),
     goals,
     periodStart: period.startsOn,
     periodEnd: period.endsOn,
     daysRemaining: period.daysRemaining,
     avgDailyBurn: averageDailySpend(daily),
-    streakDays: computeStreak(daily, budget.dailyLimit, nowIso.slice(0, 10)),
+    streakDays: computeStreak(daily, dayStartLimit, nowIso.slice(0, 10)),
     totalReceivable,
     totalPayable,
     pendingCaptures,
