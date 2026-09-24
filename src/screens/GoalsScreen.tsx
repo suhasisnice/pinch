@@ -5,7 +5,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { GoalProgress } from '../db/repos/goals';
 import { getRoundUpGoalId, setRoundUpGoalId } from '../settings/settingsStore';
-import { estimatedCompletionDate, goalReserve, goalTrackingStatus } from '../math/budget';
+import { estimatedCompletionDate, goalTrackingStatus } from '../math/budget';
 import { getBudgetSnapshot } from '../services/budgetService';
 import { getMonthlyAllowance } from '../settings/settingsStore';
 import { formatMoney } from '../utils/format';
@@ -35,13 +35,14 @@ function monthYear(date: Date): string {
 
 export default function GoalsScreen({ top }: { top?: React.ReactNode } = {}) {
   const [goals, setGoals] = useState<GoalProgress[] | null>(null);
-  const [daysRemaining, setDaysRemaining] = useState(30);
   const [reserveCapped, setReserveCapped] = useState(false);
   const [roundUpGoal, setRoundUpGoal] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [createVisible, setCreateVisible] = useState(false);
   const [contributeTo, setContributeTo] = useState<GoalProgress | null>(null);
   const [totalInvested, setTotalInvested] = useState(0);
+  // The engine's figure, not a second calculation — Plans and Today must agree.
+  const [totalReserved, setTotalReserved] = useState(0);
 
   const load = useCallback(async () => {
     const [nextGoals, roundUp, snapshot, invested] = await Promise.all([
@@ -52,8 +53,8 @@ export default function GoalsScreen({ top }: { top?: React.ReactNode } = {}) {
     ]);
     setGoals(nextGoals);
     setRoundUpGoal(roundUp);
-    setDaysRemaining(snapshot.daysRemaining);
     setReserveCapped(snapshot.goalReserveCapped);
+    setTotalReserved(snapshot.budget.goalReserve + (snapshot.budget.planReserve ?? 0));
     setTotalInvested(invested);
   }, []);
 
@@ -78,19 +79,6 @@ export default function GoalsScreen({ top }: { top?: React.ReactNode } = {}) {
   }
 
   const totalSaved = goals.reduce((sum, goal) => sum + goal.savedAmount, 0);
-  const totalReserved = goals.reduce(
-    (sum, goal) =>
-      sum +
-      goalReserve({
-        targetAmount: goal.targetAmount,
-        savedAmount: goal.savedAmount,
-        daysUntilDeadline: goal.deadline
-          ? Math.ceil((new Date(goal.deadline).getTime() - Date.now()) / MS_PER_DAY)
-          : null,
-        daysRemainingInPeriod: daysRemaining,
-      }),
-    0
-  );
 
   return (
     <Screen
@@ -203,8 +191,7 @@ function GoalRow({
   const daysLeft = goal.deadline
     ? Math.ceil((new Date(goal.deadline).getTime() - Date.now()) / MS_PER_DAY)
     : null;
-  const perDay =
-    daysLeft && daysLeft > 0 ? goal.remainingAmount / daysLeft : goal.remainingAmount / 30;
+  const perDay = daysLeft && daysLeft > 0 ? goal.remainingAmount / daysLeft : 0;
   const overdue = daysLeft !== null && daysLeft < 0 && !goal.isComplete;
   const status = goal.isComplete
     ? null
@@ -220,7 +207,8 @@ function GoalRow({
       ? `Deadline passed ${Math.abs(daysLeft!)} days ago. No judgement.`
       : [
           status === 'BEHIND' ? 'A bit behind' : status === 'ON_TRACK' ? 'On track' : null,
-          `${formatMoney(perDay)} a day`,
+          // Only a deadline makes a daily amount meaningful; open goals show a date.
+          daysLeft !== null ? `${formatMoney(perDay)} a day` : null,
           daysLeft !== null
             ? `${daysLeft} days left`
             : projected

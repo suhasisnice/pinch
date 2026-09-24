@@ -17,6 +17,7 @@ import { formatMoney } from '../utils/format';
 import { classifyNewTransaction } from './classificationService';
 import { checkForTransferMatch } from './transferService';
 import { checkForSettlement } from './settlementService';
+import { isWorthKeeping, redactOtp } from './smsPrivacy';
 
 export interface IngestResult {
   processed: number;
@@ -320,6 +321,9 @@ export async function ingestMessage(
   message: CapturedMessage,
   options: { silent?: boolean } = {}
 ): Promise<'POSTED' | 'QUEUED' | 'SKIPPED'> {
+  // Personal texts are never kept, not even as raw evidence (see smsPrivacy).
+  if (message.source === 'SMS' && !isWorthKeeping(message.sender, message.body)) return 'SKIPPED';
+  message = { ...message, body: redactOtp(message.body) };
   const rawEventId = await db.recordRawEvent({
     source: message.source,
     sender: message.sender,

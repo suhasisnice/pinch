@@ -378,13 +378,19 @@ describe('estimatedCompletionDate', () => {
   });
 
   it('projects forward from the saving rate so far', () => {
-    // 1000 saved in 10 days = 100/day. 9000 left needs 90 more days.
-    const now = new Date(2026, 0, 11);
-    const projected = estimatedCompletionDate(1000, 10000, created, now);
-    const expectedDays = Math.round(
-      (projected!.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)
-    );
-    expect(expectedDays).toBe(90);
+    // 3000 saved in 30 days = 100/day. 7000 left needs 70 more days.
+    const now = new Date(2026, 0, 31);
+    const projected = estimatedCompletionDate(3000, 10000, created, now);
+    const expectedDays = Math.round((projected!.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+    expect(expectedDays).toBe(70);
+  });
+
+  it('does not read a first lump sum as a daily pace', () => {
+    // 6000 on day two is not 3000/day; it is read over a month: 200/day.
+    const now = new Date(2026, 0, 3);
+    const projected = estimatedCompletionDate(6000, 12000, created, now);
+    const days = Math.round((projected!.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+    expect(days).toBe(30);
   });
 });
 

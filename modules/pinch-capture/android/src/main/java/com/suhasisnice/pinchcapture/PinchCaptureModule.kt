@@ -91,10 +91,13 @@ class PinchCaptureModule : Module() {
 
                 while (cursor.moveToNext()) {
                     val body = cursor.getString(bodyIndex) ?: continue
+                    val sender = cursor.getString(addressIndex) ?: continue
+                    // Personal messages never leave the inbox; see FinancialSms.
+                    if (!FinancialSms.isWorthKeeping(sender, body)) continue
                     results.put(
                         JSONObject().apply {
                             put("source", "SMS")
-                            put("sender", cursor.getString(addressIndex) ?: "unknown")
+                            put("sender", sender)
                             put("body", body)
                             put("receivedAt", cursor.getLong(dateIndex))
                         }

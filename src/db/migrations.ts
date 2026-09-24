@@ -927,6 +927,41 @@ const V17_PROGRESS: Migration = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// v18 — personal SMS out.
+//
+// Before 0.9.17 every incoming SMS became a RawEvent, a friend's text
+// included. Google Play's money-management exception and DPDP's data
+// minimisation both say only financial messages may be kept. This removes
+// what should never have been stored: SMS from a phone number (a sender with
+// no letters in it) and OTP messages — in both cases only when the message
+// never became a transaction or a review item, so no evidence behind a real
+// ledger row is lost. From here on FinancialSms.kt and smsPrivacy.ts stop
+// them at the door.
+// ---------------------------------------------------------------------------
+const PURGEABLE_RAW = `
+  SELECT r.id FROM RawEvents r
+  WHERE r.source = 'SMS'
+    AND (
+      r.sender IS NULL OR r.sender NOT GLOB '*[A-Za-z]*'
+      OR r.body LIKE '%OTP%' OR r.body LIKE '%one time password%'
+      OR r.body LIKE '%verification code%'
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM ParsedEvents p
+      WHERE p.raw_event_id = r.id
+        AND (p.transaction_id IS NOT NULL OR p.capture_id IS NOT NULL)
+    )`;
+
+export const V18_SMS_PRIVACY: Migration = {
+  version: 18,
+  name: 'sms_privacy',
+  statements: [
+    `DELETE FROM ParsedEvents WHERE raw_event_id IN (${PURGEABLE_RAW});`,
+    `DELETE FROM RawEvents WHERE id IN (${PURGEABLE_RAW});`,
+  ],
+};
+
 export const MIGRATIONS: Migration[] = [
   V1_INITIAL,
   V2_CONTACT_PHONE,
@@ -945,6 +980,7 @@ export const MIGRATIONS: Migration[] = [
   V15_REIMBURSEMENT_LINKS,
   V16_WEALTH,
   V17_PROGRESS,
+  V18_SMS_PRIVACY,
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

@@ -489,6 +489,9 @@ export function goalTrackingStatus(
  * rate to project from, and dividing by a zero pace would only produce a
  * misleadingly precise-looking "never."
  */
+/** The shortest history a saving pace is read from. */
+export const MIN_PACE_DAYS = 30;
+
 export function estimatedCompletionDate(
   savedAmount: number,
   targetAmount: number,
@@ -499,7 +502,9 @@ export function estimatedCompletionDate(
   if (remaining <= 0) return now;
   if (savedAmount <= 0) return null;
 
-  const daysSoFar = Math.max(1, (now.getTime() - Date.parse(createdAt)) / MS_PER_DAY);
+  // A goal opened yesterday with a lump sum is not saving that sum every day.
+  // Read at least a month of history, so a first deposit isn't mistaken for a pace.
+  const daysSoFar = Math.max(MIN_PACE_DAYS, (now.getTime() - Date.parse(createdAt)) / MS_PER_DAY);
   const dailyRate = savedAmount / daysSoFar;
   if (dailyRate <= 0) return null;
 

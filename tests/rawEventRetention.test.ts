@@ -1,5 +1,9 @@
 import * as db from '../src/db/dbService';
-import { ingestMessage, reprocessRawEvent, reprocessUnresolvedRawEvents } from '../src/services/captureService';
+import {
+  ingestMessage,
+  reprocessRawEvent,
+  reprocessUnresolvedRawEvents,
+} from '../src/services/captureService';
 import { addToBlocklist } from '../src/db/dbService';
 import { PARSER_RULES_VERSION } from '../src/services/revalidationService';
 import { createSqlJsAdapter } from './utils/sqljsAdapter';
@@ -33,7 +37,9 @@ describe('every message becomes a RawEvent, whatever happens to it', () => {
 
     const recent = await db.getRecentRawEvents(10);
     expect(recent).toHaveLength(1);
-    expect(recent[0].body).toContain('OTP 482913');
+    // Kept as evidence, but the code itself is masked (smsPrivacy.redactOtp).
+    expect(recent[0].body).toContain('OTP ••••••');
+    expect(recent[0].body).not.toContain('482913');
 
     const parsed = await db.getParsedEventsForRawEvent(recent[0].id);
     expect(parsed).toHaveLength(1);
@@ -71,7 +77,9 @@ describe('every message becomes a RawEvent, whatever happens to it', () => {
 
   it('records a RawEvent and a POSTED ParsedEvent with the transaction id for a confident parse', async () => {
     const outcome = await ingestMessage(
-      sms('Rs.369.00 spent on your SBI Credit Card ending 9124 at AmazonSellerServices on 11/09/26.')
+      sms(
+        'Rs.369.00 spent on your SBI Credit Card ending 9124 at AmazonSellerServices on 11/09/26.'
+      )
     );
     expect(outcome).toBe('POSTED');
 
@@ -106,11 +114,13 @@ describe('reprocessing a raw event under the current parser', () => {
     // Simulate "the parser used to reject this, but the rule was fixed":
     // ingest while blocked, then unblock and reprocess.
     await addToBlocklist('TEMP-BLOCK', 'simulating an old over-eager rule');
-    const first = await ingestMessage(sms('Rs.200 debited from A/c XX1234 at ZOMATO on 11-09-26.', 'TEMP-BLOCK'));
+    const first = await ingestMessage(
+      sms('Rs.200 debited from A/c XX1234 at ZOMATO on 11-09-26.', 'TEMP-BLOCK')
+    );
     expect(first).toBe('SKIPPED');
 
     const [rawEvent] = await db.getRecentRawEvents(10);
-    expect((await db.getParsedEventsForRawEvent(rawEvent.id))).toHaveLength(1);
+    expect(await db.getParsedEventsForRawEvent(rawEvent.id)).toHaveLength(1);
 
     await db.removeFromBlocklist('TEMP-BLOCK');
     const second = await reprocessRawEvent(rawEvent.id);
@@ -134,7 +144,9 @@ describe('reprocessUnresolvedRawEvents', () => {
   it('sweeps every never-resolved message and reports what changed', async () => {
     await addToBlocklist('TEMP-BLOCK', 'simulating an old over-eager rule');
     await ingestMessage(sms('Rs.100 debited from A/c XX1234 at CAFE on 11-09-26.', 'TEMP-BLOCK'));
-    await ingestMessage(sms('Rs.200 debited from A/c XX1234 at BOOKSTORE on 11-09-26.', 'TEMP-BLOCK'));
+    await ingestMessage(
+      sms('Rs.200 debited from A/c XX1234 at BOOKSTORE on 11-09-26.', 'TEMP-BLOCK')
+    );
     await db.removeFromBlocklist('TEMP-BLOCK');
 
     const result = await reprocessUnresolvedRawEvents();
@@ -214,7 +226,9 @@ describe('what the parser is dropping, grouped by rule', () => {
 describe('countUnresolvedRawEvents / getUnresolvedRawEvents', () => {
   it('counts only messages that never became a transaction or review item', async () => {
     await ingestMessage(sms('OTP 482913 for Rs.500 debit. Do not share.'));
-    await ingestMessage(sms('Rs.369.00 spent on your SBI Credit Card ending 9124 at Amazon on 11/09/26.'));
+    await ingestMessage(
+      sms('Rs.369.00 spent on your SBI Credit Card ending 9124 at Amazon on 11/09/26.')
+    );
 
     expect(await db.countUnresolvedRawEvents()).toBe(1);
     const unresolved = await db.getUnresolvedRawEvents();
