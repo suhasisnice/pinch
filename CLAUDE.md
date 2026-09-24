@@ -99,7 +99,8 @@ Rules that hold regardless of which palette is in force:
 **0.9.14 direction (user-chosen, overrides the Spotify doc where they conflict):**
 Raycast ink, a coral accent used rarely, "fine is not a colour" (healthy = white),
 thin huge numerals, no boxes, one outlined sentence-case action per screen, and
-three tabs (Today / Plans / People). Copy is witty but kind. See `docs/DESIGN_DIRECTION.md`.
+three tabs (Today / Plans / People), four since 0.9.15 with Wealth (`docs/WEALTH.md`).
+Copy is witty but kind. See `docs/DESIGN_DIRECTION.md`.
 - Transitions 150–220ms.
 
 ## Reuse / refactor / rebuild

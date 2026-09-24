@@ -688,6 +688,46 @@ const V15_REIMBURSEMENT_LINKS: Migration = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// v16 — wealth: what you hold, what you put in, and what goes in monthly.
+//
+// A holding is a place long-term money lives (a fund, an FD, gold). Money
+// into or out of it is still an ordinary Transaction tagged INVESTMENT
+// (Phase 9); holding_id only says which holding it went to, so every
+// existing total keeps working and an untagged row is simply "unassigned".
+//
+// current_value is typed in by the user now and then. Pinch has no market
+// data (offline-first), so it is never computed and never guessed — NULL
+// means "not told yet" and the screen falls back to money put in.
+//
+// sip_amount/sip_day make a monthly plan: the amount is set aside from the
+// budget on its day, the same way a goal reserve is, until the contribution
+// is actually logged.
+//
+// suggested_reason lets the capture pipeline say "this looks like an
+// investment" without deciding it: such messages always wait in Review.
+// ---------------------------------------------------------------------------
+const V16_WEALTH: Migration = {
+  version: 16,
+  name: 'wealth',
+  statements: [
+    `CREATE TABLE IF NOT EXISTS Holdings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'OTHER',
+      sip_amount REAL,
+      sip_day INTEGER CHECK (sip_day IS NULL OR (sip_day BETWEEN 1 AND 28)),
+      current_value REAL,
+      value_updated_at TEXT,
+      created_at TEXT NOT NULL,
+      archived_at TEXT
+    );`,
+    `ALTER TABLE Transactions ADD COLUMN holding_id INTEGER REFERENCES Holdings(id) ON DELETE SET NULL;`,
+    `CREATE INDEX IF NOT EXISTS idx_tx_holding ON Transactions(holding_id);`,
+    `ALTER TABLE CaptureInbox ADD COLUMN suggested_reason TEXT;`,
+  ],
+};
+
 export const MIGRATIONS: Migration[] = [
   V1_INITIAL,
   V2_CONTACT_PHONE,
@@ -704,6 +744,7 @@ export const MIGRATIONS: Migration[] = [
   V13_POSSIBLE_DUPLICATE,
   V14_CONTACT_ALIASES,
   V15_REIMBURSEMENT_LINKS,
+  V16_WEALTH,
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

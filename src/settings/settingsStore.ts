@@ -87,3 +87,33 @@ export async function setRoundUpGoalId(goalId: number | null): Promise<void> {
   }
   await AsyncStorage.setItem(ROUNDUP_KEY, String(goalId));
 }
+
+const CUSHION_KEY = 'pinch.cushionGoalId';
+const RETURN_RATE_KEY = 'pinch.wealthReturnRate';
+
+/** The goal that is the emergency cushion — rung one of the wealth ladder. */
+export async function getCushionGoalId(): Promise<number | null> {
+  const stored = await AsyncStorage.getItem(CUSHION_KEY);
+  if (!stored) return null;
+  const parsed = Number(stored);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export async function setCushionGoalId(goalId: number | null): Promise<void> {
+  if (goalId === null) {
+    await AsyncStorage.removeItem(CUSHION_KEY);
+    return;
+  }
+  await AsyncStorage.setItem(CUSHION_KEY, String(goalId));
+}
+
+/** The annual growth rate the projection assumes, as a fraction (0.1 = 10%). */
+export async function getReturnRate(fallback: number): Promise<number> {
+  const stored = await AsyncStorage.getItem(RETURN_RATE_KEY);
+  const parsed = stored === null ? NaN : Number(stored);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 0.3 ? parsed : fallback;
+}
+
+export async function setReturnRate(rate: number): Promise<void> {
+  await AsyncStorage.setItem(RETURN_RATE_KEY, String(rate));
+}

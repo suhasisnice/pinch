@@ -11,8 +11,20 @@ import {
   cappedGoalReserve,
 } from '../math/budget';
 import { GoalProgress } from '../db/repos/goals';
-import { averageDailySpend, categoryBreakdown, computeStreak, detectRecurring } from '../math/insights';
-import { daysBetween, endOfDayIso, startOfDayIso, formatMoney, formatDayLabel } from '../utils/format';
+import {
+  averageDailySpend,
+  categoryBreakdown,
+  computeStreak,
+  detectRecurring,
+} from '../math/insights';
+import { sipReserve } from '../math/wealth';
+import {
+  daysBetween,
+  endOfDayIso,
+  startOfDayIso,
+  formatMoney,
+  formatDayLabel,
+} from '../utils/format';
 
 export interface BudgetSnapshot {
   budget: BudgetBreakdown;
@@ -80,6 +92,9 @@ export async function getBudgetSnapshot(
     pendingCaptures,
     outingReserve,
     balanceState,
+    investedNet,
+    holdings,
+    contributedByHolding,
   ] = await Promise.all([
     db.getGrossSpendBetween(period.startsOn, period.endsOn),
     db.getIncomeBetween(period.startsOn, period.endsOn),
@@ -93,6 +108,9 @@ export async function getBudgetSnapshot(
     db.getPendingCaptureCount(),
     db.getTotalOutingReserved(),
     db.getBalanceState(),
+    db.getInvestedNetBetween(period.startsOn, period.endsOn),
+    db.getHoldings(),
+    db.getContributionsByHoldingBetween(period.startsOn, period.endsOn),
   ]);
 
   // Weight each outstanding debt by how reliably that person actually pays.
@@ -133,6 +151,18 @@ export async function getBudgetSnapshot(
     openPayables: totalPayable,
     goalReserve,
     outingReserve,
+    planReserve: sipReserve(
+      holdings
+        .filter((h) => h.sipAmount && h.sipDay)
+        .map((h) => ({
+          amount: h.sipAmount!,
+          day: h.sipDay!,
+          contributedInWindow: contributedByHolding.get(h.id) ?? 0,
+        })),
+      period.startsOn,
+      period.endsOn
+    ),
+    investedNet,
     daysRemaining: period.daysRemaining,
   });
 
@@ -158,7 +188,11 @@ export async function getBudgetSnapshot(
     bankBalance,
     availableBudget: budget.availableBudget,
     protectedMoney: budget.protectedMoney,
-    balanceConsistency: checkBalanceConsistency(bankBalance, budget.availableBudget, budget.protectedMoney),
+    balanceConsistency: checkBalanceConsistency(
+      bankBalance,
+      budget.availableBudget,
+      budget.protectedMoney
+    ),
   };
 }
 
@@ -216,14 +250,17 @@ async function sweepExpiredPeriod(now: Date): Promise<void> {
   const expiring = await db.getCurrentBudgetPeriod(now);
   if (!expiring || expiring.endsOn > nowIso) return;
 
-  const [grossSpend, income, settledIn, settledOut] = await Promise.all([
+  const [grossSpend, income, settledIn, settledOut, investedNet] = await Promise.all([
     db.getGrossSpendBetween(expiring.startsOn, expiring.endsOn),
     db.getIncomeBetween(expiring.startsOn, expiring.endsOn),
     getKindTotal('SETTLE_IN', expiring.startsOn, expiring.endsOn),
     getKindTotal('SETTLE_OUT', expiring.startsOn, expiring.endsOn),
+    db.getInvestedNetBetween(expiring.startsOn, expiring.endsOn),
   ]);
 
-  const leftover = expiring.allowance + income - grossSpend + settledIn - settledOut;
+  // Money already invested is not left over — sweeping it into Savings would
+  // count the same rupees twice, once in a fund and once in a goal.
+  const leftover = expiring.allowance + income - grossSpend + settledIn - settledOut - investedNet;
   if (leftover <= 0.009) return;
 
   const goalId = await ensureSavingsGoal();

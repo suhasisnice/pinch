@@ -1,5 +1,6 @@
 import * as db from '../db/dbService';
-import { setMonthlyAllowance, setOnboarded } from '../settings/settingsStore';
+import { setCushionGoalId, setMonthlyAllowance, setOnboarded } from '../settings/settingsStore';
+import { postInvestment } from '../services/captureService';
 
 /**
  * A believable month for a college student, for the web design preview.
@@ -22,7 +23,11 @@ export async function seedDemoData(now: Date = new Date()): Promise<void> {
   await setOnboarded(true);
   await setMonthlyAllowance(15000);
   // Period started 16 days ago, 30 days long.
-  await db.startBudgetPeriod({ allowance: 15000, days: 30, now: new Date(now.getTime() - 16 * DAY) });
+  await db.startBudgetPeriod({
+    allowance: 15000,
+    days: 30,
+    now: new Date(now.getTime() - 16 * DAY),
+  });
 
   const spend = (
     daysAgo: number,
@@ -93,7 +98,12 @@ export async function seedDemoData(now: Date = new Date()): Promise<void> {
   const diya = await db.addContact('Diya Sharma');
   const kabir = await db.addContact('Kabir Rao');
   for (const friend of [aarav, diya, kabir]) {
-    await db.createIOU({ contactId: friend, amount: 600, direction: 'THEY_OWE_ME', transactionId: toit });
+    await db.createIOU({
+      contactId: friend,
+      amount: 600,
+      direction: 'THEY_OWE_ME',
+      transactionId: toit,
+    });
   }
   // Diya paid back.
   const diyaBack = await db.addTransaction({
@@ -108,7 +118,12 @@ export async function seedDemoData(now: Date = new Date()): Promise<void> {
   for (const iou of await db.getOpenIOUsForContact(diya)) await db.settleIOU(iou.id, 600, diyaBack);
 
   // Money you owe: Kabir covered your movie ticket.
-  await db.createIOU({ contactId: kabir, amount: 250, direction: 'I_OWE_THEM', reason: 'PVR tickets' });
+  await db.createIOU({
+    contactId: kabir,
+    amount: 250,
+    direction: 'I_OWE_THEM',
+    reason: 'PVR tickets',
+  });
 
   // Income.
   await db.addTransaction({
@@ -132,6 +147,41 @@ export async function seedDemoData(now: Date = new Date()): Promise<void> {
   });
   await db.contributeToGoal(goa, 1200);
 
+  // Wealth: a cushion part-filled, a monthly index fund seven months in, a
+  // little gold, and one SIP message waiting to be confirmed.
+  const cushion = await db.createGoal({
+    name: 'Emergency fund',
+    targetAmount: 45000,
+    emoji: 'savings',
+  });
+  await db.contributeToGoal(cushion, 6000);
+  await setCushionGoalId(cushion);
+  const index = await db.createHolding({
+    name: 'Nifty 50 index fund',
+    kind: 'MUTUAL_FUND',
+    sipAmount: 1000,
+    sipDay: 5,
+  });
+  for (let monthsAgo = 7; monthsAgo >= 1; monthsAgo -= 1) {
+    const d = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 5, 9, 30);
+    await postInvestment({
+      amount: 1000,
+      direction: 'CONTRIBUTION',
+      label: 'Groww',
+      holdingId: index,
+      occurredAt: d.toISOString(),
+    });
+  }
+  await db.setHoldingValue(index, 7640, new Date(now.getTime() - 9 * DAY).toISOString());
+  const gold = await db.createHolding({ name: 'Digital gold', kind: 'GOLD' });
+  await postInvestment({
+    amount: 1500,
+    direction: 'CONTRIBUTION',
+    label: 'Gold',
+    holdingId: gold,
+    occurredAt: at(70, 12),
+  });
+
   // An outing in progress.
   await db.createOuting({
     name: 'Friday at Church Street',
@@ -149,7 +199,11 @@ export async function seedDemoData(now: Date = new Date()): Promise<void> {
   });
   await db.setTransactionOuting(toit, toitNight);
   await db.closeOuting(toitNight);
-  const movie = await db.createOuting({ name: 'Movie night', emoji: 'movie', startsAt: at(10, 16) });
+  const movie = await db.createOuting({
+    name: 'Movie night',
+    emoji: 'movie',
+    startsAt: at(10, 16),
+  });
   await db.setTransactionOuting(ids[routine.findIndex((r) => r[3] === 'PVR Cinemas')], movie);
   await db.closeOuting(movie);
 
@@ -176,5 +230,16 @@ export async function seedDemoData(now: Date = new Date()): Promise<void> {
     parsedMerchant: 'Rohan K',
     parsedDirection: 'CREDIT',
     confidence: 0.55,
+  });
+  await db.recordCapture({
+    rawText: 'Rs.1000.00 debited from A/c XX0000 towards GROWW SIP via NACH on 05-10.',
+    source: 'SMS',
+    sender: 'AX-DEMOBK',
+    receivedAt: at(0, 9),
+    parsedAmount: 1000,
+    parsedMerchant: 'Groww',
+    parsedDirection: 'DEBIT',
+    confidence: 0.9,
+    suggestedReason: 'INVESTMENT',
   });
 }
