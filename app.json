@@ -99,7 +99,8 @@
         {
           "android": {
             "enableMinifyInReleaseBuilds": true,
-            "enableShrinkResourcesInReleaseBuilds": true
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "extraProguardRules": "# Expo native modules are reached from C++ (JNI) and by reflection, which R8\n# cannot see. 0.9.17's first minified build stripped\n# expo.modules.sqlite.NativeDatabaseBinding and Pinch could not open its\n# database. Keep every Expo module class as-is.\n-keep class expo.modules.** { *; }\n-keep class com.facebook.react.** { *; }\n-keep class com.facebook.jni.** { *; }\n-keep class com.horcrux.svg.** { *; }\n-keep class com.swmansion.** { *; }\n-keep class com.th3rdwave.safeareacontext.** { *; }\n-keep class com.reactnativecommunity.asyncstorage.** { *; }\n-keep class net.zetetic.** { *; }"
           }
         }
       ]
