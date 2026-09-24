@@ -1,9 +1,15 @@
-import React, { useCallback, useState } from 'react';
-import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import * as db from '../db/dbService';
-import { getBudgetSnapshot, BudgetSnapshot } from '../services/budgetService';
-import { getMonthlyAllowance } from '../settings/settingsStore';
+import React, { useCallback, useState } from "react";
+import {
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import * as db from "../db/dbService";
+import { getBudgetSnapshot, BudgetSnapshot } from "../services/budgetService";
+import { getMonthlyAllowance } from "../settings/settingsStore";
 import {
   CategoryShift,
   MonthComparison,
@@ -18,31 +24,44 @@ import {
   computeInsights,
   detectRecurring,
   weekdayPattern,
-} from '../math/insights';
-import { daysUntilBroke } from '../math/budget';
-import { FindingTone, buildFindings, insightHero } from '../math/insightsSummary';
-import { FadeSlideIn } from '../components/motion';
-import MoneyAmount from '../components/Money';
-import { formatMoney, formatMoneyCompact } from '../utils/format';
-import { categoryColor, palette, spacing, typography } from '../theme/theme';
+} from "../math/insights";
+import { daysUntilBroke } from "../math/budget";
 import {
-  Divider,
+  FindingTone,
+  buildFindings,
+  insightHero,
+} from "../math/insightsSummary";
+import { FadeSlideIn } from "../components/motion";
+import MoneyAmount from "../components/Money";
+import { formatMoney, formatMoneyCompact } from "../utils/format";
+import { categoryColor, palette, spacing, typography } from "../theme/theme";
+import {
   Dot,
+  Group,
   EmptyState,
   Loading,
   Row,
   Screen,
   ScreenTitle,
-  SectionHeader,
-} from '../components/ui';
-import Icon from '../components/Icon';
+} from "../components/ui";
+import Icon from "../components/Icon";
 
 type CategoryCost = Awaited<ReturnType<typeof db.getCategoryCost>>[number];
 type Borne = Awaited<ReturnType<typeof db.getBorneBetween>>;
 
 const MONTH_NAMES = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ];
 
 function formatDayMonth(iso: string): string {
@@ -57,7 +76,7 @@ function monthLabel(month: string): string {
 }
 
 /** Findings the hero already says, so the list below it doesn't say them twice. */
-const HERO_FINDINGS = new Set(['underwater', 'runs-out-early']);
+const HERO_FINDINGS = new Set(["underwater", "runs-out-early"]);
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -79,10 +98,14 @@ export default function InsightsScreen() {
   const [snapshot, setSnapshot] = useState<BudgetSnapshot | null>(null);
   const [costs, setCosts] = useState<CategoryCost[]>([]);
   const [uncategorisedFraction, setUncategorisedFraction] = useState(0);
-  const [categorised, setCategorised] = useState<ReturnType<typeof categoryBreakdown>>([]);
+  const [categorised, setCategorised] = useState<
+    ReturnType<typeof categoryBreakdown>
+  >([]);
   const [daily, setDaily] = useState<Array<{ day: string; total: number }>>([]);
   const [weeks, setWeeks] = useState({ thisWeek: 0, lastWeek: 0 });
-  const [habits, setHabits] = useState<ReturnType<typeof computeInsights> | null>(null);
+  const [habits, setHabits] = useState<ReturnType<
+    typeof computeInsights
+  > | null>(null);
   const [months, setMonths] = useState<MonthTotal[]>([]);
   const [shifts, setShifts] = useState<CategoryShift[]>([]);
   const [recurring, setRecurring] = useState<RecurringCharge[]>([]);
@@ -98,10 +121,16 @@ export default function InsightsScreen() {
 
     const now = new Date();
     const weekStart = new Date(now.getTime() - 7 * MS_PER_DAY).toISOString();
-    const prevWeekStart = new Date(now.getTime() - 14 * MS_PER_DAY).toISOString();
+    const prevWeekStart = new Date(
+      now.getTime() - 14 * MS_PER_DAY,
+    ).toISOString();
     // A year of history, so "Saturdays are your expensive day" rests on more
     // than one month of Saturdays.
-    const historyStart = new Date(now.getFullYear() - 1, now.getMonth(), 1).toISOString();
+    const historyStart = new Date(
+      now.getFullYear() - 1,
+      now.getMonth(),
+      1,
+    ).toISOString();
 
     const [
       categoryRows,
@@ -136,8 +165,12 @@ export default function InsightsScreen() {
     const slices = categoryBreakdown(categoryRows);
     setSnapshot(next);
     setCosts(costRows);
-    setCategorised(slices.filter((slice) => slice.category !== 'Uncategorised'));
-    setUncategorisedFraction(slices.find((slice) => slice.category === 'Uncategorised')?.fraction ?? 0);
+    setCategorised(
+      slices.filter((slice) => slice.category !== "Uncategorised"),
+    );
+    setUncategorisedFraction(
+      slices.find((slice) => slice.category === "Uncategorised")?.fraction ?? 0,
+    );
     setDaily(dailyRows);
     setWeeks({ thisWeek, lastWeek });
     setHabits(computeInsights(transactions, ious));
@@ -154,7 +187,7 @@ export default function InsightsScreen() {
   useFocusEffect(
     useCallback(() => {
       load();
-    }, [load])
+    }, [load]),
   );
 
   const onRefresh = useCallback(async () => {
@@ -187,7 +220,9 @@ export default function InsightsScreen() {
   }
 
   // periodEnd is the midnight after the last day, so the last day is a moment before it.
-  const endLabel = formatDayMonth(new Date(Date.parse(snapshot.periodEnd) - 1).toISOString());
+  const endLabel = formatDayMonth(
+    new Date(Date.parse(snapshot.periodEnd) - 1).toISOString(),
+  );
   const hero = insightHero({
     spendablePool: snapshot.budget.spendablePool,
     dailyLimit: snapshot.budget.dailyLimit,
@@ -200,7 +235,10 @@ export default function InsightsScreen() {
   const typical = typicalDay(daily);
   const periodDays = Math.max(
     1,
-    Math.round((Date.parse(snapshot.periodEnd) - Date.parse(snapshot.periodStart)) / MS_PER_DAY)
+    Math.round(
+      (Date.parse(snapshot.periodEnd) - Date.parse(snapshot.periodStart)) /
+        MS_PER_DAY,
+    ),
   );
 
   const findings = buildFindings({
@@ -212,7 +250,9 @@ export default function InsightsScreen() {
     grossSpend: snapshot.budget.grossSpend,
     typicalDay: typical.typical,
     meanDay: typical.mean,
-    brokeIn: hero.pace ? daysUntilBroke(snapshot.budget.spendablePool, hero.pace) : null,
+    brokeIn: hero.pace
+      ? daysUntilBroke(snapshot.budget.spendablePool, hero.pace)
+      : null,
     categories: categorised,
     shifts,
     recurring,
@@ -221,12 +261,17 @@ export default function InsightsScreen() {
     uncategorisedFraction,
   }).filter((finding) => !HERO_FINDINGS.has(finding.id));
 
-  const openCategory = (category: string) => navigation.navigate('Transactions', { category });
+  const openCategory = (category: string) =>
+    navigation.navigate("Transactions", { category });
 
   return (
     <Screen
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.textSecondary} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={palette.textSecondary}
+        />
       }
     >
       <ScreenTitle
@@ -237,7 +282,11 @@ export default function InsightsScreen() {
       {/* The one answer. Number first, then what it is — so it reads as a
           sentence: "₹2,340 left over on 30 Sep, at this pace." */}
       <FadeSlideIn>
-        <View style={styles.hero} accessible accessibilityLabel={`${formatMoney(hero.amount)} ${hero.label}. ${hero.detail}`}>
+        <View
+          style={styles.hero}
+          accessible
+          accessibilityLabel={`${formatMoney(hero.amount)} ${hero.label}. ${hero.detail}`}
+        >
           <MoneyAmount
             amount={hero.amount}
             style={[styles.heroAmount, { color: heroColor(hero.tone) }]}
@@ -250,80 +299,83 @@ export default function InsightsScreen() {
       </FadeSlideIn>
 
       {findings.length > 0 ? (
-        <View>
-          <SectionHeader title="Worth knowing" />
-          {findings.slice(0, 3).map((finding, index) => (
-            <View key={finding.id}>
-              {index > 0 ? <Divider /> : null}
-              <FindingRow
-                headline={finding.headline}
-                detail={finding.detail}
-                tone={finding.tone}
-                onOpen={finding.category ? () => openCategory(finding.category!) : undefined}
-              />
-            </View>
+        <Group title="Worth knowing">
+          {findings.slice(0, 3).map((finding) => (
+            <FindingRow
+              key={finding.id}
+              headline={finding.headline}
+              detail={finding.detail}
+              tone={finding.tone}
+              onOpen={
+                finding.category
+                  ? () => openCategory(finding.category!)
+                  : undefined
+              }
+            />
           ))}
-        </View>
+        </Group>
       ) : null}
 
       {costs.length > 0 ? (
-        <WhereItWent costs={costs} borne={borne} transfers={transfers} onOpen={openCategory} />
+        <WhereItWent
+          costs={costs}
+          borne={borne}
+          transfers={transfers}
+          onOpen={openCategory}
+        />
       ) : null}
 
       {daily.length > 0 ? (
-        <View>
-          <SectionHeader title="Your pace" />
-          <PaceChart daily={daily} dailyLimit={snapshot.budget.dailyLimit} />
-          <Text style={styles.note}>
-            Each bar is a day this period. Amber ones went over {formatMoney(snapshot.budget.dailyLimit)}.
-          </Text>
-
+        <Group
+          title="Your pace"
+          footer={`Amber days went over ${formatMoney(snapshot.budget.dailyLimit)}.`}
+        >
+          <PaceChart
+            key="chart"
+            daily={daily}
+            dailyLimit={snapshot.budget.dailyLimit}
+          />
           <PaceRow
+            key="week"
             title="Last 7 days"
             detail={weekDetail(weeks.thisWeek, weeks.lastWeek)}
             amount={weeks.thisWeek}
           />
-          <Divider />
           <PaceRow
+            key="normal"
             title="A normal day"
             detail={
               typical.skewed
-                ? `A few big days pull the average up to ${formatMoney(typical.mean)}`
-                : 'The middle of your spending days'
+                ? `Average ${formatMoney(typical.mean)}, pulled up by big days`
+                : "Your middle day"
             }
             amount={typical.typical}
           />
           {weekdays[0] && historyDays >= 14 ? (
-            <>
-              <Divider />
-              <PaceRow
-                title={`${weekdays[0].label}s`}
-                detail="Your most expensive day of the week, on average"
-                amount={weekdays[0].average}
-              />
-            </>
+            <PaceRow
+              key="weekday"
+              title={`${weekdays[0].label}s`}
+              detail="Your priciest day of the week"
+              amount={weekdays[0].average}
+            />
           ) : null}
           {habits.microTransactionCount > 0 ? (
-            <>
-              <Divider />
-              <PaceRow
-                title="Small spends"
-                detail={`${habits.microTransactionCount} under ₹100 — they add up to this`}
-                amount={habits.microTransactionTotal}
-              />
-            </>
+            <PaceRow
+              key="small"
+              title="Small spends"
+              detail={`${habits.microTransactionCount} under ₹100`}
+              amount={habits.microTransactionTotal}
+            />
           ) : null}
           {habits.lateNightCount > 0 ? (
-            <>
-              <Divider />
-              <PaceRow
-                title="After 11pm"
-                detail={`${habits.lateNightCount} late-night spend${habits.lateNightCount === 1 ? '' : 's'}`}
-                amount={habits.lateNightTotal}
-              />
-            </>
+            <PaceRow
+              key="late"
+              title="After 11pm"
+              detail={`${habits.lateNightCount} late-night spend${habits.lateNightCount === 1 ? "" : "s"}`}
+              amount={habits.lateNightTotal}
+            />
           ) : null}
-        </View>
+        </Group>
       ) : null}
 
       {months.length > 1 ? (
@@ -331,28 +383,31 @@ export default function InsightsScreen() {
       ) : null}
 
       {recurring.length > 0 ? (
-        <View>
-          <SectionHeader title="Comes back every month" />
-          <Text style={styles.intro}>
-            Seen in three or more months — {formatMoney(recurring.reduce((sum, c) => sum + c.typicalAmount, 0))}{' '}
-            a month before you decide anything.
-          </Text>
+        <Group
+          title="Every month"
+          footer={`${formatMoney(recurring.reduce((sum, c) => sum + c.typicalAmount, 0))} a month, before you choose anything.`}
+        >
           {recurring.slice(0, 6).map((charge) => (
             <Row
               key={charge.merchant}
               title={charge.merchant}
-              subtitle={`${charge.months} months · about ${formatMoney(charge.annualised)} a year`}
-              right={<Text style={styles.value}>{formatMoney(charge.typicalAmount)}</Text>}
+              subtitle={`${charge.months} months · ${formatMoney(charge.annualised)} a year`}
+              right={
+                <Text style={styles.value}>
+                  {formatMoney(charge.typicalAmount)}
+                </Text>
+              }
             />
           ))}
-        </View>
+        </Group>
       ) : null}
 
       {/* Admit a partial picture rather than presenting half a ledger as the whole. */}
-      {uncategorisedFraction > 0 && !findings.slice(0, 3).some((f) => f.id === 'uncategorised') ? (
+      {uncategorisedFraction > 0 &&
+      !findings.slice(0, 3).some((f) => f.id === "uncategorised") ? (
         <Text style={styles.note}>
-          {Math.round(uncategorisedFraction * 100)}% of this period's spending has no category yet, so
-          the breakdown above is missing it.
+          {Math.round(uncategorisedFraction * 100)}% of this period's spending
+          has no category yet, so the breakdown above is missing it.
         </Text>
       ) : null}
     </Screen>
@@ -361,10 +416,12 @@ export default function InsightsScreen() {
 
 function weekDetail(thisWeek: number, lastWeek: number): string {
   const comparison = compareWeeks(thisWeek, lastWeek);
-  if (comparison.change === null) return 'Nothing the week before to compare with';
-  if (comparison.direction === 'FLAT') return `About the same as the ${formatMoney(lastWeek)} before`;
+  if (comparison.change === null)
+    return "Nothing the week before to compare with";
+  if (comparison.direction === "FLAT")
+    return `About the same as the ${formatMoney(lastWeek)} before`;
   return `${Math.abs(Math.round(comparison.change * 100))}% ${
-    comparison.direction === 'UP' ? 'more' : 'less'
+    comparison.direction === "UP" ? "more" : "less"
   } than the ${formatMoney(lastWeek)} before`;
 }
 
@@ -381,12 +438,16 @@ function FindingRow({
 }) {
   const body = (
     <>
-      <View style={[styles.findingMark, { backgroundColor: toneColor(tone) }]} />
+      <View
+        style={[styles.findingMark, { backgroundColor: toneColor(tone) }]}
+      />
       <View style={styles.findingBody}>
         <Text style={styles.findingHeadline}>{headline}</Text>
         <Text style={styles.findingDetail}>{detail}</Text>
       </View>
-      {onOpen ? <Icon name="chevronRight" size={18} color={palette.textMuted} /> : null}
+      {onOpen ? (
+        <Icon name="chevronRight" size={18} color={palette.textMuted} />
+      ) : null}
     </>
   );
   if (!onOpen) return <View style={styles.finding}>{body}</View>;
@@ -424,22 +485,27 @@ function WhereItWent({
   // Scaled to the largest bill paid, so yours + others' share always fits the track.
   const largest = Math.max(...costs.map((c) => c.paid), 1);
 
-  return (
-    <View>
-      <SectionHeader title="Where it went" />
-      <Text style={styles.intro}>
-        {anySplit ? (
-          <>
-            <Text style={styles.introStrong}>{formatMoney(totalYours)} was yours</Text> of the{' '}
-            {formatMoney(totalPaid)} you paid. The rest was other people's share.
-          </>
-        ) : (
-          <>
-            <Text style={styles.introStrong}>{formatMoney(totalYours)}</Text> this period, all of it yours.
-          </>
-        )}
-      </Text>
+  const footer = [
+    anySplit ? "Struck through is what you paid; bold is your share." : null,
+    borne && borne.stillOwed > 0.5
+      ? `${formatMoney(borne.stillOwed)} still owed to you.`
+      : null,
+    transfers > 0
+      ? `${transfers} self-transfer${transfers === 1 ? "" : "s"} left out.`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
+  return (
+    <Group title="Where it went" footer={footer || undefined}>
+      <View key="total" style={styles.totalRow}>
+        <Text style={styles.paceTitle}>{anySplit ? "Yours" : "Spent"}</Text>
+        {anySplit ? (
+          <Text style={styles.categoryPaid}>{formatMoney(totalPaid)}</Text>
+        ) : null}
+        <Text style={styles.totalValue}>{formatMoney(totalYours)}</Text>
+      </View>
       {costs.map((cost) => {
         const shared = cost.splitAway > 0.5;
         return (
@@ -448,9 +514,12 @@ function WhereItWent({
             onPress={() => onOpen(cost.category)}
             accessibilityRole="button"
             accessibilityLabel={`${cost.category}, ${formatMoney(cost.yours)} yours${
-              shared ? ` of ${formatMoney(cost.paid)} paid` : ''
+              shared ? ` of ${formatMoney(cost.paid)} paid` : ""
             }. View spending`}
-            style={({ pressed }) => [styles.category, pressed && styles.pressed]}
+            style={({ pressed }) => [
+              styles.category,
+              pressed && styles.pressed,
+            ]}
           >
             <View style={styles.categoryHead}>
               <Dot color={categoryColor(cost.category)} size={8} />
@@ -458,38 +527,34 @@ function WhereItWent({
                 {cost.category}
               </Text>
               {shared ? (
-                <Text style={styles.categoryPaid}>{formatMoney(cost.paid)}</Text>
+                <Text style={styles.categoryPaid}>
+                  {formatMoney(cost.paid)}
+                </Text>
               ) : null}
               <Text style={styles.value}>{formatMoney(cost.yours)}</Text>
             </View>
             {/* One neutral bar: length is the information, the dot already
-                says which category. A rainbow of bars says nothing extra. */}
+                says which category. Others' share trails it in grey. */}
             <View style={styles.track}>
-              <View style={[styles.fill, { width: `${Math.max(1, (cost.yours / largest) * 100)}%` }]} />
+              <View
+                style={[
+                  styles.fill,
+                  { width: `${Math.max(1, (cost.yours / largest) * 100)}%` },
+                ]}
+              />
               {shared ? (
                 <View
-                  style={[styles.fillOthers, { width: `${(cost.splitAway / largest) * 100}%` }]}
+                  style={[
+                    styles.fillOthers,
+                    { width: `${(cost.splitAway / largest) * 100}%` },
+                  ]}
                 />
               ) : null}
             </View>
           </Pressable>
         );
       })}
-
-      {anySplit ? (
-        <Text style={styles.note}>
-          Struck-out amounts are what left your account; the bold figure is your share.
-          {borne && borne.stillOwed > 0.5
-            ? ` ${formatMoney(borne.stillOwed)} of the rest is still owed to you.`
-            : ''}
-        </Text>
-      ) : null}
-      {transfers > 0 ? (
-        <Text style={styles.note}>
-          {transfers} transfer{transfers === 1 ? '' : 's'} between your own accounts left out.
-        </Text>
-      ) : null}
-    </View>
+    </Group>
   );
 }
 
@@ -497,32 +562,53 @@ function WhereItWent({
  * Daily spend this period as plain bars. Deliberately views rather than a
  * chart library — thirty bars do not justify the bundle.
  */
-function PaceChart({ daily, dailyLimit }: { daily: Array<{ day: string; total: number }>; dailyLimit: number }) {
+function PaceChart({
+  daily,
+  dailyLimit,
+}: {
+  daily: Array<{ day: string; total: number }>;
+  dailyLimit: number;
+}) {
   const shown = daily.slice(-30);
   const max = Math.max(...shown.map((d) => d.total), dailyLimit, 1);
   const limitFromBottom = (dailyLimit / max) * CHART_HEIGHT;
 
   return (
-    <View style={styles.chart}>
-      {dailyLimit > 0 ? <View style={[styles.limitLine, { bottom: limitFromBottom }]} /> : null}
-      {shown.map((day) => (
-        <View key={day.day} style={styles.barSlot}>
-          <View
-            style={[
-              styles.bar,
-              {
-                height: Math.max(3, (day.total / max) * CHART_HEIGHT),
-                backgroundColor: day.total > dailyLimit ? palette.warning : palette.textSecondary,
-              },
-            ]}
-          />
-        </View>
-      ))}
+    <View style={styles.chartBlock}>
+      <View style={styles.chart}>
+        {dailyLimit > 0 ? (
+          <View style={[styles.limitLine, { bottom: limitFromBottom }]} />
+        ) : null}
+        {shown.map((day) => (
+          <View key={day.day} style={styles.barSlot}>
+            <View
+              style={[
+                styles.bar,
+                {
+                  height: Math.max(3, (day.total / max) * CHART_HEIGHT),
+                  backgroundColor:
+                    day.total > dailyLimit
+                      ? palette.warning
+                      : palette.textSecondary,
+                },
+              ]}
+            />
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
 
-function PaceRow({ title, detail, amount }: { title: string; detail: string; amount: number }) {
+function PaceRow({
+  title,
+  detail,
+  amount,
+}: {
+  title: string;
+  detail: string;
+  amount: number;
+}) {
   return (
     <View style={styles.paceRow}>
       <View style={styles.paceBody}>
@@ -547,46 +633,53 @@ function AgainstNormal({
   const monthly: MonthComparison = compareMonths(months);
   const maxMonth = Math.max(...months.map((m) => m.total), 1);
 
-  return (
-    <View>
-      <SectionHeader title="Against a normal month" />
-      <Text style={styles.intro}>
-        {monthly.changeVsTypical === null
-          ? 'One more month and this starts comparing itself.'
-          : monthly.direction === 'FLAT'
-            ? `About the same as your usual ${formatMoney(monthly.typical ?? 0)} a month.`
-            : `Spending ${Math.abs(Math.round(monthly.changeVsTypical * 100))}% ${
-                monthly.direction === 'UP' ? 'faster' : 'slower'
-              } than usual${
-                monthly.projectedTotal !== null
-                  ? `, heading for about ${formatMoney(monthly.projectedTotal)}`
-                  : ''
-              }.`}
-      </Text>
+  const verdict =
+    monthly.changeVsTypical === null
+      ? "Compares itself after one more month."
+      : monthly.direction === "FLAT"
+        ? `About your usual ${formatMoney(monthly.typical ?? 0)}.`
+        : `${Math.abs(Math.round(monthly.changeVsTypical * 100))}% ${
+            monthly.direction === "UP" ? "faster" : "slower"
+          } than usual${
+            monthly.projectedTotal !== null
+              ? `, heading for ${formatMoney(monthly.projectedTotal)}`
+              : ""
+          }.`;
 
-      <View style={styles.monthChart}>
-        {[...months].reverse().map((month) => {
-          const isCurrent = month.month === months[0]?.month;
-          return (
-            <View key={month.month} style={styles.monthSlot}>
-              <Text style={[styles.monthAmount, isCurrent && styles.monthCurrent]}>
-                {formatMoneyCompact(month.total)}
-              </Text>
-              <View
-                style={[
-                  styles.monthBar,
-                  {
-                    height: Math.max(6, (month.total / maxMonth) * 80),
-                    backgroundColor: isCurrent ? palette.textPrimary : palette.surfaceElevated,
-                  },
-                ]}
-              />
-              <Text style={[styles.monthLabel, isCurrent && styles.monthCurrent]}>
-                {monthLabel(month.month)}
-              </Text>
-            </View>
-          );
-        })}
+  return (
+    <Group title="Against a normal month">
+      <View key="chart" style={styles.chartBlock}>
+        <Text style={styles.verdict}>{verdict}</Text>
+        <View style={styles.monthChart}>
+          {[...months].reverse().map((month) => {
+            const isCurrent = month.month === months[0]?.month;
+            return (
+              <View key={month.month} style={styles.monthSlot}>
+                <Text
+                  style={[styles.monthAmount, isCurrent && styles.monthCurrent]}
+                >
+                  {formatMoneyCompact(month.total)}
+                </Text>
+                <View
+                  style={[
+                    styles.monthBar,
+                    {
+                      height: Math.max(6, (month.total / maxMonth) * 72),
+                      backgroundColor: isCurrent
+                        ? palette.textPrimary
+                        : palette.surfaceElevated,
+                    },
+                  ]}
+                />
+                <Text
+                  style={[styles.monthLabel, isCurrent && styles.monthCurrent]}
+                >
+                  {monthLabel(month.month)}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
       </View>
 
       {shifts.slice(0, 4).map((shift) => {
@@ -597,18 +690,23 @@ function AgainstNormal({
             key={shift.category}
             left={<Dot color={categoryColor(shift.category)} size={8} />}
             title={shift.category}
-            subtitle={`${formatMoney(shift.currentTotal)} so far · usually ${formatMoney(shift.typicalTotal)}`}
+            subtitle={`${formatMoney(shift.currentTotal)} · usually ${formatMoney(shift.typicalTotal)}`}
             onPress={() => onOpen(shift.category)}
             right={
-              <Text style={[styles.value, { color: up ? palette.warning : palette.accent }]}>
-                {up ? '+' : '−'}
+              <Text
+                style={[
+                  styles.value,
+                  { color: up ? palette.warning : palette.accent },
+                ]}
+              >
+                {up ? "+" : "−"}
                 {formatMoneyCompact(diff)}
               </Text>
             }
           />
         );
       })}
-    </View>
+    </Group>
   );
 }
 
@@ -617,11 +715,11 @@ const CHART_HEIGHT = 88;
 /** A finding's colour carries its urgency, so the eye ranks them before the words do. */
 function toneColor(tone: FindingTone): string {
   switch (tone) {
-    case 'CRITICAL':
+    case "CRITICAL":
       return palette.danger;
-    case 'WARNING':
+    case "WARNING":
       return palette.warning;
-    case 'GOOD':
+    case "GOOD":
       return palette.accent;
     default:
       return palette.textMuted;
@@ -630,67 +728,112 @@ function toneColor(tone: FindingTone): string {
 
 /** The hero stays white unless there is something to be worried or pleased about. */
 function heroColor(tone: FindingTone): string {
-  return tone === 'NEUTRAL' ? palette.textPrimary : toneColor(tone);
+  return tone === "NEUTRAL" ? palette.textPrimary : toneColor(tone);
 }
 
 const styles = StyleSheet.create({
   hero: { paddingTop: spacing.sm, paddingBottom: spacing.xs, gap: 2 },
-  heroAmount: { ...typography.hero, fontSize: 48, lineHeight: 54, letterSpacing: -1.5 },
+  heroAmount: {
+    ...typography.hero,
+    fontSize: 48,
+    lineHeight: 54,
+    letterSpacing: -1.5,
+  },
   heroLabel: { ...typography.cardTitle, color: palette.textPrimary },
-  heroDetail: { ...typography.body, color: palette.textSecondary, marginTop: spacing.xs, lineHeight: 21 },
+  heroDetail: {
+    ...typography.body,
+    color: palette.textSecondary,
+    marginTop: spacing.xs,
+    lineHeight: 21,
+  },
 
   pressed: { opacity: 0.72 },
 
   finding: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.md,
     paddingVertical: spacing.md,
   },
   // A tone-coloured rule down the side, so urgency is legible before a word is read.
-  findingMark: { width: 3, borderRadius: 2, alignSelf: 'stretch' },
+  findingMark: { width: 3, borderRadius: 2, alignSelf: "stretch" },
   findingBody: { flex: 1, gap: 3 },
   findingHeadline: { ...typography.bodyBold, color: palette.textPrimary },
-  findingDetail: { ...typography.caption, color: palette.textSecondary, lineHeight: 18 },
+  findingDetail: {
+    ...typography.caption,
+    color: palette.textSecondary,
+    lineHeight: 18,
+  },
 
-  intro: { ...typography.caption, color: palette.textSecondary, lineHeight: 18, marginBottom: spacing.sm },
-  introStrong: { fontWeight: '600', color: palette.textPrimary },
-  note: { ...typography.caption, color: palette.textMuted, lineHeight: 18, marginTop: spacing.sm },
+  totalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  totalValue: { ...typography.cardTitle, color: palette.textPrimary },
+  chartBlock: { paddingVertical: spacing.md },
+  verdict: {
+    ...typography.body,
+    color: palette.textPrimary,
+    marginBottom: spacing.md,
+  },
+  intro: {
+    ...typography.caption,
+    color: palette.textSecondary,
+    lineHeight: 18,
+    marginBottom: spacing.sm,
+  },
+  note: {
+    ...typography.caption,
+    color: palette.textMuted,
+    lineHeight: 18,
+    marginTop: spacing.sm,
+  },
   value: { ...typography.bodyBold, color: palette.textPrimary },
 
   category: { gap: 6, paddingVertical: spacing.sm },
-  categoryHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  categoryHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   categoryName: { ...typography.body, color: palette.textPrimary, flex: 1 },
   categoryPaid: {
     ...typography.caption,
     color: palette.textMuted,
-    textDecorationLine: 'line-through',
+    textDecorationLine: "line-through",
   },
-  track: { flexDirection: 'row', height: 4, borderRadius: 2, overflow: 'hidden' },
+  track: {
+    flexDirection: "row",
+    height: 4,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
   fill: { height: 4, backgroundColor: palette.textPrimary, borderRadius: 2 },
-  fillOthers: { height: 4, backgroundColor: palette.surfaceElevated, marginLeft: 2, borderRadius: 2 },
+  fillOthers: {
+    height: 4,
+    backgroundColor: palette.surfaceElevated,
+    marginLeft: 2,
+    borderRadius: 2,
+  },
 
   chart: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    flexDirection: "row",
+    alignItems: "flex-end",
     gap: 3,
     height: CHART_HEIGHT,
-    marginTop: spacing.xs,
   },
   limitLine: {
-    position: 'absolute',
+    position: "absolute",
     left: 0,
     right: 0,
     height: StyleSheet.hairlineWidth,
     backgroundColor: palette.warning,
     opacity: 0.6,
   },
-  barSlot: { flex: 1, justifyContent: 'flex-end' },
-  bar: { width: '100%', borderRadius: 2, minHeight: 3 },
+  barSlot: { flex: 1, justifyContent: "flex-end" },
+  bar: { width: "100%", borderRadius: 2, minHeight: 3 },
 
   paceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.md,
     paddingVertical: spacing.md,
   },
@@ -699,15 +842,20 @@ const styles = StyleSheet.create({
   paceDetail: { ...typography.caption, color: palette.textSecondary },
 
   monthChart: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    flexDirection: "row",
+    alignItems: "flex-end",
     gap: spacing.sm,
     height: 120,
     marginBottom: spacing.sm,
   },
-  monthSlot: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 4 },
-  monthBar: { width: '100%', borderRadius: 3 },
+  monthSlot: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 4,
+  },
+  monthBar: { width: "100%", borderRadius: 3 },
   monthAmount: { ...typography.micro, color: palette.textMuted },
   monthLabel: { ...typography.micro, color: palette.textMuted },
-  monthCurrent: { color: palette.textPrimary, fontWeight: '600' },
+  monthCurrent: { color: palette.textPrimary, fontWeight: "600" },
 });

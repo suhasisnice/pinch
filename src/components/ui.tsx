@@ -523,6 +523,48 @@ export function SectionHeader({
   );
 }
 
+/**
+ * One section of a screen: a heading on the page, and its rows together on
+ * one surface, separated by hairlines.
+ *
+ * The container is what makes a screen read as segments instead of one long
+ * scroll — things inside a shared boundary are seen as belonging together
+ * (common region), so the eye can take a screen in as five chunks rather than
+ * forty lines. It groups a *concept*, never a single row: a card per row is
+ * what the spec rules out, a surface per section is what it asks for.
+ */
+export function Group({
+  title,
+  action,
+  onAction,
+  footer,
+  children,
+}: {
+  title?: string;
+  action?: string;
+  onAction?: () => void;
+  /** One short line under the surface — a key to what is above, not an essay. */
+  footer?: string;
+  children: React.ReactNode;
+}) {
+  const items = React.Children.toArray(children).filter(Boolean);
+  if (items.length === 0) return null;
+  return (
+    <View style={styles.group}>
+      {title ? <SectionHeader title={title} action={action} onAction={onAction} /> : null}
+      <View style={styles.groupSurface}>
+        {items.map((child, index) => (
+          <React.Fragment key={(child as React.ReactElement).key ?? index}>
+            {index > 0 ? <View style={styles.divider} /> : null}
+            {child}
+          </React.Fragment>
+        ))}
+      </View>
+      {footer ? <Text style={styles.groupFooter}>{footer}</Text> : null}
+    </View>
+  );
+}
+
 /** A hairline between rows of one list. */
 export function Divider() {
   return <View style={styles.divider} />;
@@ -689,6 +731,14 @@ const styles = StyleSheet.create({
   sectionTitle: { ...typography.cardTitle, color: palette.textPrimary },
   sectionAction: { ...typography.caption, fontWeight: '600', color: palette.textSecondary },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: palette.border },
+  group: { gap: spacing.xs },
+  groupSurface: {
+    backgroundColor: palette.surface,
+    borderRadius: radii.card,
+    paddingHorizontal: spacing.md,
+    overflow: "hidden",
+  },
+  groupFooter: { ...typography.caption, color: palette.textMuted, paddingHorizontal: spacing.xs, marginTop: 2 },
   rowLeft: { width: 38, alignItems: 'center' },
   rowBody: { flex: 1, gap: 2 },
   rowTitle: { ...typography.bodyBold, color: palette.textPrimary },

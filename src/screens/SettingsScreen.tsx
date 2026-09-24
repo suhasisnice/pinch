@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { showConfirm, showMessage } from '../components/Dialog';
-import { AppState, StyleSheet, Switch, Text, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { TransactionRow } from '../db/types';
@@ -28,7 +28,7 @@ import { NotificationSettings } from '../notifications/engine';
 import { requestNotificationPermission } from '../notifications/notificationService';
 import { formatMoney } from '../utils/format';
 import { palette, spacing, typography } from '../theme/theme';
-import { Button, Card, CardTitle, Field, Loading, Row, Screen, ScreenTitle } from '../components/ui';
+import { Button, Field, Group, Loading, Row, Screen, ScreenTitle } from '../components/ui';
 import Icon from '../components/Icon';
 import FreshStartSheet from '../components/FreshStartSheet';
 import appConfig from '../../app.json';
@@ -314,44 +314,49 @@ export default function SettingsScreen() {
     <Screen>
       <ScreenTitle title="Settings" />
 
-      <Card>
-        <CardTitle>Budget</CardTitle>
-        <Field
-          label="Allowance"
-          value={allowance}
-          onChangeText={(text) => {
-            setBudgetEdited(true);
-            setAllowance(text);
-          }}
-          keyboardType="numeric"
-          placeholder="9000"
-        />
-        <Field
-          label="Days it has to last"
-          value={periodDays}
-          onChangeText={(text) => {
-            setBudgetEdited(true);
-            setPeriodDays(text);
-          }}
-          keyboardType="numeric"
-          placeholder="30"
-          hint="Starts today. Set this when your allowance actually lands, not on the 1st."
-        />
-        <Button label="Start a new budget period" onPress={saveAllowance} style={{ marginTop: spacing.sm }} />
-      </Card>
+      <Group title="Budget" footer="Starts today — set it when your allowance lands.">
+        <View key="form" style={styles.form}>
+          <Field
+            label="Allowance"
+            value={allowance}
+            onChangeText={(text) => {
+              setBudgetEdited(true);
+              setAllowance(text);
+            }}
+            keyboardType="numeric"
+            placeholder="9000"
+          />
+          <Field
+            label="Days it has to last"
+            value={periodDays}
+            onChangeText={(text) => {
+              setBudgetEdited(true);
+              setPeriodDays(text);
+            }}
+            keyboardType="numeric"
+            placeholder="30"
+          />
+          <Button label="Start a new budget period" onPress={saveAllowance} />
+        </View>
+      </Group>
 
-      <Card>
-        <CardTitle>Automatic capture</CardTitle>
-        {!isCaptureAvailable ? (
-          <Text style={styles.note}>
-            Capture needs the Android dev build — it isn't available here. Everything still works with
-            manual entry.
+      <Group>
+        <NavRow key="all" title="All transactions" onPress={() => navigation.navigate('Transactions')} />
+        <NavRow key="review" title="Review inbox" onPress={() => navigation.navigate('Review')} />
+      </Group>
+
+      {!isCaptureAvailable ? (
+        <Group title="Automatic capture">
+          <Text key="na" style={styles.inset}>
+            Needs the Android build. Manual entry still works.
           </Text>
-        ) : (
-          <>
+        </Group>
+      ) : (
+        <>
+          <Group title="Automatic capture" footer="Read on your phone. Never uploaded.">
             <Row
-              title="Read bank SMS"
-              subtitle={smsGranted ? 'Granted' : 'Not granted'}
+              key="sms"
+              title="Bank SMS"
               right={
                 smsGranted ? (
                   <Text style={styles.ok}>On</Text>
@@ -361,8 +366,21 @@ export default function SettingsScreen() {
               }
             />
             <Row
-              title="Pick friends from contacts"
-              subtitle={contactsGranted ? 'Granted' : 'For splitting bills and WhatsApp nudges'}
+              key="notif"
+              title="Payment notifications"
+              subtitle={listenerEnabled ? undefined : 'GPay, PhonePe, Paytm'}
+              right={
+                listenerEnabled ? (
+                  <Text style={styles.ok}>On</Text>
+                ) : (
+                  <Button label="Allow" variant="secondary" onPress={openNotificationListenerSettings} />
+                )
+              }
+            />
+            <Row
+              key="contacts"
+              title="Contacts"
+              subtitle={contactsGranted ? undefined : 'For splitting bills'}
               right={
                 contactsGranted ? (
                   <Text style={styles.ok}>On</Text>
@@ -371,117 +389,88 @@ export default function SettingsScreen() {
                 )
               }
             />
-            <Row
-              title="Read payment notifications"
-              subtitle={listenerEnabled ? 'Granted' : 'Catches GPay, PhonePe, Paytm, bank alert emails'}
-              right={
-                listenerEnabled ? (
-                  <Text style={styles.ok}>On</Text>
-                ) : (
-                  <Button
-                    label="Allow"
-                    variant="secondary"
-                    onPress={openNotificationListenerSettings}
-                  />
-                )
-              }
-            />
+          </Group>
+
+          <Group title="Messages">
             {smsGranted ? (
-              <Button
-                label={busy ? 'Reading…' : 'Import recent SMS'}
-                variant="secondary"
+              <NavRow
+                key="import"
+                title={busy ? 'Reading…' : 'Import recent SMS'}
                 onPress={runBackfill}
                 disabled={busy}
-                style={{ marginTop: spacing.sm }}
               />
             ) : null}
-            <Button
-              label={busy ? 'Checking…' : 'Recover missed messages'}
-              variant="ghost"
+            <NavRow
+              key="recover"
+              title={busy ? 'Checking…' : 'Recover missed messages'}
               onPress={recoverMissed}
               disabled={busy}
             />
-            <Button
-              label={busy ? 'Checking…' : 'See what is being skipped'}
-              variant="ghost"
+            <NavRow
+              key="skipped"
+              title={busy ? 'Checking…' : "See what's skipped"}
               onPress={showWhatIsBeingDropped}
               disabled={busy}
             />
-            <Text style={styles.note}>
-              Messages are parsed on your phone and never leave it. Anything Pinch isn't sure about
-              waits for you in Review instead of being logged.
-            </Text>
-          </>
-        )}
-      </Card>
+          </Group>
+        </>
+      )}
 
-      {blocked.length > 0 || excluded.length > 0 ? (
-        <Card>
-          <CardTitle>Ignored</CardTitle>
-          <Text style={styles.note}>
-            Blocking is never permanent — undo anything here and it starts counting again.
-          </Text>
-
-          {blocked.length > 0 ? (
-            <>
-              <Text style={styles.groupLabel}>Blocked senders</Text>
-              {blocked.map((entry) => (
-                <Row
-                  key={entry.pattern}
-                  left={<Icon name="lock" size={15} color={palette.textMuted} />}
-                  title={entry.pattern}
-                  subtitle={entry.reason ?? 'Blocked'}
-                  right={
-                    <Text
-                      style={styles.undo}
-                      onPress={async () => {
-                        await db.removeFromBlocklist(entry.pattern);
-                        load();
-                      }}
-                    >
-                      Unblock
-                    </Text>
-                  }
-                />
-              ))}
-            </>
-          ) : null}
-
-          {excluded.length > 0 ? (
-            <>
-              <Text style={styles.groupLabel}>Not counted as spending</Text>
-              {excluded.slice(0, 12).map((tx) => (
-                <Row
-                  key={tx.id}
-                  left={<Icon name="close" size={15} color={palette.textMuted} />}
-                  title={tx.merchant}
-                  subtitle={`${formatMoney(tx.amount)} · ${tx.source.toLowerCase()}`}
-                  right={
-                    <Text
-                      style={styles.undo}
-                      onPress={async () => {
-                        await db.setTransactionExcluded(tx.id, false);
-                        load();
-                      }}
-                    >
-                      Restore
-                    </Text>
-                  }
-                />
-              ))}
-              {excluded.length > 12 ? (
-                <Text style={styles.note}>
-                  and {excluded.length - 12} more.
+      {blocked.length > 0 ? (
+        <Group title="Blocked senders" footer="Unblock and it counts again.">
+          {blocked.map((entry) => (
+            <Row
+              key={entry.pattern}
+              title={entry.pattern}
+              subtitle={entry.reason ?? undefined}
+              right={
+                <Text
+                  style={styles.undo}
+                  onPress={async () => {
+                    await db.removeFromBlocklist(entry.pattern);
+                    load();
+                  }}
+                >
+                  Unblock
                 </Text>
-              ) : null}
-            </>
-          ) : null}
-        </Card>
+              }
+            />
+          ))}
+        </Group>
       ) : null}
 
-      <Card>
-        <CardTitle>Nudges</CardTitle>
+      {excluded.length > 0 ? (
+        <Group
+          title="Not counted"
+          footer={excluded.length > 12 ? `And ${excluded.length - 12} more.` : undefined}
+        >
+          {excluded.slice(0, 12).map((tx) => (
+            <Row
+              key={tx.id}
+              title={tx.merchant}
+              subtitle={`${formatMoney(tx.amount)} · ${tx.source.toLowerCase()}`}
+              right={
+                <Text
+                  style={styles.undo}
+                  onPress={async () => {
+                    await db.setTransactionExcluded(tx.id, false);
+                    load();
+                  }}
+                >
+                  Restore
+                </Text>
+              }
+            />
+          ))}
+        </Group>
+      ) : null}
+
+      <Group
+        title="Notifications"
+        footer={`Quiet ${notifications.quietStartHour}:00–${notifications.quietEndHour}:00, at most ${notifications.maxPerDay} a day.`}
+      >
         <Toggle
+          key="all"
           label="All notifications"
           value={notifications.enabled}
           onChange={async (value) => {
@@ -490,99 +479,94 @@ export default function SettingsScreen() {
           }}
         />
         <Toggle
+          key="confirm"
           label="Confirm before logging"
-          hint="Every captured payment waits in Review until you confirm it. Nothing is lost if you miss the notification — but your numbers don't move until you answer."
+          hint="Numbers move only after you say yes"
           value={notifications.confirmBeforeLogging}
           onChange={(value) => update({ confirmBeforeLogging: value })}
         />
         <Toggle
+          key="category"
           label="Ask for a missing category"
-          hint="When a logged payment couldn't be categorised"
           value={notifications.categoryPromptsEnabled}
           onChange={(value) => update({ categoryPromptsEnabled: value })}
         />
         <Toggle
-          label="Per-transaction pulse"
-          hint="A quick read on today's limit after each spend"
+          key="pulse"
+          label="After each spend"
+          hint="Today's limit, at a glance"
           value={notifications.pulseEnabled}
           onChange={(value) => update({ pulseEnabled: value })}
         />
         <Toggle
+          key="split"
           label="Split prompts"
-          hint="Asks if a big social spend should be split"
+          hint="For big social spends"
           value={notifications.splitPromptsEnabled}
           onChange={(value) => update({ splitPromptsEnabled: value })}
         />
         <Toggle
+          key="over"
           label="Overspend warnings"
           value={notifications.overspendEnabled}
           onChange={(value) => update({ overspendEnabled: value })}
         />
         <Toggle
+          key="goals"
           label="Goal milestones"
           value={notifications.goalsEnabled}
           onChange={(value) => update({ goalsEnabled: value })}
         />
         <Toggle
+          key="streaks"
           label="Streaks"
           value={notifications.streaksEnabled}
           onChange={(value) => update({ streaksEnabled: value })}
         />
         <Toggle
+          key="settle"
           label="Settle-up reminders"
           value={notifications.settleRemindersEnabled}
           onChange={(value) => update({ settleRemindersEnabled: value })}
         />
-        <Text style={styles.note}>
-          Quiet from {notifications.quietStartHour}:00 to {notifications.quietEndHour}:00, and never
-          more than {notifications.maxPerDay} a day.
-        </Text>
-      </Card>
+      </Group>
 
-      <Card>
-        <CardTitle>Start fresh</CardTitle>
-        <Text style={styles.note}>
-          {counts
-            ? `${counts.transactions} transactions, ${counts.captures} waiting for review, ${counts.ious} debts.`
-            : ''}
-        </Text>
-        <Button
-          label="Start from my current balance"
+      <Group
+        title="Start over"
+        footer={
+          counts
+            ? `${counts.transactions} transactions · ${counts.captures} in review · ${counts.ious} debts`
+            : undefined
+        }
+      >
+        <NavRow
+          key="fresh"
+          title="Start from my current balance"
+          subtitle="Forget what came before"
           onPress={() => setFreshVisible(true)}
-          style={{ marginBottom: spacing.sm }}
         />
-        <Text style={styles.note}>
-          Ignores everything you spent before today and asks only what you have now.
-        </Text>
-
-        <Button
-          label={busy ? 'Checking…' : 'Recheck imported messages'}
-          variant="secondary"
+        <NavRow
+          key="recheck"
+          title={busy ? 'Checking…' : 'Recheck imported messages'}
+          subtitle="Drop anything that isn't a real payment"
           onPress={recheckHistory}
           disabled={busy}
         />
-        <Text style={styles.note}>
-          Re-reads everything imported using the current, stricter rules and drops whatever is
-          not a real transaction. Nothing is deleted — you can put any of it back.
-        </Text>
-        <Button
-          label="Clear spending history"
-          variant="secondary"
+        <NavRow
+          key="clear"
+          title="Clear spending history"
+          subtitle="Starts a new period today"
           onPress={() => confirmReset(false)}
           disabled={busy}
-          style={{ marginTop: spacing.sm }}
         />
-        <Button
-          label="Erase everything"
-          variant="danger"
+        <NavRow
+          key="erase"
+          title="Erase everything"
+          danger
           onPress={() => confirmReset(true)}
           disabled={busy}
-          style={{ marginTop: spacing.sm }}
         />
-        <Text style={styles.note}>
-          Both start a new budget period from today, using the allowance above.
-        </Text>
-      </Card>
+      </Group>
 
       <FreshStartSheet
         visible={freshVisible}
@@ -594,16 +578,6 @@ export default function SettingsScreen() {
         }}
       />
 
-      <Card onPress={() => navigation.navigate('Transactions')}>
-        <CardTitle>All transactions ›</CardTitle>
-        <Text style={styles.note}>Everything captured or added, including what you have ignored.</Text>
-      </Card>
-
-      <Card onPress={() => navigation.navigate('Review')}>
-        <CardTitle>Review inbox ›</CardTitle>
-        <Text style={styles.note}>Messages Pinch wasn't confident enough to log on its own.</Text>
-      </Card>
-
       {isCaptureAvailable ? (
         <Button label="Open app settings" variant="ghost" onPress={openAppSettings} />
       ) : null}
@@ -612,6 +586,38 @@ export default function SettingsScreen() {
         Pinch {appConfig.expo.version} ({appConfig.expo.android.versionCode})
       </Text>
     </Screen>
+  );
+}
+
+/** A row that goes somewhere or does something, with the chevron that says so. */
+function NavRow({
+  title,
+  subtitle,
+  onPress,
+  disabled = false,
+  danger = false,
+}: {
+  title: string;
+  subtitle?: string;
+  onPress: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      accessibilityLabel={subtitle ? `${title}, ${subtitle}` : title}
+      style={({ pressed }) => [styles.navRow, (pressed || disabled) && styles.pressed]}
+    >
+      <View style={styles.navText}>
+        <Text style={[styles.navTitle, danger && { color: palette.danger }]}>{title}</Text>
+        {subtitle ? <Text style={styles.navSubtitle}>{subtitle}</Text> : null}
+      </View>
+      <Icon name="chevronRight" size={18} color={palette.textMuted} />
+    </Pressable>
   );
 }
 
@@ -653,18 +659,19 @@ const styles = StyleSheet.create({
   note: { ...typography.caption, color: palette.textMuted, lineHeight: 18, marginTop: spacing.sm },
   ok: { ...typography.bodyBold, color: palette.accent },
   undo: { ...typography.caption, color: palette.accent, fontWeight: '700' },
-  groupLabel: {
-    ...typography.sectionLabel,
-    color: palette.textSecondary,
-    marginTop: spacing.md,
-    marginBottom: 2,
-  },
+  form: { paddingVertical: spacing.md, gap: spacing.md },
+  inset: { ...typography.body, color: palette.textSecondary, paddingVertical: spacing.md },
+  pressed: { opacity: 0.6 },
+  navRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14 },
+  navText: { flex: 1, gap: 2 },
+  navTitle: { ...typography.body, color: palette.textPrimary },
+  navSubtitle: { ...typography.caption, color: palette.textSecondary },
 
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 9,
+    paddingVertical: 12,
     gap: spacing.md,
   },
   toggleText: { flex: 1 },

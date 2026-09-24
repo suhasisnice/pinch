@@ -87,13 +87,12 @@ export default function GoalsScreen() {
           <Text style={styles.reserveLabel}>Held back from spending this period</Text>
           <Text style={styles.reserveAmount}>{formatMoney(totalReserved)}</Text>
           <Text style={styles.reserveNote}>
-            Already subtracted from your daily number — you don't have to remember to save it.
+            Already taken out of your daily number.
           </Text>
           {reserveCapped ? (
             <Text style={styles.reserveCapped}>
-              Your goals wanted more than half your allowance, so Pinch is holding back less
-              than they asked for. They will take longer than planned. Lower a target, add a
-              longer deadline, or delete one to change that.
+              Goals asked for over half your allowance, so they're paced slower. Lower a target
+              or extend a deadline.
             </Text>
           ) : null}
         </Card>
@@ -106,9 +105,7 @@ export default function GoalsScreen() {
             {formatMoney(totalInvested)}
           </Text>
           <Text style={styles.reserveNote}>
-            Contributions minus withdrawals across every platform. Pinch has no market data, so
-            this is what you've put in — not what it's worth today. Add one from + Add ›
-            Invest.
+            What you've put in, not what it's worth today.
           </Text>
         </Card>
       ) : null}
@@ -120,7 +117,7 @@ export default function GoalsScreen() {
           <EmptyState
             icon="goals"
             title="No goals yet"
-            body="A goal claims part of your allowance up front, so the money is gone before you can spend it. Add one and watch it come out of your daily number."
+            body="A goal comes out of your daily number first, so it actually gets saved."
           />
         </Card>
       ) : (
@@ -296,7 +293,7 @@ function CreateGoalSheet({
         onChangeText={setDays}
         keyboardType="numeric"
         placeholder="180"
-        hint="Leave blank for no deadline — it'll be paced over 90 days."
+        hint="Optional. Blank paces it over 90 days."
       />
       <Button label={saving ? 'Creating…' : 'Create goal'} onPress={save} disabled={!canSave || saving} />
     </Sheet>

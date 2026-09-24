@@ -78,8 +78,7 @@ export function buildFindings(input: FindingsInput): Finding[] {
     findings.push({
       id: 'underwater',
       headline: `You are ${money(-input.spendablePool)} past the allowance`,
-      detail:
-        'Everything committed for the rest of this period adds up to more than is left. Either something is counted that should not be, or the next few days have to be very cheap.',
+      detail: 'More is committed than is left. Check nothing is counted twice.',
       tone: 'CRITICAL',
       weight: 100,
     });
@@ -88,9 +87,7 @@ export function buildFindings(input: FindingsInput): Finding[] {
     findings.push({
       id: 'runs-out-early',
       headline: `At this pace the money runs out ${shortfall} day${shortfall === 1 ? '' : 's'} early`,
-      detail: `You have ${money(input.spendablePool)} for ${input.daysRemaining} days, and you are averaging ${money(
-        input.meanDay
-      )} a day. Spending ${money(input.dailyLimit)} a day instead gets you to the end.`,
+      detail: `You're averaging ${money(input.meanDay)} a day. ${money(input.dailyLimit)} a day gets you to the end.`,
       tone: 'CRITICAL',
       weight: 95,
     });
@@ -106,9 +103,7 @@ export function buildFindings(input: FindingsInput): Finding[] {
       findings.push({
         id: 'ahead-of-pace',
         headline: `${Math.round(spentFraction * 100)}% spent, ${Math.round(elapsed * 100)}% through`,
-        detail: `Spending is running ahead of the calendar. Holding to ${money(
-          input.dailyLimit
-        )} a day from here still lands on budget.`,
+        detail: `${money(input.dailyLimit)} a day from here still lands on budget.`,
         tone: 'WARNING',
         weight: 80,
       });
@@ -116,9 +111,7 @@ export function buildFindings(input: FindingsInput): Finding[] {
       findings.push({
         id: 'behind-pace',
         headline: `${Math.round(spentFraction * 100)}% spent, ${Math.round(elapsed * 100)}% through`,
-        detail: `You are comfortably under. There is roughly ${money(
-          input.dailyLimit
-        )} a day available for the rest of the period.`,
+        detail: `Comfortably under — about ${money(input.dailyLimit)} a day to spare.`,
         tone: 'GOOD',
         weight: 55,
       });
@@ -138,10 +131,8 @@ export function buildFindings(input: FindingsInput): Finding[] {
       headline: `${top.category} is ${money(perDay)} a day`,
       detail:
         shareOfLimit >= 0.5
-          ? `That is ${Math.round(shareOfLimit * 100)}% of your ${money(
-              input.dailyLimit
-            )} daily limit going to one category. It is the only place a cut would really show.`
-          : `${Math.round(top.fraction * 100)}% of everything you have spent this period.`,
+          ? `${Math.round(shareOfLimit * 100)}% of your daily limit. The one place a cut would show.`
+          : `${Math.round(top.fraction * 100)}% of this period's spending.`,
       tone: shareOfLimit >= 0.5 ? 'WARNING' : 'NEUTRAL',
       weight: shareOfLimit >= 0.5 ? 75 : 45,
       category: top.category,
@@ -157,11 +148,7 @@ export function buildFindings(input: FindingsInput): Finding[] {
       headline: `${money(committed)} a month is already committed`,
       detail: `${input.recurring.length} repeating charge${
         input.recurring.length === 1 ? '' : 's'
-      } — ${Math.round(share * 100)}% of the allowance — before you decide anything. ${
-        share >= 0.25
-          ? 'That is a large share to be fixed; worth checking nothing on the list is forgotten.'
-          : ''
-      }`.trim(),
+      }, ${Math.round(share * 100)}% of your allowance.${share >= 0.25 ? ' Any you forgot about?' : ''}`,
       tone: share >= 0.25 ? 'WARNING' : 'NEUTRAL',
       weight: share >= 0.25 ? 70 : 40,
     });
@@ -176,7 +163,7 @@ export function buildFindings(input: FindingsInput): Finding[] {
     findings.push({
       id: 'biggest-mover',
       headline: `${mover.category} is ${Math.abs(Math.round(mover.change * 100))}% ${up ? 'up' : 'down'} on a normal month`,
-      detail: `${money(mover.currentTotal)} so far against a typical ${money(mover.typicalTotal)}.`,
+      detail: `${money(mover.currentTotal)} so far, usually ${money(mover.typicalTotal)}.`,
       tone: up ? 'WARNING' : 'GOOD',
       weight: 60,
       category: mover.category,
@@ -188,8 +175,7 @@ export function buildFindings(input: FindingsInput): Finding[] {
     findings.push({
       id: 'skewed',
       headline: `Most days you spend ${money(input.typicalDay)}, not ${money(input.meanDay)}`,
-      detail:
-        'A few big days pull the average up. The lower figure is the one worth planning against; the gap between them is what one bad evening costs.',
+      detail: 'A few big days pull the average up. Plan on the lower one.',
       tone: 'NEUTRAL',
       weight: 35,
     });
@@ -202,7 +188,7 @@ export function buildFindings(input: FindingsInput): Finding[] {
       findings.push({
         id: 'week-change',
         headline: `This week is ${Math.abs(Math.round(change * 100))}% ${change > 0 ? 'up' : 'down'} on last`,
-        detail: `${money(input.thisWeek)} against ${money(input.lastWeek)}.`,
+        detail: `${money(input.thisWeek)}, against ${money(input.lastWeek)}.`,
         tone: change > 0 ? 'WARNING' : 'GOOD',
         weight: 50,
       });
@@ -217,8 +203,7 @@ export function buildFindings(input: FindingsInput): Finding[] {
     findings.push({
       id: 'uncategorised',
       headline: `${Math.round(input.uncategorisedFraction * 100)}% of spending has no category`,
-      detail:
-        'The breakdown below only covers the rest. Setting a category on any of them teaches the app the words in that name, so the next few sort themselves.',
+      detail: 'Categorise a few — similar ones then sort themselves.',
       tone: 'NEUTRAL',
       weight: 85,
     });
@@ -304,8 +289,8 @@ export function insightHero(input: HeroInput): InsightHero {
       label: 'over what this period can take',
       detail:
         days > 0
-          ? `What's already committed adds up to more than is left. The next ${dayWord(days)} need to be close to free — or something is counted that shouldn't be.`
-          : "What's committed came to more than the period had.",
+          ? `More is committed than is left, with ${dayWord(days)} to go.`
+          : 'More was committed than the period had.',
       pace,
     };
   }
@@ -317,8 +302,8 @@ export function insightHero(input: HeroInput): InsightHero {
       label: days > 0 ? `to last ${dayWord(days)}` : 'left this period',
       detail:
         days > 0
-          ? `That's ${money(input.dailyLimit)} a day. After a few days of spending, this turns into a projection of how the period ends.`
-          : 'The period is over; a new one starts tomorrow.',
+          ? `${money(input.dailyLimit)} a day. A projection appears after a few days.`
+          : 'A new period starts tomorrow.',
       pace,
     };
   }
@@ -333,9 +318,7 @@ export function insightHero(input: HeroInput): InsightHero {
       tone: lasts < days / 2 ? 'CRITICAL' : 'WARNING',
       amount: needed - input.spendablePool,
       label: `short by ${input.endLabel}, at this pace`,
-      detail: `You're spending about ${money(pace)} a day, so the money runs out around ${runOut}. ${money(
-        input.dailyLimit
-      )} a day from here gets you to the end.`,
+      detail: `About ${money(pace)} a day runs out around ${runOut}. ${money(input.dailyLimit)} a day lasts.`,
       pace,
     };
   }
@@ -344,7 +327,7 @@ export function insightHero(input: HeroInput): InsightHero {
     tone: 'GOOD',
     amount: input.spendablePool - needed,
     label: `left over on ${input.endLabel}, at this pace`,
-    detail: `You're spending about ${money(pace)} a day. Keep to that and this is what's still there when the period ends.`,
+    detail: `Spending about ${money(pace)} a day.`,
     pace,
   };
 }

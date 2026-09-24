@@ -89,7 +89,7 @@ export default function SquadScreen() {
           <EmptyState
             icon="squad"
             title="No open debts"
-            body="Split a bill from Today, or add one by hand. Balances net out per person so you settle once, not six times."
+            body="Split a bill from Today. Each person nets to one balance."
           />
         </Card>
       ) : (
@@ -257,8 +257,8 @@ function ContactSheet({
         </Text>
         {net > 0 && confidence < 0.9 ? (
           <Text style={styles.confidence}>
-            Counted as {formatMoney(net * confidence)} in your budget — {Math.round(confidence * 100)}%
-            confidence based on how they've paid before.
+            Counted as {formatMoney(net * confidence)} — they've paid back{' '}
+            {Math.round(confidence * 100)}% before.
           </Text>
         ) : null}
       </View>
@@ -359,8 +359,7 @@ function MergeContactSheet({
   return (
     <Sheet visible={visible} onClose={onClose} title={`Merge into ${contactName}`}>
       <Text style={styles.mergeIntro}>
-        Same person showing up twice — an SMS worded their name one way, a notification worded it
-        another. Pick who they really are.
+        Same person, two spellings? Pick the right one.
       </Text>
       <Field label="Search" value={query} onChangeText={setQuery} placeholder="Search people" />
       {filtered.length === 0 ? (
