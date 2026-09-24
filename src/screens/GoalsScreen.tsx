@@ -12,7 +12,8 @@ import { formatMoney } from '../utils/format';
 import { layer, palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Card, CardTitle, Chip, EmptyState, Field, Loading, ProgressBar, Screen, ScreenTitle, Sheet } from '../components/ui';
 import Icon, { GOAL_ICONS } from '../components/Icon';
-import { LabelIconBadge } from '../components/LabelIcon';
+import { NamedCover } from '../components/Cover';
+import { AnimatedMoney } from '../components/motion';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -64,6 +65,7 @@ export default function GoalsScreen() {
     );
   }
 
+  const totalSaved = goals.reduce((sum, goal) => sum + goal.savedAmount, 0);
   const totalReserved = goals.reduce(
     (sum, goal) =>
       sum +
@@ -86,18 +88,27 @@ export default function GoalsScreen() {
         action={{ label: 'New goal', onPress: () => setCreateVisible(true) }}
       />
 
+      {/* Total saved is the hero, the way Today leads with one number: it is
+          the figure that grows, and the one worth coming back to see. */}
       {goals.length > 0 ? (
-        <Card>
-          <Text style={styles.reserveLabel}>Held back from spending this period</Text>
-          <Text style={styles.reserveAmount}>{formatMoney(totalReserved)}</Text>
-          <Text style={styles.reserveNote}>Already out of your daily number.</Text>
+        <View style={styles.hero}>
+          <Text style={styles.heroLabel}>Saved so far</Text>
+          <AnimatedMoney
+            amount={totalSaved}
+            style={styles.heroAmount}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+          />
+          <Text style={styles.reserveNote}>
+            {formatMoney(totalReserved)} held back from spending this period
+          </Text>
           {reserveCapped ? (
             <Text style={styles.reserveCapped}>
               Goals asked for over half your allowance, so they're paced slower. Lower a target
               or extend a deadline.
             </Text>
           ) : null}
-        </Card>
+        </View>
       ) : null}
 
       {totalInvested > 0.009 ? (
@@ -189,7 +200,7 @@ function GoalCard({
   return (
     <Card onPress={onOpen}>
       <View style={styles.goalHead}>
-        <LabelIconBadge label={goal.emoji} />
+        <NamedCover name={goal.name} icon={goal.emoji} size={56} fill={goal.fraction} />
         <View style={styles.goalHeadText}>
           <Text style={styles.goalName}>{goal.name}</Text>
           <Text style={styles.goalMeta}>
@@ -501,6 +512,16 @@ function ManageGoalSheet({
 }
 
 const styles = StyleSheet.create({
+  hero: { paddingTop: spacing.xs, paddingBottom: spacing.xs },
+  heroLabel: { ...typography.heroLabel, color: palette.textSecondary },
+  heroAmount: {
+    ...typography.hero,
+    fontSize: 48,
+    lineHeight: 54,
+    letterSpacing: -1.5,
+    color: palette.textPrimary,
+    marginTop: 2,
+  },
   reserveLabel: { ...typography.caption, color: palette.textSecondary },
   reserveAmount: { ...typography.heroCompact, color: palette.textPrimary, marginTop: 2 },
   reserveNote: { ...typography.caption, color: palette.textMuted, marginTop: spacing.xs, lineHeight: 17 },

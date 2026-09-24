@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { showConfirm, showMessage } from '../components/Dialog';
-import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { OutingSummary } from '../db/repos/outings';
@@ -9,12 +9,14 @@ import { formatMoney, formatRelative } from '../utils/format';
 import { getBudgetSnapshot } from '../services/budgetService';
 import { getMonthlyAllowance } from '../settings/settingsStore';
 import { OutingAffordability, outingAffordability } from '../math/budget';
-import { categoryColor, layer, palette, radii, spacing, typography } from '../theme/theme';
-import { Button, Card, CardTitle, Chip, Dot, EmptyState, Field, Loading, ProgressBar, Row, Screen, ScreenTitle, Sheet } from '../components/ui';
+import { layer, palette, radii, spacing, typography } from '../theme/theme';
+import { Button, Card, CardTitle, Chip, EmptyState, Group, Field, Loading, ProgressBar, Row, Screen, ScreenTitle, Sheet } from '../components/ui';
+import { CategoryCover, DateCover } from '../components/Cover';
+import { useReducedMotion } from '../components/motion';
 import AddExpenseSheet from '../components/AddExpenseSheet';
 import SplitModal from '../components/SplitModal';
 import Icon, { OUTING_ICONS } from '../components/Icon';
-import LabelIcon, { LabelIconBadge } from '../components/LabelIcon';
+import LabelIcon from '../components/LabelIcon';
 
 function affordabilityLabel(state: OutingAffordability): string {
   switch (state) {
@@ -92,20 +94,27 @@ export default function OutingsScreen() {
 
       {active.length > 0 ? (
         <>
-          <Text style={styles.sectionLabel}>Happening now</Text>
           {active.map((outing) => (
             <OutingCard key={outing.id} outing={outing} onPress={() => setDetailFor(outing)} />
           ))}
         </>
       ) : null}
 
+      {/* Finished outings are records, not plans: a compact list, like a
+          library, rather than a card each. */}
       {past.length > 0 ? (
-        <>
-          <Text style={styles.sectionLabel}>Past</Text>
+        <Group title="Past">
           {past.map((outing) => (
-            <OutingCard key={outing.id} outing={outing} onPress={() => setDetailFor(outing)} />
+            <Row
+              key={outing.id}
+              left={<DateCover iso={outing.startsAt} name={outing.name} size={44} />}
+              title={outing.name}
+              subtitle={`${outing.transactionCount} ${outing.transactionCount === 1 ? 'item' : 'items'} · you paid ${formatMoney(outing.yourShare)}`}
+              onPress={() => setDetailFor(outing)}
+              right={<Text style={styles.pastTotal}>{formatMoney(outing.totalSpent)}</Text>}
+            />
           ))}
-        </>
+        </Group>
       ) : null}
 
       <CreateOutingSheet
@@ -130,13 +139,37 @@ export default function OutingsScreen() {
   );
 }
 
+/** A softly pulsing dot: this one is happening now. Still under reduce-motion. */
+function LiveBadge() {
+  const reduced = useReducedMotion();
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (reduced) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 0.3, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse, reduced]);
+  return (
+    <View style={styles.live}>
+      <Animated.View style={[styles.liveDot, { opacity: pulse }]} />
+      <Text style={styles.liveText}>Happening now</Text>
+    </View>
+  );
+}
+
 function OutingCard({ outing, onPress }: { outing: OutingSummary; onPress: () => void }) {
   const overBudget = outing.isOverBudget;
   return (
     <Card onPress={onPress}>
       <View style={styles.outingHead}>
-        <LabelIconBadge label={outing.emoji} />
+        <DateCover iso={outing.startsAt} name={outing.name} />
         <View style={styles.outingHeadText}>
+          <LiveBadge />
           <Text style={styles.outingName}>{outing.name}</Text>
           <Text style={styles.outingMeta}>
             {outing.transactionCount} item{outing.transactionCount === 1 ? '' : 's'} ·{' '}
@@ -447,7 +480,7 @@ function OutingDetailSheet({
             return (
               <Row
                 key={tx.id}
-                left={<Dot color={categoryColor(tx.category)} />}
+                left={<CategoryCover category={tx.category} />}
                 title={tx.merchant}
                 subtitle={formatRelative(tx.occurred_at)}
                 right={
@@ -582,6 +615,10 @@ function OutingDetailSheet({
 }
 
 const styles = StyleSheet.create({
+  live: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: palette.accent },
+  liveText: { ...typography.caption, fontSize: 12, fontWeight: '700', color: palette.accent },
+  pastTotal: { ...typography.bodyBold, color: palette.textPrimary },
   sectionLabel: {
     ...typography.cardTitle,
     color: palette.textPrimary,

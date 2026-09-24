@@ -163,6 +163,42 @@ export function categoryColor(category: string | null | undefined): string {
   return categoryColors[category] ?? categoryColors.Other;
 }
 
+/** `hex` blended towards `base` — a solid colour, not a translucent one. */
+function mix(hex: string, base: string, amount: number): string {
+  const a = channels(hex);
+  const b = channels(base);
+  const out = a.map((c, i) => Math.round(b[i] + (c - b[i]) * amount));
+  return `#${out.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * A cover's ground: the hue sunk most of the way into the background, so a
+ * list of covers reads as colour without any of them shouting. Solid, so a
+ * cover looks the same on every surface it sits on.
+ */
+export function coverTone(hue: string): string {
+  return mix(hue, surfaces.background, 0.2);
+}
+
+/** The brighter tone a cover fills with — a goal's saved share. */
+export function coverFill(hue: string): string {
+  return mix(hue, surfaces.background, 0.42);
+}
+
+/**
+ * Cover hues for things with a name but no category: goals, outings, people.
+ * The category palette minus its greys, and minus green-adjacent Health so a
+ * cover never reads as the accent's "you're fine".
+ */
+const NAMED_HUES = ['#FF8A5B', '#A78BFA', '#60A5FA', '#F472B6', '#FBBF24', '#67E8F9', '#FCA5A5', '#D0BCFF'];
+
+/** The same name always gets the same hue. */
+export function hueFor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return NAMED_HUES[hash % NAMED_HUES.length];
+}
+
 /**
  * Radii, per `SPOTIFY_FINANCE_UI_PROMPT.md`: small controls 6–8px,
  * cards/surfaces 8–16px, large sheets/dialogs 16–24px, pills full radius,
