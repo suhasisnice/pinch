@@ -11,6 +11,7 @@ import InsightsScreen from '../screens/InsightsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import ReviewScreen from '../screens/ReviewScreen';
 import TransactionsScreen from '../screens/TransactionsScreen';
+import RecapScreen from '../screens/RecapScreen';
 import Icon, { IconName } from '../components/Icon';
 import { palette, typography } from '../theme/theme';
 
@@ -20,6 +21,8 @@ export type RootStackParamList = {
   Review: undefined;
   /** `category` pre-filters the list — Insights' drill-down ("View food spending →") lands here. */
   Transactions: { category?: string } | undefined;
+  /** Last week, as full-screen slides. */
+  Recap: undefined;
 };
 
 export type TabParamList = {
@@ -115,6 +118,11 @@ export default function RootNavigator() {
           name="Transactions"
           component={TransactionsScreen}
           options={{ title: 'Transactions' }}
+        />
+        <Stack.Screen
+          name="Recap"
+          component={RecapScreen}
+          options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'fade' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

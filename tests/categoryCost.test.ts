@@ -83,4 +83,18 @@ describe('category cost: paid vs yours', () => {
     const [food] = await db.getCategoryCost(...WINDOW);
     expect(food.yours).toBe(0);
   });
+
+  it("gives each spend with its own split share, agreeing with the category totals", async () => {
+    const dinner = await spend(2400, "Toit", "Food");
+    await spend(300, "Uber", "Transport");
+    const rahul = await db.addContact("Rahul");
+    await db.createIOU({ contactId: rahul, amount: 1800, direction: "THEY_OWE_ME", transactionId: dinner });
+
+    const rows = await db.getSpendsWithShare(...WINDOW);
+    expect(rows.map((r) => [r.merchant, r.splitAway])).toEqual(
+      expect.arrayContaining([["Toit", 1800], ["Uber", 0]])
+    );
+    const cost = await db.getCategoryCost(...WINDOW);
+    expect(rows.reduce((s, r) => s + r.amount - r.splitAway, 0)).toBe(cost.reduce((s, c) => s + c.yours, 0));
+  });
 });
