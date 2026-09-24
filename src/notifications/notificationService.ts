@@ -199,6 +199,41 @@ export async function deliver(
   }
 }
 
+/**
+ * A notification for later — a heads-up before a risky window. Scheduled
+ * under a fixed identifier, so rescheduling replaces rather than stacks.
+ * Logged when it is scheduled; the log is the in-app record, not a receipt.
+ */
+export async function scheduleAt(
+  identifier: string,
+  planned: PlannedNotification,
+  at: Date
+): Promise<void> {
+  try {
+    await Notifications.cancelScheduledNotificationAsync(identifier);
+    await Notifications.scheduleNotificationAsync({
+      identifier,
+      content: {
+        title: planned.title,
+        body: planned.body,
+        data: planned.payload ?? {},
+        ...(Platform.OS === 'android' ? { channelId: CHANNEL_ID } : {}),
+      },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: at },
+    });
+  } catch {
+    // No permission, or the platform has no scheduler (web preview).
+  }
+}
+
+export async function cancelScheduled(identifier: string): Promise<void> {
+  try {
+    await Notifications.cancelScheduledNotificationAsync(identifier);
+  } catch {
+    // Nothing scheduled under it.
+  }
+}
+
 export async function deliverAll(
   planned: PlannedNotification[],
   settings: NotificationSettings

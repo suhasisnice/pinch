@@ -14,9 +14,21 @@ import { ingestPending } from '../services/captureService';
 import {
   getDismissedDiscrepancy,
   getMonthlyAllowance,
+  getNotificationSettings,
   setDismissedDiscrepancy,
 } from '../settings/settingsStore';
-import { daysUntilBroke, shouldRaiseDiscrepancy } from '../math/budget';
+import { computeToday, daysUntilBroke, shouldRaiseDiscrepancy } from '../math/budget';
+import {
+  RecoveryView,
+  WeekPatterns,
+  getWeekPatterns,
+  refreshRecovery,
+  scheduleHeadsUps,
+} from '../services/interventionService';
+import { Tone, roast } from '../notifications/roasts';
+import { suggestedCap } from '../math/patterns';
+import CapSheet, { CapDraft } from '../components/CapSheet';
+import { celebrate } from '../components/Moment';
 import { TransactionRow } from '../db/types';
 import { formatMoney, formatTime } from '../utils/format';
 import {
@@ -78,6 +90,11 @@ export default function TodayScreen() {
   const [week, setWeek] = useState<WeekDay[]>([]);
   const [reconcileVisible, setReconcileVisible] = useState(false);
   const [showDiscrepancy, setShowDiscrepancy] = useState(false);
+  const [recovery, setRecovery] = useState<RecoveryView | null>(null);
+  const [patterns, setPatterns] = useState<WeekPatterns>({ callouts: [], caps: [] });
+  const [voice, setVoice] = useState<Tone>('SAVAGE');
+  const [reprimand, setReprimand] = useState<string | null>(null);
+  const [capDraft, setCapDraft] = useState<CapDraft | null>(null);
   const [adjustmentPrefill, setAdjustmentPrefill] = useState<{
     amount: string;
     direction: 'DEBIT' | 'CREDIT';
@@ -96,6 +113,30 @@ export default function TodayScreen() {
     end.setDate(end.getDate() + 1);
 
     setSnapshot(next);
+
+    // Interventions (0.9.19): the mission, this week's patterns, and the
+    // heads-ups scheduled ahead of the next risky window.
+    const settings = await getNotificationSettings();
+    const tone: Tone = settings.roastMe ? 'SAVAGE' : 'FIRM';
+    setVoice(tone);
+    if (settings.interventionsEnabled) {
+      const rec = await refreshRecovery(next);
+      setRecovery(rec.view);
+      if (rec.about && rec.events.includes('RECOVERY_DONE')) {
+        celebrate(`Recovered. ${formatMoney(rec.about.overBy)} paid back.`);
+      }
+      setReprimand(
+        rec.about && rec.events.includes('RECOVERY_FAILED')
+          ? sentence(roast('RECOVERY_FAILED', tone, { overBy: rec.about.overBy }))
+          : null
+      );
+      setPatterns(await getWeekPatterns());
+    } else {
+      setRecovery(null);
+      setPatterns({ callouts: [], caps: [] });
+    }
+    scheduleHeadsUps(next, settings).catch(() => undefined);
+
     setBalance(await db.getBalanceState());
     setToday(await db.getTransactionsBetween(start.toISOString(), end.toISOString()));
     // One lookup for the whole day rather than one per row.
@@ -117,8 +158,16 @@ export default function TodayScreen() {
     }, [load])
   );
 
+  // During a recovery mission the day is measured against the mission's
+  // tighter number, not the ordinary limit: that is the intervention.
+  const onMission = recovery?.progress.status === 'ACTIVE';
+  const dayStatus =
+    snapshot && recovery && onMission
+      ? computeToday(recovery.mission.target, snapshot.today.spentToday)
+      : (snapshot?.today ?? null);
+
   // The tab bar wears the same colour as the ring.
-  const state = snapshot?.today.state;
+  const state = dayStatus?.state;
   useEffect(() => {
     if (state) setTodayTone(accentForState(state));
   }, [state]);
@@ -137,7 +186,9 @@ export default function TodayScreen() {
     );
   }
 
-  const tone = accentForState(snapshot.today.state);
+  const day = dayStatus ?? snapshot.today;
+  const tone = accentForState(day.state);
+  const pending = recovery?.progress.status === 'PENDING' ? recovery.mission : null;
   const brokeIn = daysUntilBroke(snapshot.budget.spendablePool, snapshot.avgDailyBurn);
   const runsOutEarly = brokeIn !== null && brokeIn < snapshot.daysRemaining;
   const periodLeft = Math.max(0, snapshot.availableBudget);
@@ -197,20 +248,39 @@ export default function TodayScreen() {
             style={({ pressed }) => pressed && styles.heroPressed}
           >
             <View style={styles.ringWrap}>
-              <Ring fraction={1 - snapshot.today.usedFraction} color={tone}>
+              <Ring fraction={1 - day.usedFraction} color={tone}>
                 <AnimatedMoney
-                  amount={Math.max(0, snapshot.today.remainingToday)}
+                  amount={Math.max(0, day.remainingToday)}
                   style={styles.numeral}
                   numberOfLines={1}
                   adjustsFontSizeToFit
                 />
-                <Text style={[styles.ringLabel, { color: tone }]}>left today</Text>
+                <Text style={[styles.ringLabel, { color: tone }]}>
+                  {recovery && onMission
+                    ? `recovery · day ${recovery.progress.dayNumber} of ${recovery.mission.daysNeeded}`
+                    : 'left today'}
+                </Text>
               </Ring>
             </View>
-            <Text style={styles.quip}>{todayQuip(snapshot, runsOutEarly ? brokeIn : null)}</Text>
+            <Text style={styles.quip}>
+              {recovery && onMission
+                ? missionQuip(recovery, day.state === 'OVER', voice)
+                : todayQuip(snapshot, runsOutEarly ? brokeIn : null)}
+            </Text>
+            {pending ? (
+              <Text style={[styles.mission, { color: palette.warning }]}>
+                Recovery starts tomorrow: {pending.daysNeeded} days at {formatMoney(pending.target)}
+                .
+              </Text>
+            ) : null}
+            {reprimand ? (
+              <Text style={[styles.mission, { color: palette.danger }]}>{reprimand}</Text>
+            ) : null}
             <Text style={styles.heroMeta}>
-              {formatMoney(snapshot.today.spentToday)} of {formatMoney(snapshot.today.dailyLimit)}{' '}
-              gone · {snapshot.daysRemaining} days to payday
+              {formatMoney(day.spentToday)} of {formatMoney(day.dailyLimit)} gone ·{' '}
+              {recovery && onMission
+                ? `${formatMoney(recovery.mission.normalLimit)} a day again after`
+                : `${snapshot.daysRemaining} days to payday`}
             </Text>
           </Pressable>
         </FadeSlideIn>
@@ -304,6 +374,51 @@ export default function TodayScreen() {
         </Section>
       ) : null}
 
+      {patterns.callouts.length > 0 || patterns.caps.length > 0 ? (
+        <Group title="Patterns">
+          {patterns.callouts.map((c) => (
+            <SentenceRow
+              key={`${c.scope}:${c.key}`}
+              tone={palette.warning}
+              text={`${sentence(
+                roast('CALLOUT', voice, {
+                  label: c.label,
+                  count: c.count,
+                  total: c.total,
+                  usual: c.usualWeekly,
+                })
+              )} Cap it?`}
+              onPress={() =>
+                setCapDraft({
+                  scope: c.scope,
+                  label: c.label,
+                  amount: suggestedCap(c),
+                  spent: c.total,
+                })
+              }
+            />
+          ))}
+          {patterns.caps.map(({ cap, spent, level }) => (
+            <SentenceRow
+              key={cap.id}
+              tone={
+                level === 'BROKEN' ? palette.danger : level === 'NEAR' ? palette.warning : undefined
+              }
+              text={`${cap.label}: ${formatMoney(spent)} of ${formatMoney(cap.weeklyAmount)} this week`}
+              onPress={() =>
+                setCapDraft({
+                  scope: cap.scope,
+                  label: cap.label,
+                  amount: cap.weeklyAmount,
+                  id: cap.id,
+                  spent,
+                })
+              }
+            />
+          ))}
+        </Group>
+      ) : null}
+
       <Group title="The month">
         <SentenceRow
           onPress={() => setBreakdownVisible(true)}
@@ -333,6 +448,15 @@ export default function TodayScreen() {
       <View style={styles.more}>
         <TextLink label="The long version" onPress={() => navigation.navigate('Insights')} />
       </View>
+
+      <CapSheet
+        draft={capDraft}
+        onClose={() => setCapDraft(null)}
+        onSaved={() => {
+          setCapDraft(null);
+          load();
+        }}
+      />
 
       <AffordSheet
         visible={affordVisible}
@@ -489,6 +613,29 @@ export function todayQuip(snapshot: BudgetSnapshot, runsOutIn: number | null): s
   return 'Going well. Keep it steady.';
 }
 
+/** A notification line, as a sentence on screen. */
+function sentence(line: string): string {
+  const s = line.charAt(0).toUpperCase() + line.slice(1);
+  return /[.!?]$/.test(s) ? s : `${s}.`;
+}
+
+/** The line under the ring while a recovery mission runs. */
+export function missionQuip(recovery: RecoveryView, overToday: boolean, voice: Tone): string {
+  const { mission, progress } = recovery;
+  if (overToday) {
+    return voice === 'SAVAGE'
+      ? `Past ${formatMoney(mission.target)} on a recovery day. Bold. This one won't count.`
+      : "Over today's recovery number. This day won't count.";
+  }
+  if (progress.lastResult === 'SLIPPED') {
+    return voice === 'SAVAGE'
+      ? 'Yesterday slipped. The spare day is gone. No more of that.'
+      : 'Yesterday slipped, so the mission runs a day longer.';
+  }
+  if (progress.lastResult === 'HELD') return 'Yesterday held. Same again.';
+  return `${formatMoney(mission.overBy)} to win back. ${formatMoney(mission.target)} is the whole day.`;
+}
+
 /**
  * Monday to Sunday of the current week, each day's spend summed over the
  * phone's own midnight-to-midnight (not the UTC day).
@@ -537,6 +684,11 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     color: palette.textPrimary,
     marginTop: spacing.lg,
+    textAlign: 'center',
+  },
+  mission: {
+    ...typography.body,
+    marginTop: spacing.sm,
     textAlign: 'center',
   },
   heroMeta: {

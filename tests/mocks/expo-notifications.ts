@@ -30,8 +30,12 @@ export async function requestPermissionsAsync(): Promise<{ granted: boolean }> {
   return { granted: false };
 }
 
-export async function scheduleNotificationAsync(): Promise<string> {
-  return 'mock-notification-id';
+export async function scheduleNotificationAsync(request?: {
+  identifier?: string;
+  trigger?: unknown;
+}): Promise<string> {
+  if (request?.identifier && request.trigger) __scheduled.set(request.identifier, request);
+  return request?.identifier ?? 'mock-notification-id';
 }
 
 type ResponseHandler = (response: {
@@ -45,12 +49,23 @@ export function addNotificationResponseReceivedListener(handler: ResponseHandler
   remove: () => void;
 } {
   registeredHandler = handler;
-  return { remove: () => {
-    registeredHandler = null;
-  } };
+  return {
+    remove: () => {
+      registeredHandler = null;
+    },
+  };
 }
 
 /** Test-only: simulates the user tapping a notification or one of its buttons. */
 export function __simulateNotificationResponse(data: unknown, actionIdentifier: string): void {
   registeredHandler?.({ notification: { request: { content: { data } } }, actionIdentifier });
+}
+
+export const SchedulableTriggerInputTypes = { DATE: 'date' };
+
+/** Test-only record of what is scheduled for later, by identifier. */
+export const __scheduled = new Map<string, unknown>();
+
+export async function cancelScheduledNotificationAsync(identifier: string): Promise<void> {
+  __scheduled.delete(identifier);
 }

@@ -112,6 +112,11 @@ shape, not new colours. Don't give a tab another tab's hero.
 - Pick via `accentForState` / `amountColor` / `categoryColor` / `place`; never a literal.
 - The feel layer is `haptics.ts`, the press scale in `ui.tsx`, and `Moment.tsx`.
 - See `docs/DESIGN_DIRECTION.md` §0.9.18.
+**0.9.19 (user-chosen):** active interventions — recovery missions, pattern callouts +
+weekly caps, heads-ups before risky windows — in a savage voice by default (reprimands
+only; "Roast me" in Settings turns it firm). Maths in `src/math/{recovery,patterns,riskWindows}.ts`,
+glue in `src/services/interventionService.ts`, copy in `src/notifications/roasts.ts`
+(roast the spending, never the person). See `docs/INTERVENTIONS.md`.
 - Transitions 150–220ms.
 
 ## Reuse / refactor / rebuild

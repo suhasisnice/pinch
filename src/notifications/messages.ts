@@ -23,7 +23,15 @@ export type NotificationType =
   /** A captured payment waiting to be confirmed before it counts. */
   | 'TXN_CONFIRM'
   /** A logged payment the classifier could not put in a category. */
-  | 'CATEGORY_PROMPT';
+  | 'CATEGORY_PROMPT'
+  /** A recovery mission starting, slipping, finishing (0.9.19). */
+  | 'RECOVERY'
+  /** A weekly cap nearly reached or broken. */
+  | 'CAP'
+  /** A habit named while it is happening. */
+  | 'CALLOUT'
+  /** Before a risky window, or on payday. Scheduled, not immediate. */
+  | 'HEADS_UP';
 
 export type Tier = 'FRESH' | 'STEADY' | 'CLOSE' | 'OVER' | 'WRECKED';
 
@@ -54,8 +62,10 @@ const money = (value: number | undefined) => formatMoney(Math.abs(value ?? 0));
 
 const PULSE: Record<Tier, Template[]> = {
   FRESH: [
-    (c) => `${money(c.amount)} at ${c.merchant}. still ${money(c.remainingToday)} to play with today 💸`,
-    (c) => `noted: ${money(c.amount)}. today's budget is barely dented — ${money(c.remainingToday)} left`,
+    (c) =>
+      `${money(c.amount)} at ${c.merchant}. still ${money(c.remainingToday)} to play with today 💸`,
+    (c) =>
+      `noted: ${money(c.amount)}. today's budget is barely dented — ${money(c.remainingToday)} left`,
     (c) => `${money(c.amount)} gone, ${money(c.remainingToday)} to go. we're chilling`,
   ],
   STEADY: [
@@ -64,13 +74,16 @@ const PULSE: Record<Tier, Template[]> = {
     (c) => `${money(c.amount)} down. you've got ${money(c.remainingToday)} before today's cap`,
   ],
   CLOSE: [
-    (c) => `${money(c.amount)} at ${c.merchant}. only ${money(c.remainingToday)} left today — pace yourself 🫡`,
-    (c) => `you're at ${c.percent}% of today's limit. ${money(c.remainingToday)} to last till midnight`,
+    (c) =>
+      `${money(c.amount)} at ${c.merchant}. only ${money(c.remainingToday)} left today — pace yourself 🫡`,
+    (c) =>
+      `you're at ${c.percent}% of today's limit. ${money(c.remainingToday)} to last till midnight`,
     (c) => `${money(c.remainingToday)} left today. it's giving "cook at home" energy`,
   ],
   OVER: [
     (c) => `bestie. you're ${money(c.overBy)} over today's limit 😭`,
-    (c) => `${money(c.amount)} at ${c.merchant} pushed you ${money(c.overBy)} past today. it happens`,
+    (c) =>
+      `${money(c.amount)} at ${c.merchant} pushed you ${money(c.overBy)} past today. it happens`,
     (c) => `today's cap: gone. you're ${money(c.overBy)} deep. tomorrow's a new number`,
   ],
   WRECKED: [
@@ -102,12 +115,15 @@ const OVERSPEND: Record<'MILD' | 'BAD' | 'DIRE', Template[]> = {
   ],
   BAD: [
     (c) => `${money(c.overBy)} over today, and that's the 2nd time this week. checking in 🫤`,
-    (c) => `today cost you ${money(c.overBy)} extra. your daily limit just dropped to ${money(c.dailyLimit)}`,
+    (c) =>
+      `today cost you ${money(c.overBy)} extra. your daily limit just dropped to ${money(c.dailyLimit)}`,
   ],
   DIRE: [
-    (c) => `you've spent ${money(c.spentToday)} today. the rest of the month is now ${money(c.dailyLimit)}/day 😬`,
+    (c) =>
+      `you've spent ${money(c.spentToday)} today. the rest of the month is now ${money(c.dailyLimit)}/day 😬`,
     (c) => `real talk: at this rate you're broke in ${c.days} days`,
-    (c) => `${money(c.overBy)} over. ${c.goalName ? `${c.goalName} is the one paying for this` : 'this is future-you\'s problem now'} 💀`,
+    (c) =>
+      `${money(c.overBy)} over. ${c.goalName ? `${c.goalName} is the one paying for this` : "this is future-you's problem now"} 💀`,
   ],
 };
 
@@ -128,7 +144,8 @@ const GOAL_COMPLETE: Template[] = [
 
 const GOAL_AT_RISK: Template[] = [
   (c) => `heads up — today's spending pushed ${c.goalName} back by ${c.goalDelayDays} days`,
-  (c) => `${c.goalName} ${c.goalEmoji} is slipping. ${money(c.amount)} still needed and the deadline isn't moving`,
+  (c) =>
+    `${c.goalName} ${c.goalEmoji} is slipping. ${money(c.amount)} still needed and the deadline isn't moving`,
 ];
 
 // ---------------------------------------------------------------------------
@@ -144,7 +161,8 @@ const STREAK: Template[] = [
 const SETTLE_REMINDER: Template[] = [
   (c) => `${c.contactName} has owed you ${money(c.amount)} for ${c.days} days. nudge them?`,
   (c) => `${money(c.amount)} from ${c.contactName}, still pending after ${c.days} days 👀`,
-  (c) => `gentle reminder that ${c.contactName} owes you ${money(c.amount)}. it's been ${c.days} days`,
+  (c) =>
+    `gentle reminder that ${c.contactName} owes you ${money(c.amount)}. it's been ${c.days} days`,
 ];
 
 const DAY_RESET: Template[] = [
@@ -249,4 +267,8 @@ export const TITLES: Record<NotificationType, string> = {
   DAY_RESET: 'New day',
   TXN_CONFIRM: 'Confirm this?',
   CATEGORY_PROMPT: 'What was this?',
+  RECOVERY: 'Recovery',
+  CAP: 'Your cap',
+  CALLOUT: 'Pattern spotted',
+  HEADS_UP: 'Heads up',
 };

@@ -217,7 +217,7 @@ export default function InsightsScreen() {
   const endLabel = formatDayMonth(new Date(Date.parse(snapshot.periodEnd) - 1).toISOString());
   const hero = insightHero({
     spendablePool: snapshot.budget.spendablePool,
-    dailyLimit: snapshot.budget.dailyLimit,
+    dailyLimit: snapshot.today.dailyLimit,
     daysRemaining: snapshot.daysRemaining,
     endLabel,
     daily,
@@ -233,7 +233,7 @@ export default function InsightsScreen() {
   const findings = buildFindings({
     spendablePool: snapshot.budget.spendablePool,
     allowance: snapshot.budget.allowance,
-    dailyLimit: snapshot.budget.dailyLimit,
+    dailyLimit: snapshot.today.dailyLimit,
     daysRemaining: snapshot.daysRemaining,
     periodDays,
     grossSpend: snapshot.budget.grossSpend,
@@ -319,9 +319,9 @@ export default function InsightsScreen() {
       {daily.length > 0 ? (
         <Group
           title="Your pace"
-          footer={`Amber days went over ${formatMoney(snapshot.budget.dailyLimit)}.`}
+          footer={`Amber days went over ${formatMoney(snapshot.today.dailyLimit)}.`}
         >
-          <PaceChart key="chart" daily={daily} dailyLimit={snapshot.budget.dailyLimit} />
+          <PaceChart key="chart" daily={daily} dailyLimit={snapshot.today.dailyLimit} />
           <PaceRow
             key="week"
             title="Last 7 days"

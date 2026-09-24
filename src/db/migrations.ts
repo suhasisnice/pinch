@@ -962,6 +962,26 @@ export const V18_SMS_PRIVACY: Migration = {
   ],
 };
 
+/**
+ * Weekly caps on a merchant or a category (0.9.19, docs/INTERVENTIONS.md §2).
+ * A cap never blocks a payment; it is what a payment is held up against.
+ */
+export const V19_SPEND_CAPS: Migration = {
+  version: 19,
+  name: 'spend_caps',
+  statements: [
+    `CREATE TABLE IF NOT EXISTS SpendCaps (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scope TEXT NOT NULL CHECK (scope IN ('MERCHANT', 'CATEGORY')),
+      key TEXT NOT NULL,
+      label TEXT NOT NULL,
+      weekly_amount REAL NOT NULL CHECK (weekly_amount > 0),
+      created_at TEXT NOT NULL,
+      UNIQUE (scope, key)
+    );`,
+  ],
+};
+
 export const MIGRATIONS: Migration[] = [
   V1_INITIAL,
   V2_CONTACT_PHONE,
@@ -981,6 +1001,7 @@ export const MIGRATIONS: Migration[] = [
   V16_WEALTH,
   V17_PROGRESS,
   V18_SMS_PRIVACY,
+  V19_SPEND_CAPS,
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

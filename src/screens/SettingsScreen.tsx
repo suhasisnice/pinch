@@ -553,6 +553,33 @@ export default function SettingsScreen() {
       </Group>
 
       <Group
+        title="Tough love"
+        footer="Pinch can't stop a payment. It can hold you to a number, name a habit, and warn you before your usual damage."
+      >
+        <Toggle
+          key="roast"
+          label="Roast me"
+          hint="Savage lines when you overspend. Off keeps them firm."
+          value={notifications.roastMe}
+          onChange={(value) => update({ roastMe: value })}
+        />
+        <Toggle
+          key="interventions"
+          label="Recovery, patterns and caps"
+          hint="A short payback after a bad day; habits named as they happen"
+          value={notifications.interventionsEnabled}
+          onChange={(value) => update({ interventionsEnabled: value })}
+        />
+        <Toggle
+          key="headsup"
+          label="Heads-ups"
+          hint="Before the days and times you usually overspend"
+          value={notifications.headsUpEnabled}
+          onChange={(value) => update({ headsUpEnabled: value })}
+        />
+      </Group>
+
+      <Group
         title="Privacy"
         footer="Pinch has no account and no server. A backup file is the only copy of your data that ever leaves this phone, and only when you make one."
       >

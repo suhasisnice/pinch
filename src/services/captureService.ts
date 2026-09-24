@@ -3,7 +3,8 @@ import { CapturedMessage, drainMessages, readRecentSms } from '../../modules/pin
 import { ACCEPT_THRESHOLD, buildDedupKey, explainRejection, parseMessage } from './parserService';
 import { PARSER_RULES_VERSION } from './revalidationService';
 import { getBudgetSnapshot } from './budgetService';
-import { NotificationSettings, planForTransaction } from '../notifications/engine';
+import { planTransactionInterventions } from './interventionService';
+import { NotificationSettings, isQuietHour, planForTransaction } from '../notifications/engine';
 import { TITLES } from '../notifications/messages';
 import { deliver, deliverAll, loadDeliveryHistory } from '../notifications/notificationService';
 import {
@@ -492,7 +493,8 @@ export async function postTransaction(input: PostTransactionInput): Promise<numb
       input.merchant,
       category,
       outingId,
-      input.silent === true
+      input.silent === true,
+      occurredAt
     );
   }
 
@@ -715,7 +717,8 @@ async function runSpendSideEffects(
   merchant: string,
   category: string | null,
   outingId: number | null,
-  silent: boolean
+  silent: boolean,
+  occurredAt: string
 ): Promise<void> {
   const goalsCrossed: Array<{ name: string; emoji: string; percent: number; remaining: number }> =
     [];
@@ -789,7 +792,34 @@ async function runSpendSideEffects(
       settings,
     });
 
-    await deliverAll(planned, settings);
+    // Interventions (0.9.19): recovery, caps, callouts. A recovery that
+    // starts with this spend rides on the overspend line instead of
+    // buzzing a second time.
+    const extra = await planTransactionInterventions({
+      transactionId,
+      amount,
+      merchant,
+      category,
+      occurredAt: new Date(occurredAt),
+      snapshot,
+      settings,
+    });
+    if (extra.overspendSuffix) {
+      const over = planned.find((p) => p.type === 'OVERSPEND');
+      if (over) over.body = `${over.body}. ${extra.overspendSuffix}`;
+      else
+        extra.planned.unshift({
+          type: 'RECOVERY',
+          tier: 'RECOVERY_START',
+          title: TITLES.RECOVERY,
+          body: extra.overspendSuffix,
+          payload: { transactionId },
+        });
+    }
+
+    // The engine already kept its own list out of quiet hours; these too.
+    const interventions = isQuietHour(new Date(), settings) ? [] : extra.planned;
+    await deliverAll([...planned, ...interventions], settings);
   } catch {
     // Notification failure must never surface as a failed transaction.
   }
