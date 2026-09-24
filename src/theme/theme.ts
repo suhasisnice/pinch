@@ -1,5 +1,5 @@
 /**
- * Spotify-dark, resolved for finance.
+ * Raycast-ink editorial, grounded in the Spotify spec (0.9.14 — see docs/DESIGN_DIRECTION.md).
  *
  * `SPOTIFY_FINANCE_UI_PROMPT.md` and `PRODUCT_SPEC.md` §8 give this system
  * three surfaces, one accent, and a small set of status colours — a
@@ -10,12 +10,12 @@
  * Two colour groups live here and they do different jobs. Do not merge them:
  *
  *   - Surfaces and `accent` dress the app: "this is the background", "this is
- *     a button", "this is the thing you tap". Green is semantic even here —
+ *     a button", "this is the thing you tap". The accent is semantic even here —
  *     it is the one accent, used for primary actions and active state, not
  *     decoration.
  *
  *   - The status colours (`danger`, `warning`, `info`, and `categoryColors`)
- *     mean something read in half a second, independent of chrome: green is
+ *     mean something read in half a second, independent of chrome: ink is
  *     "you are fine", amber is "careful", red is "you are over".
  *     `accentForState` and `balanceColor` are the only things that should
  *     pick between them.
@@ -29,23 +29,28 @@
 // separate tones — that loss of one intermediate step is the spec's own
 // three-surface model, not an oversight.
 // ---------------------------------------------------------------------------
+// Raycast ink (0.9.14, the user's own pick — see docs/DESIGN_DIRECTION.md):
+// neutral near-black, crisp and cool, no warmth. Still three steps.
 const surfaces = {
-  background: '#121212',
-  surface: '#181818',
-  surfaceElevated: '#1f1f1f',
+  background: '#0a0a0a',
+  surface: '#141414',
+  surfaceElevated: '#1c1c1c',
 } as const;
 
 // The two hex values every derived colour below reads from. Declared ahead
 // of `channels`/`onColor`/`layer`'s textual position in this file, which is
 // safe: both are `function` declarations, fully hoisted before any of this
 // module's top-level code runs.
-const ACCENT = '#1ed760';
-const DANGER = '#f3727f';
+// One accent, used rarely: Raycast's coral. It replaced Spotify green in
+// 0.9.14 at the user's request. Danger sits deeper and redder so "over"
+// never reads as merely "tap here".
+const ACCENT = '#ff6363';
+const DANGER = '#ff4545';
 
 export const palette = {
   ...surfaces,
 
-  // -- Accent: the one green, used for primary actions, active state and
+  // -- Accent: the one coral, used for primary actions, active state and
   // positive readings. Never a second colour standing in for it. ----------
   accent: ACCENT,
   /** Computed, not guessed: a fixed dark label reads wrong the moment the accent shifts. */
@@ -57,15 +62,15 @@ export const palette = {
   onDanger: onColor(DANGER),
   dangerMuted: layer(DANGER, 0.16),
 
-  warning: '#ffa42b',
+  warning: '#f5a524',
   /** The spec's "Announcement/Informational" blue — previously unused; retired `violet` (a decorative-only tag colour with no financial meaning) in its favour. */
-  info: '#539df5',
+  info: '#56c2ff',
 
-  border: 'rgba(255,255,255,0.07)',
+  border: '#262626',
   scrim: 'rgba(0,0,0,0.72)',
 
-  textPrimary: '#ffffff',
-  textSecondary: '#b3b3b3',
+  textPrimary: '#fafafa',
+  textSecondary: '#b4b4b4',
   /**
    * A third, dimmer text tier. Not named in either spec document — kept as a
    * deliberate, documented extension because 46 existing call sites
@@ -73,7 +78,7 @@ export const palette = {
    * genuinely distinct step from `textSecondary`, and this phase does not
    * touch screen layout to compensate for flattening that hierarchy.
    */
-  textMuted: '#8a8a8a',
+  textMuted: '#8f8f8f',
 } as const;
 
 /**
@@ -190,7 +195,16 @@ export function coverFill(hue: string): string {
  * The category palette minus its greys, and minus green-adjacent Health so a
  * cover never reads as the accent's "you're fine".
  */
-const NAMED_HUES = ['#FF8A5B', '#A78BFA', '#60A5FA', '#F472B6', '#FBBF24', '#67E8F9', '#FCA5A5', '#D0BCFF'];
+const NAMED_HUES = [
+  '#FF8A5B',
+  '#A78BFA',
+  '#60A5FA',
+  '#F472B6',
+  '#FBBF24',
+  '#67E8F9',
+  '#FCA5A5',
+  '#D0BCFF',
+];
 
 /** The same name always gets the same hue. */
 export function hueFor(name: string): string {
@@ -376,6 +390,33 @@ export const typography = {
     letterSpacing: 0.5,
     lineHeight: 16,
   },
+  /**
+   * The one huge number a screen opens on. Light weight at a very large
+   * size is what makes it read as typeset rather than as a dashboard stat.
+   */
+  numeral: {
+    ...TABULAR,
+    fontSize: 88,
+    fontWeight: '300' as const,
+    letterSpacing: -4,
+    lineHeight: 96,
+  },
+  /** The dry line under a numeral. */
+  quip: {
+    fontSize: 22,
+    fontWeight: '400' as const,
+    letterSpacing: -0.2,
+    lineHeight: 30,
+  },
+  /** A small label set in wide caps — dates, section marks. The only caps in the app besides buttons. */
+  overline: {
+    ...TABULAR,
+    fontSize: 12,
+    fontWeight: '600' as const,
+    letterSpacing: 1.6,
+    lineHeight: 16,
+    textTransform: 'uppercase' as const,
+  },
   /** Primary action / button label: 14px/700/uppercase/slight letter-spacing, per spec. */
   label: {
     fontSize: 14,
@@ -400,12 +441,14 @@ export function accentForState(state: TodayState): string {
     case 'CLOSE':
       return palette.warning;
     default:
-      return palette.accent;
+      // Fine is not a colour. The number stays ink; colour only arrives
+      // when there is something to notice.
+      return palette.textPrimary;
   }
 }
 
 /** Colour for a net balance: owed to you is good, owed by you is a liability. */
 export function balanceColor(netAmount: number): string {
   if (Math.abs(netAmount) < 0.01) return palette.textSecondary;
-  return netAmount > 0 ? palette.accent : palette.warning;
+  return netAmount > 0 ? palette.textPrimary : palette.warning;
 }

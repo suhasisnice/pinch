@@ -170,8 +170,8 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.6 },
   text: { flex: 1, gap: 2 },
-  title: { ...typography.bodyBold, color: palette.textPrimary },
-  meta: { ...typography.caption, color: palette.textSecondary },
+  title: { ...typography.body, color: palette.textPrimary },
+  meta: { ...typography.caption, color: palette.textMuted },
   valueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   value: { ...typography.bodyBold, color: palette.textPrimary },
   update: {

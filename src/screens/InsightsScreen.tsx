@@ -25,8 +25,16 @@ import { FadeSlideIn } from '../components/motion';
 import MoneyAmount from '../components/Money';
 import { formatMoney, formatMoneyCompact } from '../utils/format';
 import { palette, radii, spacing, typography } from '../theme/theme';
-import { Group, EmptyState, Loading, Row, Screen, ScreenTitle } from '../components/ui';
-import { CategoryCover } from '../components/Cover';
+import {
+  Group,
+  EmptyState,
+  Hero,
+  Loading,
+  Row,
+  Screen,
+  ScreenTitle,
+  TopBar,
+} from '../components/ui';
 import Icon from '../components/Icon';
 import { lastCompletedWeek } from '../math/weeklyRecap';
 import { weekRange } from './RecapScreen';
@@ -184,7 +192,7 @@ export default function InsightsScreen() {
 
   if (!snapshot || !habits) {
     return (
-      <Screen scroll={false}>
+      <Screen underHeader scroll={false}>
         <Loading />
       </Screen>
     );
@@ -194,7 +202,7 @@ export default function InsightsScreen() {
   // year of past months behind it still has plenty to say.
   if (daily.length === 0 && months.length === 0) {
     return (
-      <Screen>
+      <Screen underHeader>
         <ScreenTitle title="Insights" />
         <EmptyState
           icon="insights"
@@ -252,27 +260,21 @@ export default function InsightsScreen() {
         />
       }
     >
-      <ScreenTitle
-        title="Insights"
-        subtitle={`${formatDayMonth(snapshot.periodStart)} – ${endLabel}`}
-      />
+      <TopBar left={`${formatDayMonth(snapshot.periodStart)} – ${endLabel}`} />
 
       {/* The one answer. Number first, then what it is — so it reads as a
           sentence: "₹2,340 left over on 30 Sep, at this pace." */}
       <FadeSlideIn>
         <View
-          style={styles.hero}
           accessible
           accessibilityLabel={`${formatMoney(hero.amount)} ${hero.label}. ${hero.detail}`}
         >
-          <MoneyAmount
+          <Hero
             amount={hero.amount}
-            style={[styles.heroAmount, { color: heroColor(hero.tone) }]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
+            label={hero.label}
+            line={hero.detail}
+            color={heroColor(hero.tone)}
           />
-          <Text style={styles.heroLabel}>{hero.label}</Text>
-          <Text style={styles.heroDetail}>{hero.detail}</Text>
         </View>
       </FadeSlideIn>
 
@@ -283,13 +285,13 @@ export default function InsightsScreen() {
           accessibilityLabel={`Last week, ${weekRange(recapWeek.start, recapWeek.end)}. Open recap`}
           style={({ pressed }) => [styles.recap, pressed && styles.pressed]}
         >
-          {/* Spotify's play button, translated: the one round green control
-              on the screen, and it means "play this". */}
+          {/* A play button, drawn as a hairline circle — it means "play this",
+              it doesn't need to shout it. */}
           <View style={styles.recapPlay}>
-            <Icon name="play" size={18} color={palette.onAccent} />
+            <Icon name="play" size={16} color={palette.textPrimary} />
           </View>
           <View style={styles.recapText}>
-            <Text style={styles.recapTitle}>Your week, in a minute</Text>
+            <Text style={styles.recapTitle}>Last week, in a minute</Text>
             <Text style={styles.recapSub}>{weekRange(recapWeek.start, recapWeek.end)}</Text>
           </View>
           <Icon name="chevronRight" size={20} color={palette.textSecondary} />
@@ -417,7 +419,9 @@ function FindingRow({
 }) {
   const body = (
     <>
-      <View style={[styles.findingMark, { backgroundColor: toneColor(tone) }]} />
+      {tone === 'WARNING' || tone === 'CRITICAL' ? (
+        <View style={[styles.findingMark, { backgroundColor: toneColor(tone) }]} />
+      ) : null}
       <View style={styles.findingBody}>
         <Text style={styles.findingHeadline}>{headline}</Text>
         <Text style={styles.findingDetail}>{detail}</Text>
@@ -487,7 +491,6 @@ function WhereItWent({
             }. View spending`}
             style={({ pressed }) => [styles.category, pressed && styles.pressed]}
           >
-            <CategoryCover category={cost.category} size={36} />
             <View style={styles.categoryBody}>
               <View style={styles.categoryHead}>
                 <Text style={styles.categoryName} numberOfLines={1}>
@@ -627,12 +630,11 @@ function AgainstNormal({
         return (
           <Row
             key={shift.category}
-            left={<CategoryCover category={shift.category} size={36} />}
             title={shift.category}
             subtitle={`${formatMoney(shift.currentTotal)} · usually ${formatMoney(shift.typicalTotal)}`}
             onPress={() => onOpen(shift.category)}
             right={
-              <Text style={[styles.value, { color: up ? palette.warning : palette.accent }]}>
+              <Text style={[styles.value, { color: up ? palette.warning : palette.textSecondary }]}>
                 {up ? '+' : '−'}
                 {formatMoneyCompact(diff)}
               </Text>
@@ -654,7 +656,7 @@ function toneColor(tone: FindingTone): string {
     case 'WARNING':
       return palette.warning;
     case 'GOOD':
-      return palette.accent;
+      return palette.textPrimary;
     default:
       return palette.textMuted;
   }
@@ -670,10 +672,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: palette.surface,
-    borderRadius: radii.card,
-    paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: palette.border,
   },
   recapText: { flex: 1, gap: 2 },
   recapTitle: { ...typography.bodyBold, color: palette.textPrimary },
@@ -702,7 +704,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   // A tone-coloured rule down the side, so urgency is legible before a word is read.
-  findingMark: { width: 3, borderRadius: 2, alignSelf: 'stretch' },
+  findingMark: { width: 2, borderRadius: 1, alignSelf: 'stretch' },
   findingBody: { flex: 1, gap: 3 },
   findingHeadline: { ...typography.bodyBold, color: palette.textPrimary },
   findingDetail: {
@@ -749,7 +751,8 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: palette.accent,
+    borderWidth: 1,
+    borderColor: palette.textPrimary,
     alignItems: 'center',
     justifyContent: 'center',
   },

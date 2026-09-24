@@ -1,5 +1,11 @@
 # Spotify-Inspired Finance App — Master UI Prompt for Claude Code
 
+> **Superseded in part (0.9.14).** The user chose a Raycast-ink direction:
+> a coral accent used rarely, white for healthy states, thin numerals, three
+> tabs, and one subtle glow on the Today ring. Where the two conflict,
+> `docs/DESIGN_DIRECTION.md` wins, and it lists each conflict. The rest of this
+> document (hierarchy, lists over cards, finance-first) still applies.
+
 Design and implement the application's UI as a premium **Spotify-inspired personal finance app for college students**.
 
 Use the provided Spotify design system as the visual foundation, but translate its design language into finance. This is NOT a Spotify clone and must not contain music-specific UI, branding, fake playlists, album-art dependencies, or unnecessary imitation.

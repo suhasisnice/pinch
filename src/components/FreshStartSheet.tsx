@@ -73,7 +73,9 @@ export default function FreshStartSheet({
     setDays('30');
     setForgetHistory(false);
     setHistory(null);
-    db.countData().then(setCounts).catch(() => setCounts(null));
+    db.countData()
+      .then(setCounts)
+      .catch(() => setCounts(null));
     getSpendingHistorySummary(new Date(), HISTORY_WINDOW_DAYS)
       .then(setHistory)
       .catch(() => setHistory(null));
@@ -109,7 +111,7 @@ export default function FreshStartSheet({
   return (
     <Sheet visible={visible} onClose={onClose} title="Start fresh">
       <View style={styles.intro}>
-        <Icon name="wallet" size={22} color={palette.accent} />
+        <Icon name="wallet" size={22} color={palette.textPrimary} />
         <Text style={styles.introText}>
           Forget what happened before. Tell Pinch what you have now, and today becomes day one.
         </Text>
@@ -191,7 +193,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
   },
   previewLabel: { ...typography.sectionLabel, color: palette.textSecondary },
-  previewAmount: { ...typography.display, color: palette.accent },
+  previewAmount: { ...typography.display, color: palette.textPrimary },
   previewSub: { ...typography.caption, color: palette.textMuted },
 
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

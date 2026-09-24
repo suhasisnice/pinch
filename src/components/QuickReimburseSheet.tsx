@@ -208,7 +208,9 @@ export default function QuickReimburseSheet({
             </Text>
             {shares && shares.length > 1 ? (
               <Text style={styles.previewEach}>
-                {shares.map((share) => `${nameOf(share.contactId)} ${formatMoney(share.amount)}`).join(' · ')}
+                {shares
+                  .map((share) => `${nameOf(share.contactId)} ${formatMoney(share.amount)}`)
+                  .join(' · ')}
               </Text>
             ) : null}
           </View>
@@ -249,7 +251,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
 
   preview: { alignItems: 'center', gap: 2, paddingVertical: spacing.sm },
-  previewBack: { ...typography.cardTitle, color: palette.accent },
+  previewBack: { ...typography.cardTitle, color: palette.textPrimary },
   previewMine: { ...typography.caption, color: palette.textSecondary },
   previewEach: { ...typography.caption, color: palette.textMuted, marginTop: 2 },
 });

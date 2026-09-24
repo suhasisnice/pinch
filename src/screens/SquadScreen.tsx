@@ -10,19 +10,19 @@ import { receivableConfidence } from '../math/budget';
 import { formatMoney, formatRelative, daysBetween } from '../utils/format';
 import { balanceColor, palette, radii, spacing, typography } from '../theme/theme';
 import {
-  Avatar,
   Button,
   Card,
-  CardTitle,
   EmptyState,
+  CardTitle,
   Field,
   Group,
+  Hero,
   Loading,
   Row,
   Screen,
-  ScreenTitle,
   Sheet,
-  StatPair,
+  TextLink,
+  TopBar,
 } from '../components/ui';
 import ContactPicker from '../components/ContactPicker';
 import AddExpenseSheet from '../components/AddExpenseSheet';
@@ -73,10 +73,17 @@ export default function SquadScreen() {
   const totalOut = youOwe.reduce((sum, b) => sum + Math.abs(b.netAmount), 0);
 
   return (
-    <Screen refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.textSecondary} />}>
-      <ScreenTitle
-        title="Split"
-        subtitle="Who owes who, netted out"
+    <Screen
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={palette.textSecondary}
+        />
+      }
+    >
+      <TopBar
+        left="People"
         action={{
           label: 'Split a bill',
           icon: 'split',
@@ -87,35 +94,29 @@ export default function SquadScreen() {
         }}
       />
 
-      {/* Colour only when there is something to act on: a zero is not a debt. */}
-      <StatPair
-        items={[
-          {
-            label: 'Owed to you',
-            value: formatMoney(totalIn),
-            color: totalIn > 0.009 ? palette.accent : undefined,
-          },
-          {
-            label: 'You owe',
-            value: formatMoney(totalOut),
-            color: totalOut > 0.009 ? palette.warning : undefined,
-          },
-        ]}
+      <Hero
+        amount={totalIn}
+        label="owed to you"
+        line={peopleLine(totalIn, totalOut, owedToYou.length)}
+        meta={totalOut > 0.009 ? `You owe ${formatMoney(totalOut)}` : 'You owe nobody. Rare.'}
       />
 
       {balances.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon="squad"
-            title="No open debts"
-            body="Split a bill and each person nets to one balance."
-          />
-          <Button label="Add a debt" variant="tonal" onPress={() => setAddVisible(true)} />
-        </Card>
+        <View style={styles.empty}>
+          <Text style={styles.emptyBody}>
+            Split a bill and everyone nets down to one number each. No spreadsheets, no awkward
+            maths at the table.
+          </Text>
+          <TextLink label="Add a debt by hand" onPress={() => setAddVisible(true)} />
+        </View>
       ) : (
-        <Group title="People" action="Add a debt" onAction={() => setAddVisible(true)}>
+        <Group title="Everyone" action="Add a debt" onAction={() => setAddVisible(true)}>
           {balances.map((balance) => (
-            <ContactRow key={balance.contactId} balance={balance} onPress={() => setDetailFor(balance)} />
+            <ContactRow
+              key={balance.contactId}
+              balance={balance}
+              onPress={() => setDetailFor(balance)}
+            />
           ))}
         </Group>
       )}
@@ -185,13 +186,23 @@ function reliabilityLabel(balance: ContactBalance): { icon: IconName; text: stri
   return { icon: 'warning', text: `very slow — ~${Math.round(days)}d to settle` };
 }
 
+/** One kind sentence about the state of the group. */
+function peopleLine(totalIn: number, totalOut: number, owers: number): string {
+  if (totalIn < 0.01 && totalOut < 0.01) return 'Everyone is square. Beautiful.';
+  if (totalIn < 0.01) return 'Nobody owes you. You owe a little.';
+  return owers === 1
+    ? 'One person to nudge, whenever it feels right.'
+    : `${owers} people to nudge, whenever it feels right.`;
+}
+
 function ContactRow({ balance, onPress }: { balance: ContactBalance; onPress: () => void }) {
   const label = reliabilityLabel(balance);
-  const age = balance.oldestOpenAt ? daysBetween(balance.oldestOpenAt, new Date().toISOString()) : 0;
+  const age = balance.oldestOpenAt
+    ? daysBetween(balance.oldestOpenAt, new Date().toISOString())
+    : 0;
 
   return (
     <Row
-      left={<Avatar name={balance.name} />}
       title={balance.name}
       subtitle={
         Math.abs(balance.netAmount) < 0.01
@@ -211,9 +222,7 @@ function ContactRow({ balance, onPress }: { balance: ContactBalance; onPress: ()
             {balance.netAmount > 0 ? '+' : balance.netAmount < 0 ? '−' : ''}
             {formatMoney(Math.abs(balance.netAmount))}
           </Text>
-          {age > 7 && balance.netAmount > 0 ? (
-            <Text style={styles.aging}>{age}d old</Text>
-          ) : null}
+          {age > 7 && balance.netAmount > 0 ? <Text style={styles.aging}>{age}d old</Text> : null}
         </View>
       }
     />
@@ -280,7 +289,11 @@ function ContactSheet({
           {formatMoney(Math.abs(net))}
         </Text>
         <Text style={styles.detailLabel}>
-          {net > 0 ? `${balance.name} owes you` : net < 0 ? `you owe ${balance.name}` : 'all square'}
+          {net > 0
+            ? `${balance.name} owes you`
+            : net < 0
+              ? `you owe ${balance.name}`
+              : 'all square'}
         </Text>
         {net > 0 && confidence < 0.9 ? (
           <Text style={styles.confidence}>
@@ -305,7 +318,11 @@ function ContactSheet({
       ) : null}
 
       {Math.abs(net) > 0.009 ? (
-        <Button label={busy ? 'Settling…' : `Settle ${formatMoney(Math.abs(net))}`} onPress={settleAll} disabled={busy} />
+        <Button
+          label={busy ? 'Settling…' : `Settle ${formatMoney(Math.abs(net))}`}
+          onPress={settleAll}
+          disabled={busy}
+        />
       ) : null}
 
       {net > 0 ? (
@@ -313,8 +330,8 @@ function ContactSheet({
           label="Nudge on WhatsApp"
           variant="secondary"
           onPress={() =>
-            sendNudge(balance.name, net, ious[0]?.merchant ?? 'that thing', balance.phone).catch(() =>
-              showMessage('Could not open WhatsApp')
+            sendNudge(balance.name, net, ious[0]?.merchant ?? 'that thing', balance.phone).catch(
+              () => showMessage('Could not open WhatsApp')
             )
           }
         />
@@ -325,7 +342,11 @@ function ContactSheet({
         variant="ghost"
         onPress={markGhost}
       />
-      <Button label="Same person as someone else?" variant="ghost" onPress={() => setMergeVisible(true)} />
+      <Button
+        label="Same person as someone else?"
+        variant="ghost"
+        onPress={() => setMergeVisible(true)}
+      />
 
       <MergeContactSheet
         visible={mergeVisible}
@@ -354,14 +375,20 @@ function MergeContactSheet({
   onClose: () => void;
   onMerged: () => void;
 }) {
-  const [others, setOthers] = useState<Array<{ id: number; name: string; phone: string | null }>>([]);
+  const [others, setOthers] = useState<Array<{ id: number; name: string; phone: string | null }>>(
+    []
+  );
   const [query, setQuery] = useState('');
 
   useEffect(() => {
     if (!visible) return;
     setQuery('');
     db.getContacts().then((contacts) => {
-      setOthers(contacts.filter((c) => c.id !== contactId).map((c) => ({ id: c.id, name: c.name, phone: c.phone })));
+      setOthers(
+        contacts
+          .filter((c) => c.id !== contactId)
+          .map((c) => ({ id: c.id, name: c.name, phone: c.phone }))
+      );
     });
   }, [visible, contactId]);
 
@@ -379,21 +406,27 @@ function MergeContactSheet({
       if (!ok) return;
       await db.mergeContacts(contactId, other.id);
       onMerged();
-    }
-    );
+    });
   }
 
   return (
     <Sheet visible={visible} onClose={onClose} title={`Merge into ${contactName}`}>
-      <Text style={styles.mergeIntro}>
-        Same person, two spellings? Pick the right one.
-      </Text>
+      <Text style={styles.mergeIntro}>Same person, two spellings? Pick the right one.</Text>
       <Field label="Search" value={query} onChangeText={setQuery} placeholder="Search people" />
       {filtered.length === 0 ? (
-        <EmptyState icon="squad" title="No one else to merge with" body="Everyone else already has their own balance." />
+        <EmptyState
+          icon="squad"
+          title="No one else to merge with"
+          body="Everyone else already has their own balance."
+        />
       ) : (
         filtered.map((other) => (
-          <Row key={other.id} title={other.name} subtitle={other.phone ?? undefined} onPress={() => pick(other)} />
+          <Row
+            key={other.id}
+            title={other.name}
+            subtitle={other.phone ?? undefined}
+            onPress={() => pick(other)}
+          />
         ))
       )}
     </Sheet>
@@ -477,8 +510,19 @@ function AddDebtSheet({
           onPress={() => setPickerVisible(true)}
         />
       ) : null}
-      <Field label="How much" value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="0" />
-      <Field label="What for" value={reason} onChangeText={setReason} placeholder="Dinner at Toit" />
+      <Field
+        label="How much"
+        value={amount}
+        onChangeText={setAmount}
+        keyboardType="numeric"
+        placeholder="0"
+      />
+      <Field
+        label="What for"
+        value={reason}
+        onChangeText={setReason}
+        placeholder="Dinner at Toit"
+      />
       <Button label={saving ? 'Saving…' : 'Add'} onPress={save} disabled={!canSave || saving} />
 
       <ContactPicker
@@ -495,7 +539,9 @@ function AddDebtSheet({
 }
 
 const styles = StyleSheet.create({
-  balanceAmount: { ...typography.bodyBold, fontSize: 16 },
+  empty: { gap: spacing.md, paddingVertical: spacing.md },
+  emptyBody: { ...typography.body, color: palette.textSecondary },
+  balanceAmount: { ...typography.body },
   aging: { ...typography.caption, color: palette.warning },
 
   detailHead: { alignItems: 'center', gap: 4 },

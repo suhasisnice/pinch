@@ -87,7 +87,7 @@ function Column({
       ? palette.warning
       : day.isToday
         ? palette.accent
-        : layer(palette.accent, 0.35);
+        : layer(palette.textPrimary, 0.22);
   // A day with nothing spent still gets a stub, so the week reads as seven
   // days rather than as gaps.
   const target = day.isFuture ? 4 : Math.max(4, height);

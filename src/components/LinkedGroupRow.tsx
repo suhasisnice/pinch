@@ -3,7 +3,15 @@ import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { TransactionRow } from '../db/types';
 import { LedgerItem } from '../math/reimbursement';
 import { formatMoney } from '../utils/format';
-import { categoryColor, layer, palette, radii, spacing, stateLayer, typography } from '../theme/theme';
+import {
+  categoryColor,
+  layer,
+  palette,
+  radii,
+  spacing,
+  stateLayer,
+  typography,
+} from '../theme/theme';
 import { duration, easing, useReducedMotion } from './motion';
 import { Dot } from './ui';
 import Icon from './Icon';
@@ -72,11 +80,11 @@ export default function LinkedGroupRow({
         accessibilityLabel={`${title}, ${subtitle}, net ${even ? 'nothing' : formatMoney(Math.abs(group.net))}`}
         style={({ pressed }) => [
           styles.row,
-          pressed && { backgroundColor: layer(palette.accent, stateLayer.press) },
+          pressed && { backgroundColor: layer(palette.textPrimary, 0.05) },
         ]}
       >
         <View style={styles.badge}>
-          <Icon name="check" size={12} color={palette.accent} />
+          <Icon name="check" size={12} color={palette.textPrimary} />
         </View>
         <View style={styles.body}>
           <Text style={styles.title} numberOfLines={1}>
@@ -87,14 +95,17 @@ export default function LinkedGroupRow({
           </Text>
         </View>
         <View style={styles.right}>
-          <Text style={[styles.net, (even || moneyIn) && { color: palette.accent }]}>
+          <Text style={[styles.net, (even || moneyIn) && { color: palette.textPrimary }]}>
             {even ? 'Even' : `${moneyIn ? '+' : '−'}${formatMoney(Math.abs(group.net))}`}
           </Text>
           <Animated.View
             style={{
               transform: [
                 {
-                  rotate: progress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }),
+                  rotate: progress.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0deg', '180deg'],
+                  }),
                 },
               ],
             }}
@@ -124,18 +135,25 @@ export default function LinkedGroupRow({
               accessibilityLabel={`${member.merchant}, ${member.direction === 'CREDIT' ? 'received' : 'paid'} ${formatMoney(member.amount)}`}
               style={({ pressed }) => [
                 styles.member,
-                pressed && { backgroundColor: layer(palette.accent, stateLayer.press) },
+                pressed && { backgroundColor: layer(palette.textPrimary, 0.05) },
               ]}
             >
               <Dot
-                color={member.direction === 'CREDIT' ? palette.accent : categoryColor(member.category)}
+                color={
+                  member.direction === 'CREDIT'
+                    ? palette.textPrimary
+                    : categoryColor(member.category)
+                }
                 size={8}
               />
               <Text style={styles.memberTitle} numberOfLines={1}>
                 {member.merchant}
               </Text>
               <Text
-                style={[styles.memberAmount, member.direction === 'CREDIT' && { color: palette.accent }]}
+                style={[
+                  styles.memberAmount,
+                  member.direction === 'CREDIT' && { color: palette.textPrimary },
+                ]}
               >
                 {member.direction === 'CREDIT' ? '+' : '−'}
                 {formatMoney(member.amount)}
@@ -160,7 +178,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: palette.accentMuted,
+    backgroundColor: palette.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
   },

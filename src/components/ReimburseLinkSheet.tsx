@@ -127,22 +127,23 @@ export default function ReimburseLinkSheet({
       <View style={styles.equation}>
         <Figure label="Spent" amount={plan?.spent ?? 0} />
         <Text style={styles.operator}>−</Text>
-        <Figure label="Paid back" amount={explained} tone={palette.accent} />
+        <Figure label="Paid back" amount={explained} tone={palette.textPrimary} />
         <Text style={styles.operator}>=</Text>
-        <Figure
-          label="Yours"
-          amount={Math.max(0, (plan?.spent ?? 0) - explained)}
-          emphasis
-        />
+        <Figure label="Yours" amount={Math.max(0, (plan?.spent ?? 0) - explained)} emphasis />
       </View>
 
       <View style={styles.meter}>
         <ProgressBar
           fraction={transaction.amount > 0 ? explained / transaction.amount : 0}
-          color={excess > 0 && selected.length > 0 ? palette.warning : palette.accent}
+          color={excess > 0 && selected.length > 0 ? palette.warning : palette.textPrimary}
           height={6}
         />
-        <Text style={[styles.meterText, excess > 0 && selected.length > 0 && { color: palette.warning }]}>
+        <Text
+          style={[
+            styles.meterText,
+            excess > 0 && selected.length > 0 && { color: palette.warning },
+          ]}
+        >
           {selected.length === 0
             ? 'Tap the payments this covered'
             : excess > 0
@@ -170,7 +171,9 @@ export default function ReimburseLinkSheet({
             />
           ))}
           {rest.length > 0 ? (
-            <Text style={styles.groupLabel}>{suggested.length > 0 ? 'Everything else' : 'Before it arrived'}</Text>
+            <Text style={styles.groupLabel}>
+              {suggested.length > 0 ? 'Everything else' : 'Before it arrived'}
+            </Text>
           ) : null}
           {rest.map((candidate) => (
             <CandidateRow
@@ -195,7 +198,9 @@ export default function ReimburseLinkSheet({
         onPress={save}
         disabled={!complete || saving || selected.length === idle.length}
       />
-      {wasLinked ? <Button label="Not a repayment — unlink" variant="ghost" onPress={unlink} /> : null}
+      {wasLinked ? (
+        <Button label="Not a repayment — unlink" variant="ghost" onPress={unlink} />
+      ) : null}
     </Sheet>
   );
 }
@@ -247,7 +252,7 @@ function CandidateRow({
       style={({ pressed }) => [
         styles.candidate,
         selected && styles.candidateSelected,
-        pressed && { backgroundColor: layer(palette.accent, stateLayer.press) },
+        pressed && { backgroundColor: layer(palette.textPrimary, 0.05) },
       ]}
     >
       <View style={[styles.tick, selected && styles.tickOn]}>
@@ -257,20 +262,24 @@ function CandidateRow({
         <Text style={styles.candidateTitle} numberOfLines={1}>
           {candidate.merchant}
         </Text>
-        <Text
-          style={[styles.candidateMeta, idle && { color: palette.warning }]}
-          numberOfLines={1}
-        >
+        <Text style={[styles.candidateMeta, idle && { color: palette.warning }]} numberOfLines={1}>
           {idle
             ? 'Nothing left over for this one'
             : partial
               ? `${formatMoney(covers)} of it paid back`
-              : [shortDate(candidate.occurredAt), candidate.category ?? 'Uncategorised'].join(' · ')}
+              : [shortDate(candidate.occurredAt), candidate.category ?? 'Uncategorised'].join(
+                  ' · '
+                )}
         </Text>
       </View>
       {/* Struck through only when fully paid back — the visual "gone" the
           ledger will show, without claiming it for a bill only partly covered. */}
-      <Text style={[styles.candidateAmount, selected && !idle && !partial && styles.candidateAmountStruck]}>
+      <Text
+        style={[
+          styles.candidateAmount,
+          selected && !idle && !partial && styles.candidateAmountStruck,
+        ]}
+      >
         −{formatMoney(candidate.amount)}
       </Text>
     </Pressable>
@@ -286,7 +295,7 @@ function shortDate(iso: string): string {
 const styles = StyleSheet.create({
   hero: { alignItems: 'center', gap: 2 },
   from: { ...typography.body, color: palette.textSecondary },
-  incoming: { ...typography.display, color: palette.accent },
+  incoming: { ...typography.display, color: palette.textPrimary },
 
   equation: {
     flexDirection: 'row',
@@ -322,7 +331,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     borderRadius: radii.sm,
   },
-  candidateSelected: { backgroundColor: palette.accentMuted },
+  candidateSelected: { backgroundColor: palette.surfaceElevated },
   tick: {
     width: 22,
     height: 22,
@@ -332,7 +341,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tickOn: { backgroundColor: palette.accent, borderColor: palette.accent },
+  tickOn: { backgroundColor: palette.textPrimary, borderColor: palette.textPrimary },
   candidateBody: { flex: 1, gap: 2 },
   candidateTitle: { ...typography.body, color: palette.textPrimary },
   candidateMeta: { ...typography.caption, color: palette.textSecondary },

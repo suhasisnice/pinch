@@ -1,7 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import * as db from '../db/dbService';
-import { postInvestment, postLoan, postTransaction, postTransfer } from '../services/captureService';
+import {
+  postInvestment,
+  postLoan,
+  postTransaction,
+  postTransfer,
+} from '../services/captureService';
 import { CATEGORIES } from '../db/schema';
 import { OutingSummary } from '../db/repos/outings';
 import { Button, Chip, Field, Sheet } from './ui';
@@ -121,7 +126,9 @@ export default function AddExpenseSheet({
     setCounterpartyPhone(null);
     setReason('');
     setAdjustmentDirection(defaultDirection ?? 'DEBIT');
-    db.getOutings(false).then(setOutings).catch(() => setOutings([]));
+    db.getOutings(false)
+      .then(setOutings)
+      .catch(() => setOutings([]));
   }, [visible, defaultOutingId, defaultType, defaultAmount, defaultDirection]);
 
   const parsedAmount = Number(amount.replace(/[^\d.]/g, ''));
@@ -256,7 +263,6 @@ export default function AddExpenseSheet({
                 label={outing.name}
                 selected={outingId === outing.id}
                 onPress={() => setOutingId(outingId === outing.id ? null : outing.id)}
-
               />
             ))}
           </View>
@@ -265,8 +271,18 @@ export default function AddExpenseSheet({
 
       {type === 'TRANSFER' ? (
         <>
-          <Field label="From account" value={fromLabel} onChangeText={setFromLabel} placeholder="HDFC Savings" />
-          <Field label="To account" value={toLabel} onChangeText={setToLabel} placeholder="SBI FD" />
+          <Field
+            label="From account"
+            value={fromLabel}
+            onChangeText={setFromLabel}
+            placeholder="HDFC Savings"
+          />
+          <Field
+            label="To account"
+            value={toLabel}
+            onChangeText={setToLabel}
+            placeholder="SBI FD"
+          />
         </>
       ) : null}
 
@@ -283,9 +299,18 @@ export default function AddExpenseSheet({
             hint={counterpartyPhone ? `Will nudge on ${counterpartyPhone}` : undefined}
           />
           {isCaptureAvailable ? (
-            <Button label="Pick from contacts" variant="ghost" onPress={() => setPickerVisible(true)} />
+            <Button
+              label="Pick from contacts"
+              variant="ghost"
+              onPress={() => setPickerVisible(true)}
+            />
           ) : null}
-          <Field label="What for" value={reason} onChangeText={setReason} placeholder="Rent shortfall" />
+          <Field
+            label="What for"
+            value={reason}
+            onChangeText={setReason}
+            placeholder="Rent shortfall"
+          />
         </>
       ) : null}
 
@@ -296,7 +321,7 @@ export default function AddExpenseSheet({
               label="Money I'm adding"
               selected={adjustmentDirection === 'CREDIT'}
               onPress={() => setAdjustmentDirection('CREDIT')}
-              color={palette.accent}
+              color={palette.textPrimary}
             />
             <Chip
               label="Money I'm removing"

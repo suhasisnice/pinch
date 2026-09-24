@@ -139,7 +139,9 @@ export default function SplitModal({
   /** One tap for "same as usual" — the common case of eating with the same people every time. */
   function addEveryoneUsual() {
     const ids = new Set(quickAdd.map((p) => p.contactId));
-    setParticipants((prev) => prev.map((p) => (ids.has(p.contactId) ? { ...p, included: true } : p)));
+    setParticipants((prev) =>
+      prev.map((p) => (ids.has(p.contactId) ? { ...p, included: true } : p))
+    );
   }
 
   function bumpRatio(contactId: number) {
@@ -173,7 +175,9 @@ export default function SplitModal({
     setParticipants((prev) =>
       prev.map((p) => {
         const share = equal.shares.find((s) => s.contactId === p.contactId);
-        return p.included && share ? { ...p, exactText: share.amount ? String(share.amount) : p.exactText } : p;
+        return p.included && share
+          ? { ...p, exactText: share.amount ? String(share.amount) : p.exactText }
+          : p;
       })
     );
   }
@@ -198,8 +202,8 @@ export default function SplitModal({
     // the list back into alphabetical order behind the user's back.
     const order = new Map(ranking.map((rankedId, index) => [rankedId, index]));
     const sorted = [...rows].sort((a, b) => {
-      const ra = a.id === id ? -1 : order.get(a.id) ?? Number.MAX_SAFE_INTEGER;
-      const rb = b.id === id ? -1 : order.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+      const ra = a.id === id ? -1 : (order.get(a.id) ?? Number.MAX_SAFE_INTEGER);
+      const rb = b.id === id ? -1 : (order.get(b.id) ?? Number.MAX_SAFE_INTEGER);
       return ra - rb || a.name.localeCompare(b.name);
     });
 
@@ -326,11 +330,7 @@ export default function SplitModal({
       </View>
 
       {isCaptureAvailable ? (
-        <Button
-          label="Pick from contacts"
-          variant="ghost"
-          onPress={() => setPickerVisible(true)}
-        />
+        <Button label="Pick from contacts" variant="ghost" onPress={() => setPickerVisible(true)} />
       ) : null}
 
       <ContactPicker
@@ -374,12 +374,12 @@ export default function SplitModal({
                       onPress={() => toggle(participant.contactId)}
                       hitSlop={8}
                       accessibilityRole="button"
-                      accessibilityLabel={`${participant.included ? "Remove" : "Add"} ${participant.name}`}
+                      accessibilityLabel={`${participant.included ? 'Remove' : 'Add'} ${participant.name}`}
                     >
                       <Icon
                         name={participant.included ? 'check' : 'add'}
                         size={16}
-                        color={participant.included ? palette.accent : palette.textMuted}
+                        color={participant.included ? palette.textPrimary : palette.textMuted}
                       />
                     </Pressable>
                   ) : null}
@@ -490,9 +490,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignItems: 'center',
   },
-  modeButtonOn: { backgroundColor: palette.accentMuted },
+  modeButtonOn: { backgroundColor: palette.surfaceElevated },
   modeLabel: { ...typography.caption, color: palette.textSecondary, fontWeight: '700' },
-  modeLabelOn: { color: palette.accent },
+  modeLabelOn: { color: palette.textPrimary },
   modeHint: { ...typography.caption, color: palette.textMuted, textAlign: 'center' },
 
   addRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
     ...typography.sectionLabel,
     color: palette.textSecondary,
   },
-  quickAddAll: { ...typography.caption, color: palette.accent },
+  quickAddAll: { ...typography.caption, color: palette.textPrimary },
   quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 
   list: { gap: spacing.sm },
@@ -522,13 +522,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.border,
   },
-  personOn: { borderColor: palette.accent },
+  personOn: { borderColor: palette.textPrimary },
   personYou: { backgroundColor: palette.surfaceElevated, borderColor: 'transparent' },
   personYouName: { color: palette.textPrimary },
   personLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   personName: { ...typography.bodyBold, color: palette.textSecondary },
   personRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  personShare: { ...typography.bodyBold, color: palette.accent, minWidth: 64, textAlign: 'right' },
+  personShare: {
+    ...typography.bodyBold,
+    color: palette.textPrimary,
+    minWidth: 64,
+    textAlign: 'right',
+  },
 
   exactField: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   exactPrefix: { ...typography.bodyBold, color: palette.textMuted },

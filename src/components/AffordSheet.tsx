@@ -95,7 +95,7 @@ function verdictColor(severity: string): string {
     case 'TIGHT':
       return palette.warning;
     default:
-      return palette.accent;
+      return palette.textPrimary;
   }
 }
 

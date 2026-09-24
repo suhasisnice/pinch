@@ -94,6 +94,12 @@ Rules that hold regardless of which palette is in force:
 - Lists and hierarchy over a card per row.
 - Green (or the accent in force) is semantic — state, progress, primary action. Not paint.
 - No giant FABs, gradients, glassmorphism, rainbow charts, decorative motion or fake scores.
+  (One exception: the subtle glow on Today's ring, per `docs/DESIGN_DIRECTION.md`.)
+
+**0.9.14 direction (user-chosen, overrides the Spotify doc where they conflict):**
+Raycast ink, a coral accent used rarely, "fine is not a colour" (healthy = white),
+thin huge numerals, no boxes, one outlined sentence-case action per screen, and
+three tabs (Today / Plans / People). Copy is witty but kind. See `docs/DESIGN_DIRECTION.md`.
 - Transitions 150–220ms.
 
 ## Reuse / refactor / rebuild

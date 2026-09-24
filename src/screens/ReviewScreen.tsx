@@ -7,8 +7,8 @@ import { CaptureInboxRow, TransactionRow } from '../db/types';
 import { acceptCapture, confirmCaptureIsDuplicate, senderLabel } from '../services/captureService';
 import { ACCEPT_THRESHOLD } from '../services/parserService';
 import { formatMoney, formatRelative } from '../utils/format';
-import { layer, palette, radii, spacing, typography } from '../theme/theme';
-import { Button, Card, EmptyState, Loading, Screen, ScreenTitle } from '../components/ui';
+import { palette, spacing, typography } from '../theme/theme';
+import { Button, Card, EmptyState, Loading, Screen, TopBar } from '../components/ui';
 
 /**
  * The review queue for messages the parser was not confident about, and for
@@ -58,19 +58,14 @@ export default function ReviewScreen() {
 
   return (
     <Screen underHeader>
-      <ScreenTitle
-        title="Review"
-        subtitle={captures.length === 0 ? 'All clear' : `${captures.length} waiting`}
-      />
+      <TopBar left={captures.length === 0 ? 'All clear' : `${captures.length} waiting`} />
 
       {captures.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon="check"
-            title="Nothing to review"
-            body="Anything Pinch isn't sure about waits here."
-          />
-        </Card>
+        <EmptyState
+          icon="check"
+          title="All caught up"
+          body="Anything Pinch isn't sure about waits here. Nothing is, right now."
+        />
       ) : (
         captures.map((capture) => {
           const twin =
@@ -86,13 +81,15 @@ export default function ReviewScreen() {
                     {capture.parsed_merchant ?? 'Unknown'}
                   </Text>
                   <Text style={styles.meta} numberOfLines={1}>
-                    {capture.sender ? senderLabel(capture.sender) : capture.source === 'SMS' ? 'SMS' : 'Notification'}{' '}
+                    {capture.sender
+                      ? senderLabel(capture.sender)
+                      : capture.source === 'SMS'
+                        ? 'SMS'
+                        : 'Notification'}{' '}
                     · {formatRelative(capture.received_at)}
                   </Text>
                 </View>
-                <Text
-                  style={[styles.amount, capture.parsed_direction === 'CREDIT' && { color: palette.accent }]}
-                >
+                <Text style={styles.amount}>
                   {capture.parsed_direction === 'CREDIT' ? '+' : '−'}
                   {formatMoney(capture.parsed_amount ?? 0)}
                 </Text>
@@ -146,9 +143,7 @@ export default function ReviewScreen() {
                       style={styles.flex}
                     />
                   </View>
-                  <Text style={styles.dupeHint}>
-                    Same one keeps the original.
-                  </Text>
+                  <Text style={styles.dupeHint}>Same one keeps the original.</Text>
                 </>
               ) : (
                 <View style={styles.actions}>
@@ -222,18 +217,13 @@ function rejectWithOptionToBlock(capture: CaptureInboxRow, reload: () => void) {
 
 const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  amount: { ...typography.cardTitle, fontSize: 22, lineHeight: 28, color: palette.textPrimary },
+  amount: { ...typography.body, fontSize: 20, lineHeight: 26, color: palette.textPrimary },
   tagRow: { flexDirection: 'row', marginTop: spacing.sm },
   tag: {
     ...typography.caption,
-    fontWeight: '600',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: radii.pill,
-    overflow: 'hidden',
   },
-  tagWarn: { color: palette.warning, backgroundColor: layer(palette.warning, 0.14) },
-  tagNeutral: { color: palette.textSecondary, backgroundColor: palette.surfaceElevated },
+  tagWarn: { color: palette.warning },
+  tagNeutral: { color: palette.textMuted },
   dupeQuestion: {
     ...typography.caption,
     color: palette.textSecondary,
@@ -245,9 +235,10 @@ const styles = StyleSheet.create({
   meta: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
 
   raw: {
-    backgroundColor: palette.surfaceElevated,
-    borderRadius: radii.md,
-    padding: spacing.sm + 4,
+    borderLeftWidth: 1,
+    borderLeftColor: palette.border,
+    paddingLeft: spacing.md,
+    paddingVertical: 2,
     marginTop: spacing.sm,
   },
   rawText: { ...typography.caption, color: palette.textSecondary, lineHeight: 18 },

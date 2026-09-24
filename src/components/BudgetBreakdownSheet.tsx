@@ -59,7 +59,12 @@ export default function BudgetBreakdownSheet({
       window: 'all open debts, weighted by who actually pays',
       positive: true,
     },
-    { label: 'You still owe others', amount: b.openPayables, window: 'all open debts', positive: false },
+    {
+      label: 'You still owe others',
+      amount: b.openPayables,
+      window: 'all open debts',
+      positive: false,
+    },
     {
       label: 'Set aside for goals',
       amount: b.goalReserve,
@@ -98,7 +103,7 @@ export default function BudgetBreakdownSheet({
             <Text
               style={[
                 styles.rowAmount,
-                { color: line.positive ? palette.accent : palette.textPrimary },
+                { color: line.positive ? palette.textPrimary : palette.textPrimary },
               ]}
             >
               {line.positive ? '+' : '−'}
@@ -113,7 +118,7 @@ export default function BudgetBreakdownSheet({
         <Text
           style={[
             styles.totalAmount,
-            { color: b.spendablePool < 0 ? palette.danger : palette.accent },
+            { color: b.spendablePool < 0 ? palette.danger : palette.textPrimary },
           ]}
         >
           {formatMoney(b.spendablePool)}
@@ -124,9 +129,9 @@ export default function BudgetBreakdownSheet({
         <View style={styles.noteBox}>
           <Icon name="info" size={15} color={palette.warning} />
           <Text style={styles.noteText}>
-            {formatMoney(Math.abs(carriedOver))} of this comes from debts, goals and outings
-            rather than this period. Those are running balances — starting a fresh budget clears
-            your spending, but it does not clear what you owe or what you have set aside.
+            {formatMoney(Math.abs(carriedOver))} of this comes from debts, goals and outings rather
+            than this period. Those are running balances — starting a fresh budget clears your
+            spending, but it does not clear what you owe or what you have set aside.
           </Text>
         </View>
       ) : null}

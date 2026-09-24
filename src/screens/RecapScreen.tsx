@@ -170,7 +170,7 @@ export default function RecapScreen() {
 }
 
 function SlideBody({ slide, still = false }: { slide: RecapSlide; still?: boolean }) {
-  const colour = slide.good ? palette.accent : palette.textPrimary;
+  const colour = palette.textPrimary;
   const body = (
     <View style={styles.slideBody}>
       <Text style={styles.eyebrow}>{slide.eyebrow}</Text>

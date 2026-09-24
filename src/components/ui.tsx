@@ -25,7 +25,7 @@ import {
   stateLayer,
   typography,
 } from '../theme/theme';
-import { duration, easing, usePressScale, useReducedMotion } from './motion';
+import { AnimatedMoney, duration, easing, usePressScale, useReducedMotion } from './motion';
 import Icon, { IconName } from './Icon';
 
 /**
@@ -139,7 +139,7 @@ export function Card({
         style={({ pressed }) => [
           styles.card,
           style,
-          pressed && { backgroundColor: layer(palette.accent, stateLayer.press) },
+          pressed && { backgroundColor: layer(palette.textPrimary, 0.05) },
         ]}
       >
         {children}
@@ -148,7 +148,13 @@ export function Card({
   );
 }
 
-export function CardTitle({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
+export function CardTitle({
+  children,
+  right,
+}: {
+  children: React.ReactNode;
+  right?: React.ReactNode;
+}) {
   return (
     <View style={styles.cardTitleRow}>
       <Text style={styles.cardTitle}>{children}</Text>
@@ -203,7 +209,9 @@ export function Button({
   }[resolved];
 
   const labelColor = {
-    filled: palette.onAccent,
+    // The primary button is ink-on-paper — white with black text, the way
+    // Raycast and Linear do it. The coral accent stays for links and state.
+    filled: palette.background,
     // Spec: "Secondary: Dark pill" — a neutral dark surface, not a tint of
     // the one accent (that would read as a second, weaker green button).
     tonal: palette.textPrimary,
@@ -218,7 +226,9 @@ export function Button({
 
   // The spec reserves capitals for the primary action. Every other button in
   // sentence case is what keeps a sheet with four actions from shouting.
-  const labelStyle = resolved === 'filled' ? styles.buttonLabel : styles.buttonLabelQuiet;
+  // Sentence case everywhere (0.9.14): the user asked for quieter buttons,
+  // and capitals were the loudest thing left on any screen.
+  const labelStyle = styles.buttonLabelQuiet;
 
   // The caller's style carries layout (a flex:1 in a button row), so it rides
   // on the wrapper; the visual styles stay on the pressable that is scaling.
@@ -241,7 +251,9 @@ export function Button({
         ]}
       >
         {icon ? <Icon name={icon} size={size === 'small' ? 16 : 18} color={labelColor} /> : null}
-        <Text style={[labelStyle, size === 'small' && styles.buttonLabelSmall, { color: labelColor }]}>
+        <Text
+          style={[labelStyle, size === 'small' && styles.buttonLabelSmall, { color: labelColor }]}
+        >
           {label}
         </Text>
       </Pressable>
@@ -303,10 +315,10 @@ export function Chip({
   onPress?: () => void;
   color?: string;
 }) {
-  const selectedBackground = color ?? palette.accent;
+  const selectedBackground = color ?? palette.textPrimary;
   // A caller-supplied tint can be any colour, so the label is measured
   // against it rather than assumed. See onColor in theme.ts.
-  const selectedLabel = color ? onColor(color) : palette.onAccent;
+  const selectedLabel = color ? onColor(color) : palette.background;
 
   return (
     <Pressable
@@ -320,9 +332,7 @@ export function Chip({
         pressed && { opacity: 0.7 },
       ]}
     >
-      <Text style={[styles.chipLabel, selected && { color: selectedLabel }]}>
-        {label}
-      </Text>
+      <Text style={[styles.chipLabel, selected && { color: selectedLabel }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -356,7 +366,7 @@ export function SearchBar({
 }) {
   const [focused, setFocused] = useState(false);
   return (
-    <View style={[styles.search, focused && { borderColor: palette.accent }]}>
+    <View style={[styles.search, focused && { borderColor: palette.textSecondary }]}>
       <Icon name="search" size={18} color={palette.textMuted} />
       <TextInput
         value={value}
@@ -370,7 +380,12 @@ export function SearchBar({
         accessibilityLabel={placeholder}
       />
       {value.length > 0 ? (
-        <Pressable onPress={() => onChangeText('')} hitSlop={10} accessibilityRole="button" accessibilityLabel="Clear search">
+        <Pressable
+          onPress={() => onChangeText('')}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Clear search"
+        >
           <Icon name="close" size={16} color={palette.textMuted} />
         </Pressable>
       ) : null}
@@ -393,7 +408,7 @@ export function Field({
 
   return (
     <View style={styles.field}>
-      <Text style={[styles.fieldLabel, focused && { color: palette.accent }]}>{label}</Text>
+      <Text style={[styles.fieldLabel, focused && { color: palette.textPrimary }]}>{label}</Text>
       <TextInput
         placeholderTextColor={palette.textMuted}
         {...inputProps}
@@ -405,11 +420,7 @@ export function Field({
           setFocused(false);
           inputProps.onBlur?.(event);
         }}
-        style={[
-          styles.input,
-          focused && { borderColor: palette.accent },
-          inputProps.style,
-        ]}
+        style={[styles.input, focused && { borderColor: palette.textSecondary }, inputProps.style]}
       />
       {hint ? <Text style={styles.fieldHint}>{hint}</Text> : null}
     </View>
@@ -422,7 +433,7 @@ export function Field({
  */
 export function ProgressBar({
   fraction,
-  color = palette.accent,
+  color = palette.textPrimary,
   height = 8,
 }: {
   fraction: number;
@@ -497,7 +508,7 @@ export function EmptyState({
 export function Loading({ label }: { label?: string }) {
   return (
     <View style={styles.loading}>
-      <ActivityIndicator color={palette.accent} />
+      <ActivityIndicator color={palette.textMuted} />
       {label ? <Text style={styles.loadingLabel}>{label}</Text> : null}
     </View>
   );
@@ -585,7 +596,7 @@ export function Row({
       style={({ pressed }) => [
         styles.row,
         pressed && {
-          backgroundColor: layer(palette.accent, stateLayer.press),
+          backgroundColor: layer(palette.textPrimary, 0.05),
           borderRadius: radii.sm,
         },
       ]}
@@ -616,7 +627,12 @@ export function SectionHeader({
         {title}
       </Text>
       {action && onAction ? (
-        <Pressable onPress={onAction} hitSlop={12} accessibilityRole="button" accessibilityLabel={action}>
+        <Pressable
+          onPress={onAction}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={action}
+        >
           <Text style={styles.sectionAction}>{action}</Text>
         </Pressable>
       ) : null}
@@ -727,6 +743,137 @@ export function StatPair({
   );
 }
 
+/**
+ * A titled stretch of the page with no rules or dividers — for prose and a
+ * chart, where hairlines between them would chop one thought in two.
+ */
+export function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.section}>
+      <SectionHeader title={title} />
+      {children}
+    </View>
+  );
+}
+
+/**
+ * An inline action written as words with an arrow — "The long version →".
+ * Quieter than a button; the default way to go somewhere in this app.
+ */
+export function TextLink({
+  label,
+  onPress,
+  accent = false,
+}: {
+  label: string;
+  onPress: () => void;
+  accent?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={10}
+      accessibilityRole="link"
+      accessibilityLabel={label}
+      style={({ pressed }) => [styles.textLink, pressed && { opacity: 0.6 }]}
+    >
+      <Text style={[styles.textLinkLabel, accent && { color: palette.accent }]}>{label}</Text>
+      <Text style={[styles.textLinkArrow, accent && { color: palette.accent }]}>→</Text>
+    </Pressable>
+  );
+}
+
+/** A list row that is a sentence, not a label and a value. Tap for detail. */
+export function SentenceRow({
+  text,
+  onPress,
+  tone,
+}: {
+  text: string;
+  onPress?: () => void;
+  tone?: string;
+}) {
+  const content = (
+    <>
+      <Text style={[styles.sentenceText, tone ? { color: tone } : null]}>{text}</Text>
+      {onPress ? <Text style={styles.textLinkArrow}>→</Text> : null}
+    </>
+  );
+  if (!onPress) return <View style={styles.sentenceRow}>{content}</View>;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={text}
+      style={({ pressed }) => [styles.sentenceRow, pressed && { opacity: 0.6 }]}
+    >
+      {content}
+    </Pressable>
+  );
+}
+
+/**
+ * The strip across the top of a tab: where you are on the left (a date, a
+ * switcher, a small caps name), at most one quiet action on the right.
+ */
+export function TopBar({
+  left,
+  action,
+}: {
+  left: React.ReactNode;
+  action?: { label: string; onPress: () => void; icon?: IconName };
+}) {
+  return (
+    <View style={styles.topBar}>
+      <View style={styles.flexOne}>
+        {typeof left === 'string' ? <Text style={styles.topBarText}>{left}</Text> : left}
+      </View>
+      {action ? (
+        <Button
+          label={action.label}
+          icon={action.icon ?? 'add'}
+          onPress={action.onPress}
+          variant="outlined"
+          size="small"
+        />
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * A screen's one number, set large and thin, centred, with the line that
+ * says what it means under it. Same shape on every tab, so each opens the
+ * same way: one figure, one sentence.
+ */
+export function Hero({
+  amount,
+  label,
+  line,
+  meta,
+  color = palette.textPrimary,
+}: {
+  amount: number;
+  label?: string;
+  line?: string;
+  meta?: string;
+  color?: string;
+}) {
+  return (
+    <View style={styles.hero}>
+      <AnimatedMoney
+        amount={amount}
+        style={[styles.heroNumeral, { color }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      />
+      {label ? <Text style={styles.heroLabel}>{label}</Text> : null}
+      {line ? <Text style={styles.heroLine}>{line}</Text> : null}
+      {meta ? <Text style={styles.heroMeta}>{meta}</Text> : null}
+    </View>
+  );
+}
+
 /** A hairline between rows of one list. */
 export function Divider() {
   return <View style={styles.divider} />;
@@ -754,16 +901,25 @@ const styles = StyleSheet.create({
   titleBlock: { marginBottom: spacing.xs },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   titleText: { flex: 1 },
-  screenTitle: { ...typography.screenTitle, color: palette.textPrimary },
+  // Thin and large, like the numerals — the page is named, not announced.
+  screenTitle: {
+    ...typography.screenTitle,
+    fontWeight: '300',
+    letterSpacing: -0.5,
+    color: palette.textPrimary,
+  },
   screenSubtitle: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
 
   // Tonal separation only. A drop shadow on #121212 is invisible except as
   // a smudge along the bottom edge, and the spec asks for contrast between
   // surfaces over shadows.
+  // No box. A "card" is now a stretch of the page between hairlines —
+  // separation by space and rule, not by a rounded grey container.
   card: {
-    backgroundColor: palette.surface,
-    borderRadius: radii.card,
-    padding: spacing.md,
+    backgroundColor: 'transparent',
+    paddingVertical: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: palette.border,
   },
 
   cardTitleRow: {
@@ -784,7 +940,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderRadius: radii.pill,
   },
-  buttonFilled: { backgroundColor: palette.accent },
+  buttonFilled: { backgroundColor: palette.textPrimary },
   // Spec: "Secondary: Dark pill" — not a green tint (see labelColor above).
   buttonTonal: { backgroundColor: palette.surfaceElevated },
   buttonOutlined: {
@@ -811,10 +967,11 @@ const styles = StyleSheet.create({
   },
 
   chip: {
-    paddingVertical: 8,
+    paddingVertical: 7,
     paddingHorizontal: 14,
     borderRadius: radii.pill,
-    backgroundColor: palette.surfaceElevated,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   chipLabel: { ...typography.caption, fontWeight: '600', color: palette.textPrimary },
   chipScroll: { flexGrow: 0, marginHorizontal: -spacing.gutter },
@@ -823,11 +980,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: palette.surfaceElevated,
+    backgroundColor: palette.surface,
     borderRadius: radii.input,
     paddingHorizontal: spacing.md,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: palette.border,
   },
   searchInput: { flex: 1, color: palette.textPrimary, fontSize: 16, paddingVertical: 12 },
 
@@ -839,10 +996,10 @@ const styles = StyleSheet.create({
   // A filled, softly rounded well that takes a green ring while focused —
   // Spotify's search field, not the MD3 underline it replaces.
   input: {
-    backgroundColor: palette.surfaceElevated,
+    backgroundColor: palette.surface,
     borderRadius: radii.input,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: palette.border,
     paddingHorizontal: spacing.md,
     paddingVertical: 14,
     color: palette.textPrimary,
@@ -875,6 +1032,9 @@ const styles = StyleSheet.create({
     backgroundColor: palette.surface,
     borderTopLeftRadius: radii.sheet,
     borderTopRightRadius: radii.sheet,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: palette.border,
     maxHeight: '88%',
     paddingBottom: spacing.lg,
   },
@@ -906,17 +1066,60 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.xs,
   },
-  sectionTitle: { ...typography.cardTitle, color: palette.textPrimary },
-  sectionAction: { ...typography.caption, fontWeight: '600', color: palette.textSecondary },
+  // Sections are marked, not headlined: small wide caps, like a magazine's
+  // department name. The content under it is what should be loud.
+  sectionTitle: { ...typography.overline, color: palette.textMuted },
+  sectionAction: { ...typography.caption, color: palette.textSecondary },
+  section: { gap: spacing.sm },
+  flexOne: { flex: 1 },
+  topBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 36 },
+  topBarText: { ...typography.overline, color: palette.textMuted },
+  hero: { alignItems: 'center', paddingVertical: spacing.xl, gap: 2 },
+  heroNumeral: {
+    ...typography.numeral,
+    fontSize: 64,
+    lineHeight: 72,
+    letterSpacing: -3,
+  },
+  heroLabel: { ...typography.caption, color: palette.textMuted },
+  heroLine: {
+    ...typography.quip,
+    fontSize: 19,
+    lineHeight: 26,
+    color: palette.textPrimary,
+    textAlign: 'center',
+    marginTop: spacing.md,
+  },
+  heroMeta: {
+    ...typography.caption,
+    color: palette.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  textLink: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' },
+  textLinkLabel: { ...typography.body, color: palette.textPrimary },
+  textLinkArrow: { ...typography.body, color: palette.textMuted },
+  sentenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingVertical: 14,
+  },
+  sentenceText: { ...typography.body, color: palette.textPrimary, flex: 1 },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: palette.border },
   group: { gap: spacing.xs },
   groupSurface: {
-    backgroundColor: palette.surface,
-    borderRadius: radii.card,
-    paddingHorizontal: spacing.md,
-    overflow: "hidden",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: palette.border,
   },
-  groupFooter: { ...typography.caption, color: palette.textMuted, paddingHorizontal: spacing.xs, marginTop: 2 },
+  groupFooter: {
+    ...typography.caption,
+    color: palette.textMuted,
+    paddingHorizontal: spacing.xs,
+    marginTop: 2,
+  },
   avatar: {
     backgroundColor: palette.surfaceElevated,
     alignItems: 'center',
@@ -932,7 +1135,12 @@ const styles = StyleSheet.create({
   statDivider: { width: StyleSheet.hairlineWidth, backgroundColor: palette.border },
   statCell: { flex: 1, paddingHorizontal: spacing.md, gap: 2 },
   statLabel: { ...typography.caption, color: palette.textSecondary },
-  statValue: { ...typography.heroCompact, fontSize: 26, lineHeight: 32, color: palette.textPrimary },
+  statValue: {
+    ...typography.heroCompact,
+    fontSize: 26,
+    lineHeight: 32,
+    color: palette.textPrimary,
+  },
   rowLeft: { minWidth: 38, alignItems: 'center' },
   rowBody: { flex: 1, gap: 2 },
   rowTitle: { ...typography.bodyBold, color: palette.textPrimary },
