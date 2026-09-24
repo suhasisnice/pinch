@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DEFAULT_NOTIFICATION_SETTINGS, NotificationSettings } from '../notifications/engine';
+import type { PayPlan } from '../math/payday';
 
 const ALLOWANCE_KEY = 'pinch.monthlyAllowance';
 const NOTIFICATION_KEY = 'pinch.notificationSettings';
@@ -116,4 +117,21 @@ export async function getReturnRate(fallback: number): Promise<number> {
 
 export async function setReturnRate(rate: number): Promise<void> {
   await AsyncStorage.setItem(RETURN_RATE_KEY, String(rate));
+}
+
+const PAY_PLAN_KEY = 'pinch.payPlan';
+
+/** The pay-yourself-first split (see math/payday.ts). */
+export async function getPayPlan(fallback: PayPlan): Promise<PayPlan> {
+  const stored = await AsyncStorage.getItem(PAY_PLAN_KEY);
+  if (!stored) return fallback;
+  try {
+    return { ...fallback, ...(JSON.parse(stored) as Partial<PayPlan>) };
+  } catch {
+    return fallback;
+  }
+}
+
+export async function setPayPlan(plan: PayPlan): Promise<void> {
+  await AsyncStorage.setItem(PAY_PLAN_KEY, JSON.stringify(plan));
 }

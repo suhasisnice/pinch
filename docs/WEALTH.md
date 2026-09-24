@@ -102,3 +102,39 @@ so invested money is not swept into Savings a second time.
 - holdings totals against real SQL
 - archived holdings keeping their money in the totals
 - Review's three answers
+
+# Pay yourself first, net worth, the habit (0.9.16)
+
+The 0.9.15 tab tracked investments. It did not yet make saving the default,
+so 0.9.16 adds the parts the user asked for: a plan for every rupee, a feeling
+of progress, one net-worth number, and habit insights for people on an allowance.
+Savings follow a plan. Everyday spending only gets nudges; no new alerts were added.
+
+## Pieces
+
+- **Pay yourself first** (`src/math/payday.ts`, settings key `pinch.payPlan`).
+  - A split takes a percentage of the allowance for the cushion, goals and investing. The total is capped at 50%.
+  - Each period this becomes a payday checklist. An unticked line is held back from the budget as `planReserve`.
+  - Ticking a line writes the goal contribution or logs the investment. The pool does not change, so Today does not move.
+  - The cushion line is capped at what the cushion still needs. The invest line is never below the SIPs due.
+  - With the plan off, the reserve falls back to the 0.9.15 SIP reserve.
+- **Net worth** (`src/math/progress.ts`) = bank balance + investment worth + money owed to you − money you owe.
+  - Goals are not added, because they are labels on bank money.
+  - It is null until a bank balance exists; until then the hero shows "kept for later".
+  - Net worth is written once a month to `NetWorthSnapshots` (migration v17), which draws the line.
+- **The habit.** Share of income kept (goal contributions + net invested) for each of the last six periods, shown as bars.
+  - The streak counts finished periods at 10% or more.
+- **Milestones.** Stored in `Milestones` the first time each is reached, so their dates stay fixed. The next one is shown.
+- **Small change, big number.**
+  - Takes the top discretionary category if its monthly run-rate is at least ₹400.
+  - Shows what a quarter of it, kept every month, would become in ten years at the user's chosen rate.
+
+## Behaviour change: goal reserve is per period
+
+Before, a goal held back its all-time savings from every new period. Money saved
+in March therefore reduced April's budget again: double counting.
+
+- Now a goal only holds back what was contributed this period (`savedThisPeriod`).
+- The period-close sweep dates its automatic contribution into the period that is ending.
+- When pay-yourself-first is on, goals are not paced (`paced: false`). The plan does the pacing.
+- Tests: `tests/payYourselfFirst.test.ts`.

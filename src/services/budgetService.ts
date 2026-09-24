@@ -17,7 +17,9 @@ import {
   computeStreak,
   detectRecurring,
 } from '../math/insights';
-import { sipReserve } from '../math/wealth';
+import { sipOccurrences, sipReserve } from '../math/wealth';
+import { DEFAULT_PAY_PLAN, Payday, paydayFromData } from '../math/payday';
+import { getCushionGoalId, getPayPlan } from '../settings/settingsStore';
 import {
   daysBetween,
   endOfDayIso,
@@ -39,6 +41,8 @@ export interface BudgetSnapshot {
   totalPayable: number;
   pendingCaptures: number;
   /** True when goals wanted more than the period could safely give them. */
+  /** The pay-yourself-first plan for this period; null when it is switched off. */
+  payday: Payday | null;
   goalReserveCapped: boolean;
   /** What goals asked for before the ceiling was applied. */
   goalReserveRequested: number;
@@ -95,6 +99,10 @@ export async function getBudgetSnapshot(
     investedNet,
     holdings,
     contributedByHolding,
+    goalContributions,
+    contributedThisPeriod,
+    payPlan,
+    cushionId,
   ] = await Promise.all([
     db.getGrossSpendBetween(period.startsOn, period.endsOn),
     db.getIncomeBetween(period.startsOn, period.endsOn),
@@ -111,6 +119,10 @@ export async function getBudgetSnapshot(
     db.getInvestedNetBetween(period.startsOn, period.endsOn),
     db.getHoldings(),
     db.getContributionsByHoldingBetween(period.startsOn, period.endsOn),
+    db.getGoalContributionsBetween(period.startsOn, period.endsOn),
+    db.getContributedBetween(period.startsOn, period.endsOn),
+    getPayPlan(DEFAULT_PAY_PLAN),
+    getCushionGoalId(),
   ]);
 
   // Weight each outstanding debt by how reliably that person actually pays.
@@ -136,9 +148,31 @@ export async function getBudgetSnapshot(
         ? Math.ceil((new Date(goal.deadline).getTime() - now.getTime()) / MS_PER_DAY)
         : null,
       daysRemainingInPeriod: period.daysRemaining,
+      // Only what was set aside out of *this* period's money is held back
+      // from it; earlier savings came out of earlier allowances.
+      savedThisPeriod: goalContributions.get(goal.id) ?? 0,
+      // A pay-yourself-first plan replaces automatic pacing.
+      paced: !payPlan.enabled,
     })),
     period.allowance + income
   );
+
+  const sipPlans = holdings.filter((h) => h.sipAmount && h.sipDay);
+  const payday = payPlan.enabled
+    ? paydayFromData({
+        allowance: period.allowance,
+        plan: payPlan,
+        cushionId,
+        goals,
+        goalContributions,
+        sipDue: sipPlans.reduce(
+          (sum, h) =>
+            sum + h.sipAmount! * sipOccurrences(h.sipDay!, period.startsOn, period.endsOn),
+          0
+        ),
+        investedDone: contributedThisPeriod,
+      })
+    : null;
   const goalReserve = goalReserveResult.reserved;
 
   const budget = computeBudget({
@@ -151,17 +185,19 @@ export async function getBudgetSnapshot(
     openPayables: totalPayable,
     goalReserve,
     outingReserve,
-    planReserve: sipReserve(
-      holdings
-        .filter((h) => h.sipAmount && h.sipDay)
-        .map((h) => ({
-          amount: h.sipAmount!,
-          day: h.sipDay!,
-          contributedInWindow: contributedByHolding.get(h.id) ?? 0,
-        })),
-      period.startsOn,
-      period.endsOn
-    ),
+    // With a plan, its unticked items are the reserve (SIPs included);
+    // without one, each SIP holds back its own amount.
+    planReserve: payday
+      ? payday.reserve
+      : sipReserve(
+          sipPlans.map((h) => ({
+            amount: h.sipAmount!,
+            day: h.sipDay!,
+            contributedInWindow: contributedByHolding.get(h.id) ?? 0,
+          })),
+          period.startsOn,
+          period.endsOn
+        ),
     investedNet,
     daysRemaining: period.daysRemaining,
   });
@@ -183,6 +219,7 @@ export async function getBudgetSnapshot(
     totalReceivable,
     totalPayable,
     pendingCaptures,
+    payday,
     goalReserveCapped: goalReserveResult.capped,
     goalReserveRequested: goalReserveResult.requested,
     bankBalance,
@@ -264,7 +301,15 @@ async function sweepExpiredPeriod(now: Date): Promise<void> {
   if (leftover <= 0.009) return;
 
   const goalId = await ensureSavingsGoal();
-  await db.contributeToGoal(goalId, leftover, 'AUTO');
+  // Filed under the period it came from, so the new period does not hold
+  // it back a second time (see savedThisPeriod in math/budget.ts).
+  await db.contributeToGoal(
+    goalId,
+    leftover,
+    'AUTO',
+    null,
+    new Date(Date.parse(expiring.endsOn) - 1).toISOString()
+  );
 }
 
 /**

@@ -5,7 +5,26 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { HoldingSummary } from '../db/repos/holdings';
 import { postInvestment } from '../services/captureService';
-import { WealthSnapshot, getWealthSnapshot, startCushion } from '../services/wealthService';
+import {
+  WealthSnapshot,
+  getWealthSnapshot,
+  payCushion,
+  payGoals,
+  savePayPlan,
+  startCushion,
+} from '../services/wealthService';
+import { BalanceState } from '../db/repos/balance';
+import { PaydayItem } from '../math/payday';
+import { habitLine } from '../math/progress';
+import BalanceCard from '../components/BalanceCard';
+import {
+  HabitBars,
+  InvestSheet,
+  Milestones,
+  NetWorthLine,
+  PaydayChecklist,
+  PlanSheet,
+} from '../components/WealthParts';
 import {
   HABIT_MONTHS,
   HOLDING_KINDS,
@@ -50,13 +69,18 @@ import { showConfirm } from '../components/Dialog';
  */
 export default function WealthScreen() {
   const [snap, setSnap] = useState<WealthSnapshot | null>(null);
+  const [balance, setBalance] = useState<BalanceState | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [managing, setManaging] = useState<HoldingSummary | null>(null);
   const [cushionOpen, setCushionOpen] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
+  const [investFor, setInvestFor] = useState<number | null>(null);
 
   const load = useCallback(async () => {
-    setSnap(await getWealthSnapshot());
+    const [next, bal] = await Promise.all([getWealthSnapshot(), db.getBalanceState()]);
+    setSnap(next);
+    setBalance(bal);
   }, []);
 
   useFocusEffect(
@@ -74,7 +98,7 @@ export default function WealthScreen() {
     }
   }
 
-  if (!snap) {
+  if (!snap || !balance) {
     return (
       <Screen scroll={false}>
         <Loading />
@@ -83,6 +107,22 @@ export default function WealthScreen() {
   }
 
   const { ladder } = snap;
+  const kept = snap.habit.length > 0 ? snap.habit[snap.habit.length - 1].kept : 0;
+  const lastMonth =
+    snap.netWorthHistory.length > 1
+      ? snap.netWorthHistory[snap.netWorthHistory.length - 2].value
+      : null;
+
+  async function tick(item: PaydayItem) {
+    const left = Math.max(0, item.amount - item.done);
+    if (item.key === 'CUSHION') await payCushion(left);
+    else if (item.key === 'GOALS') await payGoals(left);
+    else {
+      setInvestFor(left);
+      return;
+    }
+    await load();
+  }
 
   return (
     <Screen
@@ -94,28 +134,85 @@ export default function WealthScreen() {
         />
       }
     >
-      <TopBar left="Wealth" action={{ label: 'Add holding', onPress: () => setCreating(true) }} />
-
-      <Hero
-        amount={snap.worth}
-        label={snap.putIn > 0.009 ? 'invested, as far as you’ve told me' : 'invested so far'}
-        line={wealthLine({
-          worth: snap.worth,
-          putIn: snap.putIn,
-          current: ladder.current,
-          monthly: snap.monthly,
-        })}
-        meta={
-          snap.putIn > 0.009 || snap.monthly > 0
-            ? [
-                `${formatMoney(snap.putIn)} put in`,
-                snap.monthly > 0 ? `${formatMoney(snap.monthly)} a month` : null,
-              ]
-                .filter(Boolean)
-                .join(' · ')
-            : undefined
-        }
+      <TopBar
+        left="Wealth"
+        action={{
+          label: snap.plan.enabled ? 'Your split' : 'Pay yourself first',
+          onPress: () => setPlanOpen(true),
+        }}
       />
+
+      {/* The one number. Net worth once there is a bank balance to rest it on;
+          until then, what has been kept — never a guessed total. */}
+      {snap.netWorth !== null ? (
+        <>
+          <Hero
+            amount={snap.netWorth}
+            label="net worth"
+            line={netWorthLine(snap.netWorth, lastMonth)}
+            meta={`${formatMoney(balance.projected ?? 0)} in the bank · ${formatMoney(snap.worth)} invested`}
+          />
+          <NetWorthLine history={snap.netWorthHistory} />
+        </>
+      ) : (
+        <>
+          <Hero
+            amount={(snap.cushion?.savedAmount ?? 0) + snap.worth}
+            label="kept for later"
+            line="Add your bank balance and this becomes your net worth."
+          />
+          <BalanceCard state={balance} onChanged={load} />
+        </>
+      )}
+
+      <Section title="Payday">
+        {snap.payday ? (
+          <PaydayChecklist
+            payday={snap.payday}
+            plan={snap.plan}
+            onTick={tick}
+            onEdit={() => setPlanOpen(true)}
+            onMoveIdleCushion={async () => {
+              await savePayPlan({
+                ...snap.plan,
+                investPct: snap.plan.investPct + snap.plan.cushionPct,
+                cushionPct: 0,
+              });
+              await load();
+            }}
+          />
+        ) : (
+          <View style={styles.offPlan}>
+            <Text style={styles.offPlanLine}>
+              Pay yourself first. When the allowance lands, a slice goes to you before spending
+              starts, and Today only divides what is left.
+            </Text>
+            <TextLink label="Set your split" accent onPress={() => setPlanOpen(true)} />
+          </View>
+        )}
+      </Section>
+
+      <Section title="The habit">
+        <Text style={styles.habitLine}>{habitLine(snap.habit)}</Text>
+        <HabitBars habit={snap.habit} />
+        {kept > 0.009 ? (
+          <Text style={styles.habitMeta}>
+            {formatMoney(kept)} kept this month
+            {snap.streak > 1 ? ` · ${snap.streak} months in a row at 10% or more` : ''}
+          </Text>
+        ) : null}
+      </Section>
+
+      {snap.insight ? (
+        <Section title="Small change, big number">
+          <Text style={styles.insight}>
+            {snap.insight.category} spending runs about{' '}
+            {formatMoney(Math.round(snap.insight.monthly / 10) * 10)} a month. Keep a quarter of it,{' '}
+            {formatMoney(snap.insight.trimmed)}, every month and in ten years that is around{' '}
+            {formatMoneyCompact(snap.insight.tenYears)}.
+          </Text>
+        </Section>
+      ) : null}
 
       <Group title="The ladder">
         <Rung
@@ -150,7 +247,7 @@ export default function WealthScreen() {
               ? `${formatMoney(snap.monthly)} a month, on autopilot.`
               : ladder.habit.hasPlan
                 ? `${Math.min(ladder.habit.months, HABIT_MONTHS)} of ${HABIT_MONTHS} months in. Small and steady beats big and once.`
-                : 'A monthly amount on a holding. Small is fine; regular is the point.'
+                : 'A monthly amount into a holding. Small is fine; regular is the point.'
           }
         />
         <Rung
@@ -165,34 +262,38 @@ export default function WealthScreen() {
         />
       </Group>
 
-      {snap.holdings.length === 0 && snap.unassigned <= 0.009 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyBody}>
+      <Group title="Holdings" action="Add" onAction={() => setCreating(true)}>
+        {snap.holdings.length === 0 && snap.unassigned <= 0.009 ? (
+          <Text key="empty" style={styles.emptyBody}>
             A holding is wherever the slow money lives: a fund, an FD, gold. Pinch keeps count; your
             broker still does the buying.
           </Text>
-          <TextLink label="Add the first one" onPress={() => setCreating(true)} />
-        </View>
-      ) : (
-        <Group title="Holdings">
-          {snap.holdings.map((holding) => (
-            <HoldingRow key={holding.id} holding={holding} onPress={() => setManaging(holding)} />
-          ))}
-          {snap.unassigned > 0.009 ? (
-            <Row
-              title="Not in a holding"
-              subtitle="Logged before holdings existed"
-              right={<Text style={styles.value}>{formatMoney(snap.unassigned)}</Text>}
-            />
-          ) : null}
-        </Group>
-      )}
+        ) : (
+          [
+            ...snap.holdings.map((holding) => (
+              <HoldingRow key={holding.id} holding={holding} onPress={() => setManaging(holding)} />
+            )),
+            snap.unassigned > 0.009 ? (
+              <Row
+                key="unassigned"
+                title="Not in a holding"
+                subtitle="Logged before holdings existed"
+                right={<Text style={styles.value}>{formatMoney(snap.unassigned)}</Text>}
+              />
+            ) : null,
+          ]
+        )}
+      </Group>
 
       {ladder.current === 1 && snap.holdings.length > 0 ? (
         <Text style={styles.caution}>
           Investing before the cushion is full is how people end up selling at the worst moment.
         </Text>
       ) : null}
+
+      <Section title="Milestones">
+        <Milestones achieved={snap.milestones} next={snap.next} />
+      </Section>
 
       {snap.worth > 0.009 || snap.monthly > 0 ? (
         <Projection
@@ -212,6 +313,32 @@ export default function WealthScreen() {
         arithmetic, not advice.
       </Text>
 
+      <PlanSheet
+        visible={planOpen}
+        plan={snap.plan}
+        allowance={snap.allowance}
+        daysInPeriod={snap.periodDays}
+        onClose={() => setPlanOpen(false)}
+        onSave={async (plan) => {
+          await savePayPlan(plan);
+          setPlanOpen(false);
+          await load();
+        }}
+      />
+      <InvestSheet
+        visible={investFor !== null}
+        amount={investFor ?? 0}
+        holdings={snap.holdings}
+        onClose={() => setInvestFor(null)}
+        onSaved={async () => {
+          setInvestFor(null);
+          await load();
+        }}
+        onAddHolding={() => {
+          setInvestFor(null);
+          setCreating(true);
+        }}
+      />
       <HoldingSheet
         visible={creating}
         holding={null}
@@ -241,6 +368,17 @@ export default function WealthScreen() {
       />
     </Screen>
   );
+}
+
+/** The line under net worth: which way it moved, said kindly. */
+function netWorthLine(now: number, lastMonth: number | null): string {
+  if (lastMonth === null) return 'The first mark on the chart. Next month gives it a direction.';
+  const diff = now - lastMonth;
+  if (diff > 0.5)
+    return `Up ${formatMoney(diff)} since last month. That is the habit, compounding.`;
+  if (diff < -0.5)
+    return `Down ${formatMoney(-diff)} since last month. One month is weather, not climate.`;
+  return 'Level with last month. Holding steady counts.';
 }
 
 // ---------------------------------------------------------------------------
@@ -757,8 +895,12 @@ const styles = StyleSheet.create({
   rungBar: { marginTop: 6 },
   rungAction: { ...typography.caption, color: palette.accent, marginTop: 2 },
 
-  empty: { gap: spacing.md, paddingVertical: spacing.lg },
-  emptyBody: { ...typography.body, color: palette.textSecondary },
+  emptyBody: { ...typography.body, color: palette.textSecondary, paddingVertical: spacing.md },
+  offPlan: { gap: spacing.md },
+  offPlanLine: { ...typography.body, color: palette.textPrimary, lineHeight: 22 },
+  habitLine: { ...typography.body, color: palette.textPrimary, lineHeight: 22 },
+  habitMeta: { ...typography.caption, color: palette.textMuted, marginTop: spacing.sm },
+  insight: { ...typography.body, color: palette.textPrimary, lineHeight: 22 },
 
   holdingRight: { alignItems: 'flex-end', gap: 2 },
   change: { ...typography.caption, color: palette.textMuted },
