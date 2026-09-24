@@ -10,9 +10,21 @@ import { getBudgetSnapshot } from '../services/budgetService';
 import { getMonthlyAllowance } from '../settings/settingsStore';
 import { formatMoney } from '../utils/format';
 import { layer, palette, radii, spacing, typography } from '../theme/theme';
-import { Button, Card, CardTitle, Chip, EmptyState, Field, Loading, ProgressBar, Screen, ScreenTitle, Sheet } from '../components/ui';
+import {
+  Button,
+  Card,
+  CardTitle,
+  Chip,
+  Field,
+  Group,
+  Hero,
+  Loading,
+  ProgressBar,
+  Screen,
+  Sheet,
+  TopBar,
+} from '../components/ui';
 import Icon, { GOAL_ICONS } from '../components/Icon';
-import { NamedCover } from '../components/Cover';
 import { AnimatedMoney } from '../components/motion';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -21,7 +33,7 @@ function monthYear(date: Date): string {
   return date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
 }
 
-export default function GoalsScreen() {
+export default function GoalsScreen({ top }: { top?: React.ReactNode } = {}) {
   const [goals, setGoals] = useState<GoalProgress[] | null>(null);
   const [daysRemaining, setDaysRemaining] = useState(30);
   const [reserveCapped, setReserveCapped] = useState(false);
@@ -81,71 +93,59 @@ export default function GoalsScreen() {
   );
 
   return (
-    <Screen refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.textSecondary} />}>
-      <ScreenTitle
-        title="Savings"
-        subtitle="Saved first, spent after"
+    <Screen
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={palette.textSecondary}
+        />
+      }
+    >
+      <TopBar
+        left={top ?? 'Saving'}
         action={{ label: 'New goal', onPress: () => setCreateVisible(true) }}
       />
 
-      {/* Total saved is the hero, the way Today leads with one number: it is
-          the figure that grows, and the one worth coming back to see. */}
-      {goals.length > 0 ? (
-        <View style={styles.hero}>
-          <Text style={styles.heroLabel}>Saved so far</Text>
-          <AnimatedMoney
-            amount={totalSaved}
-            style={styles.heroAmount}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-          />
-          <Text style={styles.reserveNote}>
-            {formatMoney(totalReserved)} held back from spending this period
+      {goals.length === 0 ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>Nothing saved for yet.</Text>
+          <Text style={styles.emptyBody}>
+            Pick something you want. Pinch sets a little aside each day, before you can spend it.
           </Text>
+        </View>
+      ) : (
+        <>
+          <Hero
+            amount={totalSaved}
+            label="saved so far"
+            line={savingLine(goals)}
+            meta={`${formatMoney(totalReserved)} set aside this month${
+              totalInvested > 0.009 ? ` · ${formatMoney(totalInvested)} invested` : ''
+            }`}
+          />
           {reserveCapped ? (
-            <Text style={styles.reserveCapped}>
-              Goals asked for over half your allowance, so they're paced slower. Lower a target
-              or extend a deadline.
+            <Text style={styles.capped}>
+              Your goals wanted more than half the allowance, so Pinch is pacing them slower.
             </Text>
           ) : null}
-        </View>
-      ) : null}
 
-      {totalInvested > 0.009 ? (
-        <Card>
-          <Text style={styles.reserveLabel}>Invested so far</Text>
-          <Text style={[styles.reserveAmount, { color: palette.accent }]}>
-            {formatMoney(totalInvested)}
-          </Text>
-          <Text style={styles.reserveNote}>
-            What you've put in, not what it's worth today.
-          </Text>
-        </Card>
-      ) : null}
-
-      {goals.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon="goals"
-            title="No goals yet"
-            body="A goal comes out of your daily number first, so it actually gets saved."
-          />
-        </Card>
-      ) : (
-        goals.map((goal) => (
-          <GoalCard
-            key={goal.id}
-            goal={goal}
-            daysRemaining={daysRemaining}
-            isRoundUp={roundUpGoal === goal.id}
-            onOpen={() => setContributeTo(goal)}
-            onToggleRoundUp={async () => {
-              const next = roundUpGoal === goal.id ? null : goal.id;
-              await setRoundUpGoalId(next);
-              setRoundUpGoal(next);
-            }}
-          />
-        ))
+          <Group title="Goals">
+            {goals.map((goal) => (
+              <GoalRow
+                key={goal.id}
+                goal={goal}
+                isRoundUp={roundUpGoal === goal.id}
+                onOpen={() => setContributeTo(goal)}
+                onToggleRoundUp={async () => {
+                  const next = roundUpGoal === goal.id ? null : goal.id;
+                  await setRoundUpGoalId(next);
+                  setRoundUpGoal(next);
+                }}
+              />
+            ))}
+          </Group>
+        </>
       )}
 
       <CreateGoalSheet
@@ -169,15 +169,33 @@ export default function GoalsScreen() {
   );
 }
 
-function GoalCard({
+/** The line under the total: how the goals are doing, in one kind sentence. */
+function savingLine(goals: GoalProgress[]): string {
+  const open = goals.filter((g) => !g.isComplete);
+  if (open.length === 0) return 'Everything funded. Treat yourself, carefully.';
+  const behind = open.filter(
+    (g) => goalTrackingStatus(g.savedAmount, g.targetAmount, g.createdAt, g.deadline) === 'BEHIND'
+  );
+  if (behind.length > 0) {
+    return behind.length === 1
+      ? `${behind[0].name} could use a little attention.`
+      : `${behind.length} goals could use a little attention.`;
+  }
+  const closest = [...open].sort((a, b) => b.fraction - a.fraction)[0];
+  return `${closest.name} is ${Math.round(closest.fraction * 100)}% there. Steady on.`;
+}
+
+/**
+ * One goal as a row: name and percentage, a hairline of progress, and one
+ * line of how it is going. Tap for money in or out.
+ */
+function GoalRow({
   goal,
-  daysRemaining,
   isRoundUp,
   onOpen,
   onToggleRoundUp,
 }: {
   goal: GoalProgress;
-  daysRemaining: number;
   isRoundUp: boolean;
   onOpen: () => void;
   onToggleRoundUp: () => void;
@@ -188,63 +206,68 @@ function GoalCard({
   const perDay =
     daysLeft && daysLeft > 0 ? goal.remainingAmount / daysLeft : goal.remainingAmount / 30;
   const overdue = daysLeft !== null && daysLeft < 0 && !goal.isComplete;
-
   const status = goal.isComplete
     ? null
     : goalTrackingStatus(goal.savedAmount, goal.targetAmount, goal.createdAt, goal.deadline);
-  const projectedCompletion =
+  const projected =
     !goal.deadline && !goal.isComplete
       ? estimatedCompletionDate(goal.savedAmount, goal.targetAmount, goal.createdAt)
       : null;
 
-  return (
-    <Card onPress={onOpen}>
-      <View style={styles.goalHead}>
-        <NamedCover name={goal.name} icon={goal.emoji} size={56} fill={goal.fraction} />
-        <View style={styles.goalHeadText}>
-          <Text style={styles.goalName}>{goal.name}</Text>
-          <Text style={styles.goalMeta}>
-            {formatMoney(goal.savedAmount)} of {formatMoney(goal.targetAmount)}
-            {daysLeft !== null
-              ? overdue
-                ? ` · ${Math.abs(daysLeft)}d overdue`
-                : ` · ${daysLeft}d left`
-              : ''}
-          </Text>
-        </View>
-        <Text style={styles.goalPercent}>{Math.round(goal.fraction * 100)}%</Text>
-      </View>
+  const detail = goal.isComplete
+    ? 'Done. All of it.'
+    : overdue
+      ? `Deadline passed ${Math.abs(daysLeft!)} days ago. No judgement.`
+      : [
+          status === 'BEHIND' ? 'A bit behind' : status === 'ON_TRACK' ? 'On track' : null,
+          `${formatMoney(perDay)} a day`,
+          daysLeft !== null
+            ? `${daysLeft} days left`
+            : projected
+              ? `by ${monthYear(projected)}`
+              : null,
+        ]
+          .filter(Boolean)
+          .join(' · ');
 
+  return (
+    <Pressable
+      onPress={onOpen}
+      accessibilityRole="button"
+      accessibilityLabel={`${goal.name}, ${formatMoney(goal.savedAmount)} of ${formatMoney(goal.targetAmount)}`}
+      style={({ pressed }) => [styles.goal, pressed && styles.pressed]}
+    >
+      <View style={styles.goalHead}>
+        <Text style={styles.goalName} numberOfLines={1}>
+          {goal.name}
+        </Text>
+        <Text style={styles.goalAmount}>
+          {formatMoney(goal.savedAmount)}
+          <Text style={styles.goalOf}> / {formatMoney(goal.targetAmount)}</Text>
+        </Text>
+      </View>
       <ProgressBar
         fraction={goal.fraction}
-        color={overdue || status === 'BEHIND' ? palette.warning : palette.accent}
-        height={6}
+        color={overdue || status === 'BEHIND' ? palette.warning : palette.textPrimary}
+        height={2}
       />
-
-      {goal.isComplete ? (
-        <Text style={styles.goalDone}>Fully funded. Go get it.</Text>
-      ) : (
-        <Text style={styles.goalPace}>
-          {status ? (
-            <Text style={status === 'BEHIND' ? styles.statusBehind : styles.statusOn}>
-              {status === 'ON_TRACK' ? 'On track' : 'Behind'}
-              {' · '}
-            </Text>
-          ) : null}
-          {formatMoney(perDay)}/day to finish{daysLeft !== null ? ' on time' : ''}
-          {projectedCompletion ? ` · by ${monthYear(projectedCompletion)}` : ''}
+      <View style={styles.goalFoot}>
+        <Text style={[styles.goalDetail, status === 'BEHIND' && { color: palette.warning }]}>
+          {detail}
         </Text>
-      )}
-
-      <View style={styles.goalActions}>
-        <Button label="Add money" icon="add" variant="tonal" size="small" onPress={onOpen} />
-        <Chip
-          label={isRoundUp ? 'Round-ups on' : 'Round-ups'}
-          selected={isRoundUp}
+        <Pressable
           onPress={onToggleRoundUp}
-        />
+          hitSlop={8}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: isRoundUp }}
+          accessibilityLabel="Round-ups"
+        >
+          <Text style={[styles.roundUp, isRoundUp && styles.roundUpOn]}>
+            {isRoundUp ? 'round-ups on' : 'round-ups'}
+          </Text>
+        </Pressable>
       </View>
-    </Card>
+    </Pressable>
   );
 }
 
@@ -294,7 +317,13 @@ function CreateGoalSheet({
     <Sheet visible={visible} onClose={onClose} title="New goal">
       <IconPicker value={icon} onChange={setIcon} />
       <Field label="What for" value={name} onChangeText={setName} placeholder="Laptop" />
-      <Field label="How much" value={target} onChangeText={setTarget} keyboardType="numeric" placeholder="45000" />
+      <Field
+        label="How much"
+        value={target}
+        onChangeText={setTarget}
+        keyboardType="numeric"
+        placeholder="45000"
+      />
       <Field
         label="In how many days"
         value={days}
@@ -303,7 +332,11 @@ function CreateGoalSheet({
         placeholder="180"
         hint="Optional. Blank paces it over 90 days."
       />
-      <Button label={saving ? 'Creating…' : 'Create goal'} onPress={save} disabled={!canSave || saving} />
+      <Button
+        label={saving ? 'Creating…' : 'Create goal'}
+        onPress={save}
+        disabled={!canSave || saving}
+      />
     </Sheet>
   );
 }
@@ -372,7 +405,9 @@ function ManageGoalSheet({
     setIcon(goal.emoji);
     setDays(
       goal.deadline
-        ? String(Math.max(0, Math.ceil((new Date(goal.deadline).getTime() - Date.now()) / MS_PER_DAY)))
+        ? String(
+            Math.max(0, Math.ceil((new Date(goal.deadline).getTime() - Date.now()) / MS_PER_DAY))
+          )
         : ''
     );
   }, [goal]);
@@ -512,37 +547,22 @@ function ManageGoalSheet({
 }
 
 const styles = StyleSheet.create({
-  hero: { paddingTop: spacing.xs, paddingBottom: spacing.xs },
-  heroLabel: { ...typography.heroLabel, color: palette.textSecondary },
-  heroAmount: {
-    ...typography.hero,
-    fontSize: 48,
-    lineHeight: 54,
-    letterSpacing: -1.5,
-    color: palette.textPrimary,
-    marginTop: 2,
-  },
-  reserveLabel: { ...typography.caption, color: palette.textSecondary },
-  reserveAmount: { ...typography.heroCompact, color: palette.textPrimary, marginTop: 2 },
-  reserveNote: { ...typography.caption, color: palette.textMuted, marginTop: spacing.xs, lineHeight: 17 },
-  reserveCapped: {
-    ...typography.caption,
-    color: palette.warning,
-    marginTop: spacing.sm,
-    lineHeight: 17,
-  },
-
-  goalHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
-  goalHeadText: { flex: 1 },
-  goalName: { ...typography.cardTitle, color: palette.textPrimary },
-  goalMeta: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
-  goalPercent: { ...typography.bodyBold, color: palette.textSecondary },
-  statusOn: { color: palette.accent, fontWeight: '600' },
-  statusBehind: { color: palette.warning, fontWeight: '600' },
-  goalPace: { ...typography.caption, color: palette.textSecondary, marginTop: spacing.sm },
-  goalDone: { ...typography.caption, color: palette.accent, marginTop: spacing.sm },
-  goalActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md },
+  pressed: { opacity: 0.6 },
   flex: { flex: 1 },
+  empty: { paddingVertical: spacing.xxl, gap: spacing.sm },
+  emptyTitle: { ...typography.quip, color: palette.textPrimary },
+  emptyBody: { ...typography.body, color: palette.textSecondary },
+  capped: { ...typography.caption, color: palette.warning, textAlign: 'center' },
+
+  goal: { paddingVertical: spacing.md, gap: 10 },
+  goalHead: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.md },
+  goalName: { ...typography.bodyBold, color: palette.textPrimary, flex: 1 },
+  goalAmount: { ...typography.body, color: palette.textPrimary },
+  goalOf: { color: palette.textMuted },
+  goalFoot: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  goalDetail: { ...typography.caption, color: palette.textMuted, flex: 1 },
+  roundUp: { ...typography.caption, color: palette.textMuted },
+  roundUpOn: { color: palette.accent },
 
   iconRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   iconChoice: {
@@ -555,7 +575,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.border,
   },
-  iconChoiceOn: { borderColor: palette.accent, backgroundColor: palette.accentMuted },
+  iconChoiceOn: { borderColor: palette.textPrimary, backgroundColor: palette.surfaceElevated },
   dangerNote: { ...typography.caption, color: palette.textMuted, textAlign: 'center' },
   contributeMeta: { ...typography.body, color: palette.textSecondary, textAlign: 'center' },
 });

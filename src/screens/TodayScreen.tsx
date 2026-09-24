@@ -1,5 +1,12 @@
 import React, { useCallback, useState } from 'react';
-import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { BudgetSnapshot, getBudgetSnapshot } from '../services/budgetService';
@@ -12,26 +19,17 @@ import {
 import { daysUntilBroke, shouldRaiseDiscrepancy } from '../math/budget';
 import { TransactionRow } from '../db/types';
 import { formatMoney, formatTime } from '../utils/format';
+import { accentForState, palette, spacing, typography } from '../theme/theme';
 import {
-  accentForState,
-  layer,
-  palette,
-  radii,
-  spacing,
-  typography,
-} from '../theme/theme';
-import {
-  Group,
   Button,
-  Card,
-  EmptyState,
+  Group,
   Loading,
-  ProgressBar,
   Row,
   Screen,
-  ScreenTitle,
+  Section,
+  SentenceRow,
+  TextLink,
 } from '../components/ui';
-import { CategoryCover } from '../components/Cover';
 import AddExpenseSheet from '../components/AddExpenseSheet';
 import SplitModal from '../components/SplitModal';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
@@ -43,14 +41,16 @@ import QuickReimburseSheet from '../components/QuickReimburseSheet';
 import BalanceCard from '../components/BalanceCard';
 import AffordSheet from '../components/AffordSheet';
 import WeekStrip, { WeekDay } from '../components/WeekStrip';
+import Ring from '../components/Ring';
 import { AnimatedMoney, FadeSlideIn } from '../components/motion';
-import Icon, { IconName } from '../components/Icon';
+import Icon from '../components/Icon';
 
 /** Below this, "for someone?" is noise — a solo coffee is never a split. */
 const REIMBURSE_PROMPT_MIN = 200;
 
 export default function TodayScreen() {
   const navigation = useNavigation<any>();
+  const { height: windowHeight } = useWindowDimensions();
   const [snapshot, setSnapshot] = useState<BudgetSnapshot | null>(null);
   const [today, setToday] = useState<TransactionRow[]>([]);
   const [balance, setBalance] = useState<Awaited<ReturnType<typeof db.getBalanceState>> | null>(
@@ -123,14 +123,15 @@ export default function TodayScreen() {
     );
   }
 
-  const accent = accentForState(snapshot.today.state);
+  const tone = accentForState(snapshot.today.state);
   const brokeIn = daysUntilBroke(snapshot.budget.spendablePool, snapshot.avgDailyBurn);
   const runsOutEarly = brokeIn !== null && brokeIn < snapshot.daysRemaining;
-  // availableBudget is already net of what was spent; the bar shows how much
-  // of the period's spendable money is gone.
   const periodLeft = Math.max(0, snapshot.availableBudget);
-  const spentSoFar = snapshot.budget.grossSpend;
-  const periodUsed = spentSoFar + periodLeft > 0 ? spentSoFar / (spentSoFar + periodLeft) : 0;
+  const weekTotal = week.reduce((sum, d) => sum + d.total, 0);
+  const worstDay = week.reduce<WeekDay | null>(
+    (worst, d) => (!d.isFuture && d.total > (worst?.total ?? 0) ? d : worst),
+    null
+  );
 
   return (
     <Screen
@@ -142,271 +143,181 @@ export default function TodayScreen() {
         />
       }
     >
-      <View style={styles.headerRow}>
-        <View style={styles.flex}>
-          <ScreenTitle
-            title="Today"
-            subtitle={`${formatDayMonth(snapshot.periodStart)} – ${formatDayMonth(
-              lastDay(snapshot.periodEnd)
-            )} · ${snapshot.daysRemaining} days left`}
-          />
-        </View>
-        <Pressable
-          style={({ pressed }) => [styles.gear, pressed && styles.pressed]}
-          onPress={() => navigation.navigate('Settings')}
-          accessibilityRole="button"
-          accessibilityLabel="Settings"
-          hitSlop={12}
-        >
-          <Icon name="settings" size={20} color={palette.textSecondary} />
-        </Pressable>
-      </View>
-
-      {snapshot.budget.spendablePool < 0 ? (
-        <Card style={styles.troubleBanner}>
-          <View style={styles.troubleHead}>
-            <Icon name="warning" size={16} color={palette.warning} />
-            <Text style={styles.troubleTitle}>Your numbers look wrong</Text>
-          </View>
-          <Text style={styles.troubleBody}>
-            {formatMoney(-snapshot.budget.spendablePool)} past your{' '}
-            {formatMoney(snapshot.budget.allowance)} allowance. Usually a message was counted that
-            wasn't a real payment.
-          </Text>
-          <View style={styles.troubleActions}>
-            <Button
-              label="See what was counted"
-              variant="secondary"
-              size="small"
-              onPress={() => navigation.navigate('Transactions')}
-              style={styles.flex}
-            />
-            <Button
-              label="Start fresh"
-              variant="secondary"
-              size="small"
-              onPress={() => setFreshVisible(true)}
-              style={styles.flex}
-            />
-          </View>
-        </Card>
-      ) : null}
-
-      {/* The number. Everything else on this screen explains it — so it comes
-          first, on the page itself rather than in a box, with room around it.
-          The one warning that changes what it means (over today, or running
-          out before the period ends) sits right under it, not at the bottom
-          of the screen. */}
-      <FadeSlideIn>
-        <Pressable
-          onPress={() => setBreakdownVisible(true)}
-          accessibilityRole="button"
-          accessibilityLabel={`Safe to spend today, ${formatMoney(Math.max(0, snapshot.today.remainingToday))}. How this is worked out`}
-          style={({ pressed }) => [styles.hero, pressed && styles.heroPressed]}
-        >
-          <Text style={[styles.heroLabel, { color: accent }]}>Safe to spend today</Text>
-          <AnimatedMoney
-            amount={Math.max(0, snapshot.today.remainingToday)}
-            style={[styles.heroAmount, { color: accent }]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-          />
-          {week.length === 7 ? (
-            <WeekStrip days={week} limit={snapshot.today.dailyLimit} />
-          ) : (
-            <View style={styles.heroBar}>
-              <ProgressBar fraction={snapshot.today.usedFraction} color={accent} height={4} />
-            </View>
-          )}
-          <View style={styles.heroMetaRow}>
-            <Text style={styles.heroSub}>
-              {formatMoney(snapshot.today.spentToday)} of {formatMoney(snapshot.today.dailyLimit)}{' '}
-              used
-            </Text>
-            <View style={styles.heroExplainRow}>
-              <Text style={styles.heroExplain}>How</Text>
-              <Icon name="chevronRight" size={14} color={palette.textSecondary} />
-            </View>
-          </View>
-          {snapshot.today.state === 'OVER' ? (
-            <Note tone={palette.danger} icon="warning">
-              {formatMoney(-snapshot.today.remainingToday)} over today. Tomorrow starts fresh.
-            </Note>
-          ) : runsOutEarly ? (
-            <Note tone={palette.warning} icon="clock">
-              At this pace, money lasts {brokeIn} {brokeIn === 1 ? 'day' : 'days'}, not{' '}
-              {snapshot.daysRemaining}.
-            </Note>
-          ) : snapshot.streakDays > 1 ? (
-            <Note tone={palette.warning} icon="streak">
-              {snapshot.streakDays} days under budget in a row
-            </Note>
-          ) : null}
-        </Pressable>
-      </FadeSlideIn>
-
-      <FadeSlideIn delay={35} style={styles.actionRow}>
-        <Button
-          label="Add expense"
-          icon="add"
-          onPress={() => {
-            setAddThenSplit(false);
-            setAddVisible(true);
-          }}
-          style={styles.flex}
-        />
-        <Button
-          label="Split a bill"
-          icon="split"
-          variant="tonal"
-          onPress={() => {
-            setAddThenSplit(true);
-            setAddVisible(true);
-          }}
-          style={styles.flex}
-        />
-      </FadeSlideIn>
-
-      {snapshot.pendingCaptures > 0 ? (
-        <FadeSlideIn delay={60}>
+      {/* The first screenful is one number and one line. Everything else is
+          a scroll away — you came to learn one thing. */}
+      <View style={[styles.first, { minHeight: Math.round(windowHeight * 0.62) }]}>
+        <View style={styles.topBar}>
+          <Text style={styles.date}>{longDate(new Date())}</Text>
           <Pressable
-            style={({ pressed }) => [styles.reviewRow, pressed && styles.pressed]}
-            onPress={() => navigation.navigate('Review')}
+            onPress={() => navigation.navigate('Settings')}
             accessibilityRole="button"
-            accessibilityLabel={`${snapshot.pendingCaptures} messages to review`}
+            accessibilityLabel="Settings"
+            hitSlop={14}
+            style={({ pressed }) => pressed && styles.pressed}
           >
-            <View style={styles.reviewBadge}>
-              <Text style={styles.reviewCount}>{snapshot.pendingCaptures}</Text>
-            </View>
-            <View style={styles.flex}>
-              <Text style={styles.reviewTitle}>
-                {snapshot.pendingCaptures === 1 ? 'Payment' : 'Payments'} to check
-              </Text>
-              <Text style={styles.reviewSub}>Pinch wasn't sure — one tap each</Text>
-            </View>
-            <Icon name="chevronRight" size={18} color={palette.textSecondary} />
+            <Icon name="settings" size={20} color={palette.textMuted} />
           </Pressable>
-        </FadeSlideIn>
-      ) : null}
+        </View>
 
-      {/* The rest of the money picture, as rows of one list rather than a
-          card each: the period's budget, the bank, and the question people
-          open a budget app with. */}
-      <FadeSlideIn delay={90}>
-        <Group title="This period">
+        {snapshot.budget.spendablePool < 0 ? (
+          <View style={styles.trouble}>
+            <Text style={styles.troubleText}>
+              The numbers say you're {formatMoney(-snapshot.budget.spendablePool)} past your
+              allowance. More likely, something got counted that shouldn't have.
+            </Text>
+            <View style={styles.inlineActions}>
+              <TextLink
+                label="See what counted"
+                onPress={() => navigation.navigate('Transactions')}
+              />
+              <TextLink label="Start fresh" onPress={() => setFreshVisible(true)} />
+            </View>
+          </View>
+        ) : null}
+
+        <FadeSlideIn style={styles.hero}>
           <Pressable
-            key="available"
-            style={({ pressed }) => [styles.moneyRow, pressed && styles.pressed]}
             onPress={() => setBreakdownVisible(true)}
             accessibilityRole="button"
-            accessibilityLabel={`Left this period, ${formatMoney(periodLeft)}`}
+            accessibilityLabel={`${formatMoney(Math.max(0, snapshot.today.remainingToday))} left to spend today. How this is worked out`}
+            style={({ pressed }) => pressed && styles.heroPressed}
           >
-            <View style={styles.moneyHead}>
-              <View style={styles.flex}>
-                <Text style={styles.moneyTitle}>Left this period</Text>
-                <Text style={styles.moneyMeta} numberOfLines={1}>
-                  {snapshot.protectedMoney > 0.009
-                    ? `${formatMoney(snapshot.protectedMoney)} set aside for goals & outings`
-                    : `of ${formatMoney(snapshot.availableBudget)}`}
-                </Text>
-              </View>
-              <Text style={styles.moneyValue}>{formatMoney(periodLeft)}</Text>
-            </View>
-            <ProgressBar fraction={periodUsed} color={palette.textSecondary} height={4} />
-          </Pressable>
-
-          {balance ? <BalanceCard key="bank" state={balance} onChanged={load} /> : null}
-
-          {showDiscrepancy && snapshot.balanceConsistency ? (
-            <Pressable
-              key="gap"
-              style={({ pressed }) => [styles.gapRow, pressed && styles.pressed]}
-              onPress={() => setReconcileVisible(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Account for the missing money"
-            >
-              <Icon name="info" size={16} color={palette.warning} />
-              <Text style={styles.gapText}>
-                {snapshot.balanceConsistency.discrepancy > 0
-                  ? `Bank shows ${formatMoney(snapshot.balanceConsistency.discrepancy)} more than Pinch`
-                  : `Bank shows ${formatMoney(-snapshot.balanceConsistency.discrepancy)} less — a payment may be missing`}
-              </Text>
-              <Text style={styles.gapAction}>Fix</Text>
-            </Pressable>
-          ) : null}
-
-          <Pressable
-            key="afford"
-            style={({ pressed }) => [styles.affordRow, pressed && styles.pressed]}
-            onPress={() => setAffordVisible(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Can I afford it?"
-          >
-            <Text style={styles.moneyTitle}>Can I afford it?</Text>
-            <Icon name="chevronRight" size={18} color={palette.textSecondary} />
-          </Pressable>
-        </Group>
-      </FadeSlideIn>
-
-      <FadeSlideIn delay={140}>
-        <Group
-          title="Today's spending"
-          action="See all"
-          onAction={() => navigation.navigate('Transactions')}
-        >
-          {today.length === 0 ? (
-            <EmptyState
-              icon="empty"
-              title="Nothing yet today"
-              body="Payments show up here on their own."
-            />
-          ) : (
-            today.map((tx) => {
-              const owed = owedByTx.get(tx.id);
-              // Only spending can be owed back, and only once. The prompt is
-              // kept for amounts big enough to plausibly have been for more
-              // than one person — nobody splits a ₹40 chai.
-              const canReimburse =
-                tx.kind === 'SPEND' && owed === undefined && tx.amount >= REIMBURSE_PROMPT_MIN;
-
-              return (
-                <Row
-                  key={tx.id}
-                  left={<CategoryCover category={tx.category} />}
-                  title={tx.merchant}
-                  subtitle={`${tx.category ?? 'Uncategorised'} · ${formatTime(tx.occurred_at)}`}
-                  onPress={() => setDetailFor(tx)}
-                  right={
-                    <View style={styles.txRight}>
-                      <Text
-                        style={[
-                          styles.txAmount,
-                          tx.direction === 'CREDIT' && { color: palette.accent },
-                        ]}
-                      >
-                        {tx.direction === 'CREDIT' ? '+' : '−'}
-                        {formatMoney(tx.amount)}
-                      </Text>
-                      {owed !== undefined ? (
-                        <Text style={styles.txOwed}>{formatMoney(owed)} back</Text>
-                      ) : canReimburse ? (
-                        <Pressable
-                          onPress={() => setReimburseFor(tx)}
-                          hitSlop={8}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Say who ${tx.merchant} was for`}
-                        >
-                          <Text style={styles.txReimburse}>For someone?</Text>
-                        </Pressable>
-                      ) : null}
-                    </View>
-                  }
+            <View style={styles.ringWrap}>
+              <Ring fraction={1 - snapshot.today.usedFraction} color={tone}>
+                <AnimatedMoney
+                  amount={Math.max(0, snapshot.today.remainingToday)}
+                  style={styles.numeral}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
                 />
-              );
-            })
-          )}
-        </Group>
-      </FadeSlideIn>
+                <Text style={styles.ringLabel}>left today</Text>
+              </Ring>
+            </View>
+            <Text style={styles.quip}>{todayQuip(snapshot, runsOutEarly ? brokeIn : null)}</Text>
+            <Text style={styles.heroMeta}>
+              {formatMoney(snapshot.today.spentToday)} of {formatMoney(snapshot.today.dailyLimit)}{' '}
+              gone · {snapshot.daysRemaining} days to payday
+            </Text>
+          </Pressable>
+        </FadeSlideIn>
+
+        <View style={styles.firstFooter}>
+          {snapshot.pendingCaptures > 0 ? (
+            <TextLink
+              label={
+                snapshot.pendingCaptures === 1
+                  ? '1 payment wants a word'
+                  : `${snapshot.pendingCaptures} payments want a word`
+              }
+              onPress={() => navigation.navigate('Review')}
+              accent
+            />
+          ) : null}
+          <View style={styles.actionRow}>
+            <Button
+              label="Add a spend"
+              icon="add"
+              variant="outlined"
+              size="small"
+              onPress={() => {
+                setAddThenSplit(false);
+                setAddVisible(true);
+              }}
+            />
+            <Text style={styles.scrollHint}>
+              {today.length === 0
+                ? 'nothing below yet'
+                : `${today.length} ${today.length === 1 ? 'spend' : 'spends'} below ↓`}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      <Group title="Today">
+        {today.length === 0 ? (
+          <Text style={styles.empty}>Nothing yet. Frugal, or forgetful?</Text>
+        ) : (
+          today.map((tx) => {
+            const owed = owedByTx.get(tx.id);
+            // Only spending can be owed back, and only once. Kept for amounts
+            // big enough to plausibly have been for more than one person.
+            const canReimburse =
+              tx.kind === 'SPEND' && owed === undefined && tx.amount >= REIMBURSE_PROMPT_MIN;
+            return (
+              <Row
+                key={tx.id}
+                title={tx.merchant}
+                subtitle={`${formatTime(tx.occurred_at)} · ${tx.category ?? 'no category'}`}
+                onPress={() => setDetailFor(tx)}
+                right={
+                  <View style={styles.txRight}>
+                    <Text style={styles.txAmount}>
+                      {tx.direction === 'CREDIT' ? '+' : ''}
+                      {formatMoney(tx.amount)}
+                    </Text>
+                    {owed !== undefined ? (
+                      <Text style={styles.txNote}>{formatMoney(owed)} coming back</Text>
+                    ) : canReimburse ? (
+                      <Pressable
+                        onPress={() => setReimburseFor(tx)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Say who ${tx.merchant} was for`}
+                      >
+                        <Text style={styles.txNote}>for someone?</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                }
+              />
+            );
+          })
+        )}
+      </Group>
+
+      {week.length === 7 ? (
+        <Section title="This week">
+          <Text style={styles.sentence}>
+            {formatMoney(weekTotal)} so far
+            {worstDay && worstDay.total > snapshot.today.dailyLimit
+              ? `. ${FULL_DAYS[week.indexOf(worstDay)]} did most of the damage.`
+              : weekTotal > 0
+                ? '. Nothing dramatic.'
+                : '. Quiet week.'}
+          </Text>
+          <WeekStrip days={week} limit={snapshot.today.dailyLimit} />
+        </Section>
+      ) : null}
+
+      <Group title="The month">
+        <SentenceRow
+          onPress={() => setBreakdownVisible(true)}
+          text={`${formatMoney(periodLeft)} left for ${snapshot.daysRemaining} days`}
+        />
+        {snapshot.protectedMoney > 0.009 ? (
+          <SentenceRow
+            onPress={() => navigation.navigate('Plans')}
+            text={`${formatMoney(snapshot.protectedMoney)} already spoken for by plans`}
+          />
+        ) : null}
+        {balance ? <BalanceCard state={balance} onChanged={load} /> : null}
+        {showDiscrepancy && snapshot.balanceConsistency ? (
+          <SentenceRow
+            onPress={() => setReconcileVisible(true)}
+            tone={palette.warning}
+            text={
+              snapshot.balanceConsistency.discrepancy > 0
+                ? `The bank has ${formatMoney(snapshot.balanceConsistency.discrepancy)} Pinch can't explain`
+                : `The bank has ${formatMoney(-snapshot.balanceConsistency.discrepancy)} less than it should`
+            }
+          />
+        ) : null}
+        <SentenceRow onPress={() => setAffordVisible(true)} text="Can I afford it?" />
+      </Group>
+
+      <View style={styles.more}>
+        <TextLink label="The long version" onPress={() => navigation.navigate('Insights')} />
+      </View>
 
       <AffordSheet
         visible={affordVisible}
@@ -520,14 +431,48 @@ export default function TodayScreen() {
   );
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+const FULL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-function formatDayMonth(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+/** "Thursday, 24 September" */
+function longDate(d: Date): string {
+  return `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
-const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+/**
+ * The one line under the number. Dry, short, and always true: every
+ * branch is decided by the same figures the number is, so the joke never
+ * contradicts the maths.
+ */
+export function todayQuip(snapshot: BudgetSnapshot, runsOutIn: number | null): string {
+  const t = snapshot.today;
+  if (t.state === 'OVER')
+    return `A little over, by ${formatMoney(-t.remainingToday)}. Tomorrow resets.`;
+  if (runsOutIn !== null) {
+    return runsOutIn <= 0
+      ? 'Running on fumes this month. Easy does it.'
+      : `At this pace it lasts ${runsOutIn} more ${runsOutIn === 1 ? 'day' : 'days'}, not ${snapshot.daysRemaining}. Easy does it.`;
+  }
+  if (t.spentToday <= 0) return 'Nothing spent yet. Nice and quiet.';
+  if (t.state === 'CLOSE') return 'Almost at today’s limit. Home stretch.';
+  if (snapshot.streakDays >= 3) return `${snapshot.streakDays} days under budget. Lovely.`;
+  return 'Going well. Keep it steady.';
+}
 
 /**
  * Monday to Sunday of the current week, each day's spend summed over the
@@ -554,114 +499,56 @@ async function loadWeek(todayStart: Date): Promise<WeekDay[]> {
   );
 }
 
-/** periodEnd is exclusive (midnight after the last day); name the last day itself. */
-function lastDay(iso: string): string {
-  return new Date(new Date(iso).getTime() - 1).toISOString();
-}
-
-/** One line under the hero that changes what the number means. */
-function Note({
-  tone,
-  icon,
-  children,
-}: {
-  tone: string;
-  icon: IconName;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.note}>
-      <Icon name={icon} size={14} color={tone} />
-      <Text style={[styles.noteText, { color: tone }]}>{children}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  gear: {
-    marginTop: 2,
-    width: 40,
-    height: 40,
-    borderRadius: radii.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: palette.surface,
-  },
   pressed: { opacity: 0.6 },
-  flex: { flex: 1 },
+  first: { justifyContent: 'space-between', gap: spacing.lg },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  date: { ...typography.overline, color: palette.textMuted },
 
-  // No container: the figure sits on the page, left-aligned like the title
-  // above it, and wins by size and space alone.
-  hero: { paddingTop: spacing.sm, paddingBottom: spacing.xs, borderRadius: radii.card },
+  hero: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  ringWrap: { alignItems: 'center' },
+  ringLabel: { ...typography.caption, color: palette.textMuted, marginTop: 2 },
   heroPressed: { opacity: 0.72 },
-  heroLabel: { ...typography.heroLabel },
-  heroAmount: { ...typography.hero, fontSize: 56, lineHeight: 62, letterSpacing: -2, marginTop: 2 },
-  heroBar: { width: '100%', marginTop: spacing.md },
-  heroMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  numeral: {
+    ...typography.numeral,
+    fontSize: 68,
+    lineHeight: 76,
+    letterSpacing: -3,
+    color: palette.textPrimary,
+  },
+  quip: {
+    ...typography.quip,
+    fontSize: 19,
+    lineHeight: 26,
+    color: palette.textPrimary,
+    marginTop: spacing.lg,
+    textAlign: 'center',
+  },
+  heroMeta: {
+    ...typography.caption,
+    color: palette.textMuted,
     marginTop: spacing.sm,
+    textAlign: 'center',
   },
-  heroSub: { ...typography.caption, color: palette.textSecondary },
-  heroExplainRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  heroExplain: { ...typography.caption, fontWeight: '600', color: palette.textSecondary },
-  note: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.md },
-  noteText: { ...typography.caption, fontWeight: '600', flex: 1 },
 
-  actionRow: { flexDirection: 'row', gap: spacing.sm },
-
-  reviewRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: palette.surface,
-    borderRadius: radii.card,
-    paddingVertical: 12,
-    paddingHorizontal: spacing.md,
-  },
-  reviewBadge: {
-    minWidth: 28,
-    height: 28,
-    paddingHorizontal: 6,
-    borderRadius: radii.pill,
-    backgroundColor: palette.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  reviewCount: { ...typography.bodyBold, fontSize: 14, color: palette.onAccent },
-  reviewTitle: { ...typography.bodyBold, color: palette.textPrimary },
-  reviewSub: { ...typography.caption, color: palette.textSecondary },
-
-  moneyRow: { paddingVertical: 14, gap: spacing.sm },
-  moneyHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  moneyTitle: { ...typography.bodyBold, color: palette.textPrimary },
-  moneyMeta: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
-  moneyValue: { ...typography.cardTitle, color: palette.textPrimary },
-  gapRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 14 },
-  gapText: { ...typography.caption, color: palette.warning, flex: 1 },
-  gapAction: { ...typography.caption, fontWeight: '700', color: palette.textPrimary },
-  affordRow: {
+  firstFooter: { gap: spacing.lg },
+  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
+    gap: spacing.md,
   },
+  scrollHint: { ...typography.caption, color: palette.textMuted },
 
+  trouble: { gap: spacing.sm },
+  troubleText: { ...typography.body, color: palette.warning },
+  inlineActions: { flexDirection: 'row', gap: spacing.lg },
+
+  empty: { ...typography.body, color: palette.textMuted, paddingVertical: spacing.md },
   txRight: { alignItems: 'flex-end', gap: 1 },
-  txAmount: { ...typography.bodyBold, color: palette.textPrimary },
-  txOwed: { ...typography.caption, color: palette.accent },
-  txReimburse: { ...typography.caption, color: palette.textMuted },
+  txAmount: { ...typography.body, color: palette.textPrimary },
+  txNote: { ...typography.caption, color: palette.textMuted },
 
-  // Amber stays: this is a status, and the colour is the fastest read on
-  // the card. It is the container that becomes tonal, not the meaning.
-  troubleBanner: {
-    backgroundColor: layer(palette.warning, 0.12),
-    gap: spacing.sm,
-  },
-  troubleHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  troubleTitle: { ...typography.cardTitle, color: palette.warning },
-  troubleBody: { ...typography.body, color: palette.textSecondary, lineHeight: 20 },
-  troubleActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  sentence: { ...typography.quip, fontSize: 19, lineHeight: 26, color: palette.textPrimary },
+  more: { paddingTop: spacing.sm },
 });

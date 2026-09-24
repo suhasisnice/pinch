@@ -1,12 +1,17 @@
 import React from 'react';
-import { Platform } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 
-import { NavigationContainer, DarkTheme, LinkingOptions, NavigatorScreenParams, Theme } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  DarkTheme,
+  LinkingOptions,
+  NavigatorScreenParams,
+  Theme,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import TodayScreen from '../screens/TodayScreen';
-import OutingsScreen from '../screens/OutingsScreen';
-import GoalsScreen from '../screens/GoalsScreen';
+import PlansScreen from '../screens/PlansScreen';
 import SquadScreen from '../screens/SquadScreen';
 import InsightsScreen from '../screens/InsightsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -24,14 +29,19 @@ export type RootStackParamList = {
   Transactions: { category?: string } | undefined;
   /** Last week, as full-screen slides. */
   Recap: undefined;
+  /** The long version of Today — reached from the bottom of Today, not a tab. */
+  Insights: undefined;
 };
 
+/**
+ * Three tabs (0.9.14), down from five: one thing per screen. Insights folded
+ * into Today; savings and outings share Plans. Route name "Squad" is kept
+ * internally; the label is "People".
+ */
 export type TabParamList = {
   Today: undefined;
-  Outings: undefined;
-  Goals: undefined;
+  Plans: undefined;
   Squad: undefined;
-  Insights: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -54,10 +64,8 @@ const pinchTheme: Theme = {
 // on every Android skin and none of them are designed to sit in a tab bar.
 const TAB_ICONS: Record<keyof TabParamList, IconName> = {
   Today: 'today',
-  Outings: 'outings',
-  Goals: 'goals',
+  Plans: 'goals',
   Squad: 'squad',
-  Insights: 'insights',
 };
 
 function Tabs() {
@@ -68,13 +76,14 @@ function Tabs() {
         tabBarActiveTintColor: palette.textPrimary,
         tabBarInactiveTintColor: palette.textMuted,
         tabBarStyle: {
-          backgroundColor: palette.surface,
-          borderTopWidth: 0,
+          backgroundColor: palette.background,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: palette.border,
           height: 72,
           paddingBottom: 10,
           paddingTop: 8,
         },
-        tabBarLabelStyle: { ...typography.micro, fontSize: 11 },
+        tabBarLabelStyle: { ...typography.caption, fontSize: 12, fontWeight: '600' },
         // Active is the green glyph and a white label — no pill behind it.
         // The pill was Material 3's signature; this app's language is
         // Spotify's, where the bar is quiet and state is carried by colour
@@ -83,20 +92,18 @@ function Tabs() {
           <Icon
             name={TAB_ICONS[route.name as keyof TabParamList]}
             size={22}
-            color={focused ? palette.accent : palette.textMuted}
+            color={focused ? palette.textPrimary : palette.textMuted}
           />
         ),
       })}
     >
       <Tab.Screen name="Today" component={TodayScreen} />
-      <Tab.Screen name="Outings" component={OutingsScreen} />
+      <Tab.Screen name="Plans" component={PlansScreen} />
       {/* Route name stays "Goals"/"Squad" (internal, used by TabParamList and
           IconName lookups elsewhere) — only the label the user sees changes,
           to PRODUCT_SPEC.md §2's "Savings"/"Split". Renaming the route itself
           is a bigger, unrelated refactor for no user-visible benefit. */}
-      <Tab.Screen name="Goals" component={GoalsScreen} options={{ tabBarLabel: 'Savings' }} />
-      <Tab.Screen name="Squad" component={SquadScreen} options={{ tabBarLabel: 'Split' }} />
-      <Tab.Screen name="Insights" component={InsightsScreen} />
+      <Tab.Screen name="Squad" component={SquadScreen} options={{ tabBarLabel: 'People' }} />
     </Tab.Navigator>
   );
 }
@@ -112,12 +119,11 @@ const previewLinking: LinkingOptions<RootStackParamList> = {
       Tabs: {
         screens: {
           Today: 'today',
-          Outings: 'outings',
-          Goals: 'savings',
-          Squad: 'split',
-          Insights: 'insights',
+          Plans: 'plans',
+          Squad: 'people',
         },
       },
+      Insights: 'insights',
       Settings: 'settings',
       Review: 'review',
       Transactions: 'transactions',
@@ -128,7 +134,10 @@ const previewLinking: LinkingOptions<RootStackParamList> = {
 
 export default function RootNavigator() {
   return (
-    <NavigationContainer theme={pinchTheme} linking={Platform.OS === 'web' ? previewLinking : undefined}>
+    <NavigationContainer
+      theme={pinchTheme}
+      linking={Platform.OS === 'web' ? previewLinking : undefined}
+    >
       <Stack.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: palette.background },
@@ -148,6 +157,7 @@ export default function RootNavigator() {
           component={TransactionsScreen}
           options={{ title: 'Transactions' }}
         />
+        <Stack.Screen name="Insights" component={InsightsScreen} />
         <Stack.Screen
           name="Recap"
           component={RecapScreen}
@@ -157,5 +167,3 @@ export default function RootNavigator() {
     </NavigationContainer>
   );
 }
-
-

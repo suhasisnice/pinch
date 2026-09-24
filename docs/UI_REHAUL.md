@@ -133,3 +133,26 @@ Spec note: the Today and Savings hero amounts are 48–56px, above the spec's
 32–42px range. That was already true before this pass and is kept on purpose,
 because a bigger number is the most effective single change. It is flagged
 here so it is a known deviation, not a silent one.
+
+## 0.9.14 — Raycast ink, the user's own taste
+
+Three rounds of multiple-choice questions replaced guesswork with the user's
+stated taste. The full direction and its spec conflicts are in
+`docs/DESIGN_DIRECTION.md`.
+
+- **Three tabs.**
+  - Today, Plans (Saving / Going out) and People.
+  - Insights is a stack screen reached from Today.
+- **Today.**
+  - The day's money sits in a thin ring that empties as you spend.
+  - One soft line sits under it, plus a quiet "Add a spend".
+- **Plans and People.**
+  - Each opens on a centred thin hero with one line.
+  - Under it are hairline lists, with no avatars or covers.
+- **Insights, Review, Settings and Transactions.**
+  - Thin titles.
+  - No boxed recap, tags or raw-text panels.
+  - Money in is white, not coloured.
+  - Switches are white when on.
+- **Coral is now rare.** It appears on links, the live dot, round-ups and today's bar in the week strip.
+- **Removed.** The `Cover` component is no longer used anywhere.

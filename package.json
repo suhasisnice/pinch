@@ -23,7 +23,7 @@
     "postapk": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/copy-to-phone.ps1",
     "postapk:clean": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/copy-to-phone.ps1",
     "prepreview": "node -e \"require('fs').mkdirSync('public',{recursive:true});require('fs').copyFileSync('node_modules/sql.js/dist/sql-wasm.wasm','public/sql-wasm.wasm')\"",
-    "preview": "expo start --web --port 8090",
+    "preview": "expo start --web --port 8090 --offline",
     "shoot": "node scripts/shoot.js"
   },
   "dependencies": {

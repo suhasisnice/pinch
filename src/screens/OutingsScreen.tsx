@@ -10,8 +10,20 @@ import { getBudgetSnapshot } from '../services/budgetService';
 import { getMonthlyAllowance } from '../settings/settingsStore';
 import { OutingAffordability, outingAffordability } from '../math/budget';
 import { layer, palette, radii, spacing, typography } from '../theme/theme';
-import { Button, Card, CardTitle, Chip, EmptyState, Group, Field, Loading, ProgressBar, Row, Screen, ScreenTitle, Sheet } from '../components/ui';
-import { CategoryCover, DateCover } from '../components/Cover';
+import {
+  Button,
+  Card,
+  CardTitle,
+  Chip,
+  Field,
+  Group,
+  Loading,
+  ProgressBar,
+  Row,
+  Screen,
+  Sheet,
+  TopBar,
+} from '../components/ui';
 import { useReducedMotion } from '../components/motion';
 import AddExpenseSheet from '../components/AddExpenseSheet';
 import SplitModal from '../components/SplitModal';
@@ -32,7 +44,7 @@ function affordabilityLabel(state: OutingAffordability): string {
 function affordabilityStyle(state: OutingAffordability) {
   switch (state) {
     case 'COMFORTABLE':
-      return { color: palette.accent };
+      return { color: palette.textPrimary };
     case 'TIGHT':
       return { color: palette.warning };
     case 'DISRUPTIVE':
@@ -40,7 +52,7 @@ function affordabilityStyle(state: OutingAffordability) {
   }
 }
 
-export default function OutingsScreen() {
+export default function OutingsScreen({ top }: { top?: React.ReactNode } = {}) {
   const [outings, setOutings] = useState<OutingSummary[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [createVisible, setCreateVisible] = useState(false);
@@ -74,42 +86,43 @@ export default function OutingsScreen() {
   const past = outings.filter((o) => o.closedAt !== null);
 
   return (
-    <Screen refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.textSecondary} />}>
-      <ScreenTitle
-        title="Outings"
-        subtitle="Group spending, kept together"
-        action={{ label: 'Start', onPress: () => setCreateVisible(true) }}
+    <Screen
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={palette.textSecondary}
+        />
+      }
+    >
+      <TopBar
+        left={top ?? 'Going out'}
+        action={{ label: 'Start one', onPress: () => setCreateVisible(true) }}
       />
 
-
       {outings.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon="outings"
-            title="No outings yet"
-            body="Start one before you head out. Spends get tagged, and you settle up once."
-          />
-        </Card>
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>No plans tonight?</Text>
+          <Text style={styles.emptyBody}>
+            Start an outing before you head out. Every spend gets tagged to it, and you settle up
+            once at the end.
+          </Text>
+        </View>
       ) : null}
 
-      {active.length > 0 ? (
-        <>
-          {active.map((outing) => (
-            <OutingCard key={outing.id} outing={outing} onPress={() => setDetailFor(outing)} />
-          ))}
-        </>
-      ) : null}
+      {active.map((outing) => (
+        <LiveOuting key={outing.id} outing={outing} onPress={() => setDetailFor(outing)} />
+      ))}
 
-      {/* Finished outings are records, not plans: a compact list, like a
-          library, rather than a card each. */}
       {past.length > 0 ? (
-        <Group title="Past">
+        <Group title="Been there">
           {past.map((outing) => (
             <Row
               key={outing.id}
-              left={<DateCover iso={outing.startsAt} name={outing.name} size={44} />}
               title={outing.name}
-              subtitle={`${outing.transactionCount} ${outing.transactionCount === 1 ? 'item' : 'items'} · you paid ${formatMoney(outing.yourShare)}`}
+              subtitle={`${shortDate(outing.startsAt)} · ${outing.transactionCount} ${
+                outing.transactionCount === 1 ? 'spend' : 'spends'
+              } · your share ${formatMoney(outing.yourShare)}`}
               onPress={() => setDetailFor(outing)}
               right={<Text style={styles.pastTotal}>{formatMoney(outing.totalSpent)}</Text>}
             />
@@ -162,41 +175,70 @@ function LiveBadge() {
   );
 }
 
-function OutingCard({ outing, onPress }: { outing: OutingSummary; onPress: () => void }) {
-  const overBudget = outing.isOverBudget;
-  return (
-    <Card onPress={onPress}>
-      <View style={styles.outingHead}>
-        <DateCover iso={outing.startsAt} name={outing.name} />
-        <View style={styles.outingHeadText}>
-          <LiveBadge />
-          <Text style={styles.outingName}>{outing.name}</Text>
-          <Text style={styles.outingMeta}>
-            {outing.transactionCount} item{outing.transactionCount === 1 ? '' : 's'} ·{' '}
-            {outing.headcount} {outing.headcount === 1 ? 'person' : 'people'} ·{' '}
-            {formatRelative(outing.startsAt)}
-          </Text>
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={styles.outingTotal}>{formatMoney(outing.totalSpent)}</Text>
-          <Text style={styles.outingShare}>you: {formatMoney(outing.yourShare)}</Text>
-        </View>
-      </View>
+const SHORT_MONTHS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
 
-      {outing.budgetAmount ? (
-        <>
-          <ProgressBar
-            fraction={outing.budgetFraction ?? 0}
-            color={overBudget ? palette.danger : (outing.budgetFraction ?? 0) > 0.8 ? palette.warning : palette.accent}
-          />
-          <Text style={[styles.outingBudget, overBudget && { color: palette.danger }]}>
-            {overBudget
-              ? `${formatMoney(outing.totalSpent - outing.budgetAmount)} over the ${formatMoney(outing.budgetAmount)} cap`
-              : `${formatMoney(outing.budgetAmount - outing.totalSpent)} left of ${formatMoney(outing.budgetAmount)}`}
-          </Text>
-        </>
+/** "18 Sep" */
+function shortDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getDate()} ${SHORT_MONTHS[d.getMonth()]}`;
+}
+
+/**
+ * The outing happening now, given the room a hero gets: its name, what has
+ * gone on it, and — if it has a budget — a hairline of how much is left.
+ */
+function LiveOuting({ outing, onPress }: { outing: OutingSummary; onPress: () => void }) {
+  const over = outing.isOverBudget;
+  const budget = outing.budgetAmount;
+  const line = budget
+    ? over
+      ? `${formatMoney(outing.totalSpent - budget)} past the plan. It happens.`
+      : `${formatMoney(budget - outing.totalSpent)} of ${formatMoney(budget)} still to play with.`
+    : outing.totalSpent > 0
+      ? `${formatMoney(outing.totalSpent)} so far, ${formatMoney(outing.yourShare)} of it yours.`
+      : 'Nothing spent yet. Have fun.';
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${outing.name}, happening now`}
+      style={({ pressed }) => [styles.liveBlock, pressed && styles.pressed]}
+    >
+      <LiveBadge />
+      <Text style={styles.liveName}>{outing.name}</Text>
+      <Text style={styles.liveLine}>{line}</Text>
+      {budget ? (
+        <ProgressBar
+          fraction={outing.budgetFraction ?? 0}
+          color={
+            over
+              ? palette.danger
+              : (outing.budgetFraction ?? 0) > 0.8
+                ? palette.warning
+                : palette.textPrimary
+          }
+          height={2}
+        />
       ) : null}
-    </Card>
+      <Text style={styles.liveMeta}>
+        Started {formatRelative(outing.startsAt)} · {outing.headcount}{' '}
+        {outing.headcount === 1 ? 'person' : 'people'}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -296,9 +338,7 @@ function CreateOutingSheet({
           {affordabilityLabel(affordability)}
         </Text>
       ) : null}
-      <Text style={styles.note}>
-        Spends are tagged to it while it's open.
-      </Text>
+      <Text style={styles.note}>Spends are tagged to it while it's open.</Text>
       <Button label={saving ? 'Starting…' : 'Start'} onPress={save} disabled={!canSave || saving} />
     </Sheet>
   );
@@ -355,7 +395,8 @@ function OutingDetailSheet({
 
   const parsedReserve = Number(reserveAmount.replace(/[^\d.]/g, ''));
   const canReserve = Number.isFinite(parsedReserve) && parsedReserve > 0;
-  const stillNeeded = outing.budgetAmount !== null ? Math.max(0, outing.budgetAmount - reserved) : null;
+  const stillNeeded =
+    outing.budgetAmount !== null ? Math.max(0, outing.budgetAmount - reserved) : null;
 
   async function adjustReserve(sign: 1 | -1) {
     if (!canReserve || reserving) return;
@@ -399,13 +440,15 @@ function OutingDetailSheet({
       <View style={styles.detailTotals}>
         <View style={styles.detailStat}>
           <Text style={styles.detailStatLabel}>Your share</Text>
-          <Text style={[styles.detailStatValue, { color: palette.accent }]}>
+          <Text style={[styles.detailStatValue, { color: palette.textPrimary }]}>
             {formatMoney(outing.yourShare)}
           </Text>
         </View>
         <View style={styles.detailStat}>
           <Text style={styles.detailStatLabel}>Owed back</Text>
-          <Text style={[styles.detailStatValue, { color: palette.accent }]}>{formatMoney(owedBack)}</Text>
+          <Text style={[styles.detailStatValue, { color: palette.textPrimary }]}>
+            {formatMoney(owedBack)}
+          </Text>
         </View>
         {stillNeeded !== null ? (
           <View style={styles.detailStat}>
@@ -480,7 +523,6 @@ function OutingDetailSheet({
             return (
               <Row
                 key={tx.id}
-                left={<CategoryCover category={tx.category} />}
                 title={tx.merchant}
                 subtitle={formatRelative(tx.occurred_at)}
                 right={
@@ -511,7 +553,7 @@ function OutingDetailSheet({
                 <Text
                   style={[
                     styles.itemAmount,
-                    { color: iou.openAmount <= 0.009 ? palette.textMuted : palette.accent },
+                    { color: iou.openAmount <= 0.009 ? palette.textMuted : palette.textPrimary },
                   ]}
                 >
                   {formatMoney(iou.amount)}
@@ -566,7 +608,9 @@ function OutingDetailSheet({
             message: `"${outing.name}" will be removed. The ${outing.transactionCount} item${
               outing.transactionCount === 1 ? '' : 's'
             } and any debts stay in your ledger — they just stop being grouped under it.${
-              reserved > 0.009 ? ` ${formatMoney(reserved)} reserved for it returns to your available budget.` : ''
+              reserved > 0.009
+                ? ` ${formatMoney(reserved)} reserved for it returns to your available budget.`
+                : ''
             }`,
             confirmLabel: 'Delete',
             destructive: true,
@@ -584,9 +628,7 @@ function OutingDetailSheet({
           });
         }}
       />
-      <Text style={styles.note}>
-        Deleting an outing never deletes the spending inside it.
-      </Text>
+      <Text style={styles.note}>Deleting an outing never deletes the spending inside it.</Text>
 
       <AddExpenseSheet
         visible={addVisible}
@@ -615,17 +657,42 @@ function OutingDetailSheet({
 }
 
 const styles = StyleSheet.create({
+  pressed: { opacity: 0.6 },
+  empty: { paddingVertical: spacing.xxl, gap: spacing.sm },
+  emptyTitle: { ...typography.quip, color: palette.textPrimary },
+  emptyBody: { ...typography.body, color: palette.textSecondary },
+  liveBlock: { paddingVertical: spacing.xl, gap: spacing.sm },
+  liveName: {
+    ...typography.numeral,
+    fontSize: 40,
+    lineHeight: 46,
+    letterSpacing: -1.5,
+    color: palette.textPrimary,
+  },
+  liveLine: {
+    ...typography.quip,
+    fontSize: 19,
+    lineHeight: 26,
+    color: palette.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  liveMeta: { ...typography.caption, color: palette.textMuted },
   live: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: palette.accent },
   liveText: { ...typography.caption, fontSize: 12, fontWeight: '700', color: palette.accent },
-  pastTotal: { ...typography.bodyBold, color: palette.textPrimary },
+  pastTotal: { ...typography.body, color: palette.textPrimary },
   sectionLabel: {
     ...typography.cardTitle,
     color: palette.textPrimary,
     marginTop: spacing.xs,
   },
 
-  outingHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  outingHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
 
   outingHeadText: { flex: 1 },
   outingName: { ...typography.cardTitle, color: palette.textPrimary },
@@ -645,7 +712,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.border,
   },
-  iconChoiceOn: { borderColor: palette.accent, backgroundColor: palette.accentMuted },
+  iconChoiceOn: { borderColor: palette.textPrimary, backgroundColor: palette.surfaceElevated },
   note: { ...typography.caption, color: palette.textMuted, lineHeight: 17 },
   affordability: { ...typography.caption, lineHeight: 17 },
 

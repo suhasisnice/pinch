@@ -336,12 +336,16 @@ export default function SettingsScreen() {
             keyboardType="numeric"
             placeholder="30"
           />
-          <Button label="Start a new budget period" onPress={saveAllowance} />
+          <Button label="Start a new budget period" variant="outlined" onPress={saveAllowance} />
         </View>
       </Group>
 
       <Group>
-        <NavRow key="all" title="All transactions" onPress={() => navigation.navigate('Transactions')} />
+        <NavRow
+          key="all"
+          title="All transactions"
+          onPress={() => navigation.navigate('Transactions')}
+        />
         <NavRow key="review" title="Review inbox" onPress={() => navigation.navigate('Review')} />
       </Group>
 
@@ -373,7 +377,11 @@ export default function SettingsScreen() {
                 listenerEnabled ? (
                   <Text style={styles.ok}>On</Text>
                 ) : (
-                  <Button label="Allow" variant="secondary" onPress={openNotificationListenerSettings} />
+                  <Button
+                    label="Allow"
+                    variant="secondary"
+                    onPress={openNotificationListenerSettings}
+                  />
                 )
               }
             />
@@ -641,8 +649,10 @@ function Toggle({
       <Switch
         value={value}
         onValueChange={onChange}
-        trackColor={{ false: palette.surfaceElevated, true: palette.accent }}
-        thumbColor={palette.textPrimary}
+        // On is white, like every other "yes" in the app; coral stays rare.
+        trackColor={{ false: palette.surfaceElevated, true: palette.textPrimary }}
+        thumbColor={value ? palette.background : palette.textSecondary}
+        {...({ activeThumbColor: palette.background } as object)}
       />
     </View>
   );
@@ -657,7 +667,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   note: { ...typography.caption, color: palette.textMuted, lineHeight: 18, marginTop: spacing.sm },
-  ok: { ...typography.bodyBold, color: palette.accent },
+  ok: { ...typography.bodyBold, color: palette.textPrimary },
   undo: { ...typography.caption, color: palette.accent, fontWeight: '700' },
   form: { paddingVertical: spacing.md, gap: spacing.md },
   inset: { ...typography.body, color: palette.textSecondary, paddingVertical: spacing.md },

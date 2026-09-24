@@ -17,7 +17,6 @@ import {
   ScreenTitle,
   SearchBar,
 } from '../components/ui';
-import { CategoryCover } from '../components/Cover';
 import Icon from '../components/Icon';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
 import MarkAsLoanSheet from '../components/MarkAsLoanSheet';
@@ -83,9 +82,7 @@ export default function TransactionsScreen() {
     setRows(all);
     setLinks(linked);
     setOwedByTx(owed);
-    setPeriod(
-      currentPeriod ? { start: currentPeriod.startsOn, end: currentPeriod.endsOn } : null
-    );
+    setPeriod(currentPeriod ? { start: currentPeriod.startsOn, end: currentPeriod.endsOn } : null);
   }, []);
 
   useFocusEffect(
@@ -136,9 +133,14 @@ export default function TransactionsScreen() {
   const activeCount = activeFilterCount(filter);
 
   return (
-    <Screen underHeader
+    <Screen
+      underHeader
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.textSecondary} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={palette.textSecondary}
+        />
       }
     >
       <ScreenTitle
@@ -196,7 +198,6 @@ export default function TransactionsScreen() {
               return (
                 <Row
                   key={tx.id}
-                  left={<CategoryCover category={tx.category} />}
                   title={tx.merchant}
                   subtitle={[
                     tx.category ?? 'Uncategorised',
@@ -204,9 +205,7 @@ export default function TransactionsScreen() {
                   ].join(' · ')}
                   onPress={() => setDetailFor(tx)}
                   right={
-                    <Text
-                      style={[styles.amount, tx.direction === 'CREDIT' && { color: palette.accent }]}
-                    >
+                    <Text style={styles.amount}>
                       {tx.direction === 'CREDIT' ? '+' : '−'}
                       {formatMoney(tx.amount)}
                     </Text>
@@ -301,5 +300,5 @@ function formatDay(day: string): string {
 
 const styles = StyleSheet.create({
   note: { ...typography.caption, color: palette.textMuted },
-  amount: { ...typography.bodyBold, color: palette.textPrimary },
+  amount: { ...typography.body, color: palette.textPrimary },
 });

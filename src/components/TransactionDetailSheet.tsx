@@ -4,7 +4,10 @@ import { StyleSheet, Text, View } from 'react-native';
 import * as db from '../db/dbService';
 import { TransactionRow } from '../db/types';
 import { CATEGORIES } from '../db/schema';
-import { learnFromCategoryCorrection, propagateCategoryCorrection } from '../services/classificationService';
+import {
+  learnFromCategoryCorrection,
+  propagateCategoryCorrection,
+} from '../services/classificationService';
 import { formatMoney, formatRelative } from '../utils/format';
 import { palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Chip, Field, Sheet } from './ui';
@@ -183,8 +186,7 @@ export default function TransactionDetailSheet({
   function confirmDeleteCaptured() {
     void showConfirm({
       title: 'Delete this transaction?',
-      message:
-        'It stops counting. Bring it back from Settings.',
+      message: 'It stops counting. Bring it back from Settings.',
       confirmLabel: 'Delete',
       destructive: true,
     }).then((ok) => {
@@ -214,7 +216,11 @@ export default function TransactionDetailSheet({
   }
 
   return (
-    <Sheet visible={transaction !== null} onClose={onClose} title={editing ? 'Edit' : 'Transaction'}>
+    <Sheet
+      visible={transaction !== null}
+      onClose={onClose}
+      title={editing ? 'Edit' : 'Transaction'}
+    >
       {editing ? (
         <>
           <Field label="Amount" value={amount} onChangeText={setAmount} keyboardType="numeric" />
@@ -232,19 +238,18 @@ export default function TransactionDetailSheet({
               ))}
             </View>
           </View>
-          <Button label={busy ? 'Saving…' : 'Save changes'} onPress={saveEdits} disabled={!canSave || busy} />
+          <Button
+            label={busy ? 'Saving…' : 'Save changes'}
+            onPress={saveEdits}
+            disabled={!canSave || busy}
+          />
           <Button label="Cancel" variant="ghost" onPress={() => setEditing(false)} />
         </>
       ) : (
         <>
           <View style={styles.summary}>
             <Text style={styles.merchant}>{transaction.merchant}</Text>
-            <Text
-              style={[
-                styles.amount,
-                transaction.direction === 'CREDIT' && { color: palette.accent },
-              ]}
-            >
+            <Text style={[styles.amount]}>
               {transaction.direction === 'CREDIT' ? '+' : '−'}
               {formatMoney(transaction.amount)}
             </Text>
@@ -264,7 +269,9 @@ export default function TransactionDetailSheet({
                 color={palette.textMuted}
               />
               <Text style={styles.sourceText}>
-                {transaction.source === 'MANUAL' ? 'Added by hand' : `Captured from ${transaction.source.toLowerCase()}`}
+                {transaction.source === 'MANUAL'
+                  ? 'Added by hand'
+                  : `Captured from ${transaction.source.toLowerCase()}`}
               </Text>
             </View>
           </View>
@@ -277,7 +284,12 @@ export default function TransactionDetailSheet({
           ) : null}
 
           <View style={styles.actions}>
-            <Button label="Edit" variant="secondary" onPress={() => setEditing(true)} style={styles.flex} />
+            <Button
+              label="Edit"
+              variant="secondary"
+              onPress={() => setEditing(true)}
+              style={styles.flex}
+            />
             {transaction.kind === 'SPEND' && transaction.transfer_pair_id === null ? (
               <Button
                 label="Split"
@@ -291,12 +303,14 @@ export default function TransactionDetailSheet({
           {onLinkReimbursement && db.canBeReimbursement(transaction) ? (
             <>
               <Button
-                label={transaction.kind === 'SETTLE_IN' ? 'What this paid back' : 'This paid me back for…'}
+                label={
+                  transaction.kind === 'SETTLE_IN'
+                    ? 'What this paid back'
+                    : 'This paid me back for…'
+                }
                 onPress={() => onLinkReimbursement(transaction)}
               />
-              <Text style={styles.loanHint}>
-                Pick what it covered to see your real share.
-              </Text>
+              <Text style={styles.loanHint}>Pick what it covered to see your real share.</Text>
             </>
           ) : null}
 
@@ -320,8 +334,18 @@ export default function TransactionDetailSheet({
 
           {isCaptured ? (
             <View style={styles.excludeBlock}>
-              <Button label="Delete" variant="danger" onPress={confirmDeleteCaptured} disabled={busy} />
-              <Button label="Report as fake or spam" variant="ghost" onPress={confirmReport} disabled={busy} />
+              <Button
+                label="Delete"
+                variant="danger"
+                onPress={confirmDeleteCaptured}
+                disabled={busy}
+              />
+              <Button
+                label="Report as fake or spam"
+                variant="ghost"
+                onPress={confirmReport}
+                disabled={busy}
+              />
             </View>
           ) : (
             <Button label="Delete" variant="danger" onPress={confirmDelete} disabled={busy} />
