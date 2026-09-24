@@ -4,7 +4,7 @@ import { BalanceState } from '../db/repos/balance';
 import * as db from '../db/dbService';
 import { formatMoney } from '../utils/format';
 import { layer, palette, radii, spacing, typography } from '../theme/theme';
-import { Button, Card, Field, Sheet } from './ui';
+import { Button, Field, Sheet } from './ui';
 import Icon from './Icon';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -20,10 +20,11 @@ function when(iso: string): string {
  * Safe-to-Spend answers "what may I spend today" and is shaped by goals,
  * debts and the length of the period. Balance answers "what is there", and
  * nothing shapes it but the money itself. Showing them as one number would
- * make both wrong, so they sit in separate cards that never mix.
+ * make both wrong, so they sit on separate rows that never mix.
  *
  * Hidden by default. A balance is the one figure on this screen that is
- * nobody else's business, and phones get glanced at.
+ * nobody else's business, and phones get glanced at. The row lives inside
+ * Today's "This period" group; tap it to reveal, "Update" to record a new figure.
  */
 export default function BalanceCard({
   state,
@@ -37,50 +38,47 @@ export default function BalanceCard({
 
   const value = state.projected;
   const stale = state.snapshot !== null && (state.spentSince > 0 || state.receivedSince > 0);
+  const meta =
+    state.snapshot === null
+      ? 'Add it once and Pinch keeps it current'
+      : stale
+        ? `Estimated since ${when(state.snapshot.recordedAt)}`
+        : `Updated ${when(state.snapshot.recordedAt)}`;
 
   return (
     <>
-      <Card style={styles.card}>
-        <View style={styles.head}>
-          <Text style={styles.label}>In the bank</Text>
-          <Pressable
-            onPress={() => setShown((v) => !v)}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel={shown ? "Hide balance" : "Show balance"}
-          >
-            <Icon name={shown ? 'eye' : 'eyeOff'} size={16} color={palette.textMuted} />
-          </Pressable>
-        </View>
-
-        {value === null ? (
-          <Pressable onPress={() => setEditing(true)}>
-            <Text style={styles.empty}>Tap to add your balance</Text>
-          </Pressable>
-        ) : (
-          <Pressable onPress={() => setShown((v) => !v)}>
-            <Text style={styles.amount}>{shown ? formatMoney(value) : '••••••'}</Text>
-          </Pressable>
-        )}
-
-        {state.snapshot !== null ? (
-          <Text style={styles.meta}>
-            {stale
-              ? `From ${formatMoney(state.snapshot.amount)} on ${when(
-                  state.snapshot.recordedAt
-                )}, less ${formatMoney(state.spentSince)} out and ${formatMoney(
-                  state.receivedSince
-                )} in`
-              : `As you entered it on ${when(state.snapshot.recordedAt)}`}
-          </Text>
-        ) : null}
-
-        <Pressable onPress={() => setEditing(true)} hitSlop={8}>
-          <Text style={styles.update}>
-            {state.snapshot === null ? 'Add balance' : 'Update from your bank'}
-          </Text>
+      <View style={styles.row}>
+        <Pressable
+          style={({ pressed }) => [styles.main, pressed && styles.pressed]}
+          onPress={() => (value === null ? setEditing(true) : setShown((v) => !v))}
+          accessibilityRole="button"
+          accessibilityLabel={
+            value === null ? 'Add your bank balance' : shown ? 'Hide balance' : 'Show balance'
+          }
+        >
+          <View style={styles.text}>
+            <Text style={styles.title}>In the bank</Text>
+            <Text style={styles.meta} numberOfLines={1}>
+              {meta}
+            </Text>
+          </View>
+          {value === null ? null : (
+            <View style={styles.valueRow}>
+              <Text style={styles.value}>{shown ? formatMoney(value) : '••••••'}</Text>
+              <Icon name={shown ? 'eye' : 'eyeOff'} size={15} color={palette.textMuted} />
+            </View>
+          )}
         </Pressable>
-      </Card>
+        <Pressable
+          onPress={() => setEditing(true)}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={value === null ? 'Add balance' : 'Update balance'}
+          style={({ pressed }) => [styles.update, pressed && styles.pressed]}
+        >
+          <Text style={styles.updateText}>{value === null ? 'Add' : 'Update'}</Text>
+        </Pressable>
+      </View>
 
       <UpdateBalanceSheet
         visible={editing}
@@ -146,8 +144,8 @@ function UpdateBalanceSheet({
         <View style={styles.driftBox}>
           <Icon name="info" size={15} color={palette.warning} />
           <Text style={styles.driftText}>
-            {formatMoney(Math.abs(drift))}{' '}
-            {drift < 0 ? 'less' : 'more'} than expected — usually cash, or a message Pinch missed.
+            {formatMoney(Math.abs(drift))} {drift < 0 ? 'less' : 'more'} than expected — usually
+            cash, or a message Pinch missed.
           </Text>
         </View>
       ) : null}
@@ -162,16 +160,27 @@ function UpdateBalanceSheet({
 }
 
 const styles = StyleSheet.create({
-  card: { gap: 2 },
-  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  label: {
-    ...typography.sectionLabel,
-    color: palette.textSecondary,
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  main: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: 14,
   },
-  amount: { ...typography.heroCompact, fontSize: 30, color: palette.textPrimary, marginTop: 2 },
-  empty: { ...typography.body, color: palette.textMuted, marginTop: spacing.xs },
-  meta: { ...typography.micro, color: palette.textMuted, marginTop: 2, lineHeight: 15 },
-  update: { ...typography.caption, color: palette.accent, marginTop: spacing.sm },
+  pressed: { opacity: 0.6 },
+  text: { flex: 1, gap: 2 },
+  title: { ...typography.bodyBold, color: palette.textPrimary },
+  meta: { ...typography.caption, color: palette.textSecondary },
+  valueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  value: { ...typography.bodyBold, color: palette.textPrimary },
+  update: {
+    paddingVertical: 6,
+    paddingHorizontal: spacing.sm + 4,
+    borderRadius: radii.pill,
+    backgroundColor: palette.surfaceElevated,
+  },
+  updateText: { ...typography.caption, fontWeight: '600', color: palette.textPrimary },
 
   intro: { ...typography.body, color: palette.textSecondary, lineHeight: 20 },
   driftBox: {

@@ -23,3 +23,7 @@ errors/
 Screenshot*.png
 Screenshot*.jpg
 Screenshot*.jpeg
+
+# Web design preview (npm run preview) — copied from node_modules at start.
+public/sql-wasm.wasm
+.shots/

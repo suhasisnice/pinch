@@ -38,8 +38,13 @@ const PACKAGE_LABELS: Record<string, string> = {
   'com.google.android.gm.lite': 'Email',
 };
 
+/** A sender as a person would name it: "Google Pay", not its package name. */
+export function senderLabel(sender: string): string {
+  return PACKAGE_LABELS[sender] ?? sender;
+}
+
 function labelFor(message: CapturedMessage): string {
-  return PACKAGE_LABELS[message.sender] ?? message.sender;
+  return senderLabel(message.sender);
 }
 
 /**

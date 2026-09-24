@@ -1,6 +1,7 @@
 import React from 'react';
+import { Platform } from 'react-native';
 
-import { NavigationContainer, DarkTheme, Theme } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme, LinkingOptions, NavigatorScreenParams, Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import TodayScreen from '../screens/TodayScreen';
@@ -16,7 +17,7 @@ import Icon, { IconName } from '../components/Icon';
 import { palette, typography } from '../theme/theme';
 
 export type RootStackParamList = {
-  Tabs: undefined;
+  Tabs: NavigatorScreenParams<TabParamList> | undefined;
   Settings: undefined;
   Review: undefined;
   /** `category` pre-filters the list — Insights' drill-down ("View food spending →") lands here. */
@@ -100,15 +101,43 @@ function Tabs() {
   );
 }
 
+/**
+ * URLs for the web design preview only (`npm run preview`), so each screen
+ * can be opened — and screenshotted — directly. Android has no deep links.
+ */
+const previewLinking: LinkingOptions<RootStackParamList> = {
+  prefixes: [],
+  config: {
+    screens: {
+      Tabs: {
+        screens: {
+          Today: 'today',
+          Outings: 'outings',
+          Goals: 'savings',
+          Squad: 'split',
+          Insights: 'insights',
+        },
+      },
+      Settings: 'settings',
+      Review: 'review',
+      Transactions: 'transactions',
+      Recap: 'recap',
+    },
+  },
+};
+
 export default function RootNavigator() {
   return (
-    <NavigationContainer theme={pinchTheme}>
+    <NavigationContainer theme={pinchTheme} linking={Platform.OS === 'web' ? previewLinking : undefined}>
       <Stack.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: palette.background },
           headerTintColor: palette.textPrimary,
           headerShadowVisible: false,
           contentStyle: { backgroundColor: palette.background },
+          // Back arrow only: each screen sets its own large title, and the
+          // header repeating it read as the same word twice.
+          headerTitle: '',
         }}
       >
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />

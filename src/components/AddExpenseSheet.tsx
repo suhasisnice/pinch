@@ -253,10 +253,10 @@ export default function AddExpenseSheet({
             {outings.map((outing) => (
               <Chip
                 key={outing.id}
-                label={`${outing.emoji} ${outing.name}`}
+                label={outing.name}
                 selected={outingId === outing.id}
                 onPress={() => setOutingId(outingId === outing.id ? null : outing.id)}
-                color={palette.info}
+
               />
             ))}
           </View>

@@ -67,6 +67,15 @@ export function formatMoneyCompact(amount: number): string {
   return `${sign}₹${Math.round(value)}`;
 }
 
+/** "9:40 pm" — a clock time, formatted by hand so it reads the same on every engine. */
+export function formatTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return `${h % 12 === 0 ? 12 : h % 12}:${m} ${h < 12 ? 'am' : 'pm'}`;
+}
+
 /** "2 days ago", "just now" */
 export function formatRelative(iso: string, now: Date = new Date()): string {
   const then = new Date(iso).getTime();

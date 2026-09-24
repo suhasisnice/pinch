@@ -90,5 +90,5 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: spacing.sm,
   },
-  hint: { ...typography.micro, color: palette.textMuted, lineHeight: 15 },
+  hint: { ...typography.caption, color: palette.textMuted },
 });

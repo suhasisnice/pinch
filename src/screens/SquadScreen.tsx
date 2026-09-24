@@ -9,7 +9,21 @@ import { sendNudge } from '../utils/nudge';
 import { receivableConfidence } from '../math/budget';
 import { formatMoney, formatRelative, daysBetween } from '../utils/format';
 import { balanceColor, palette, radii, spacing, typography } from '../theme/theme';
-import { Button, Card, CardTitle, EmptyState, Field, Loading, Row, Screen, ScreenTitle, Sheet } from '../components/ui';
+import {
+  Avatar,
+  Button,
+  Card,
+  CardTitle,
+  EmptyState,
+  Field,
+  Group,
+  Loading,
+  Row,
+  Screen,
+  ScreenTitle,
+  Sheet,
+  StatPair,
+} from '../components/ui';
 import ContactPicker from '../components/ContactPicker';
 import AddExpenseSheet from '../components/AddExpenseSheet';
 import SplitModal from '../components/SplitModal';
@@ -60,45 +74,50 @@ export default function SquadScreen() {
 
   return (
     <Screen refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.textSecondary} />}>
-      <ScreenTitle title="Split" subtitle="Who owes who, netted out" />
-
-      <View style={styles.totals}>
-        <Card style={styles.totalCard}>
-          <Text style={styles.totalLabel}>Owed to you</Text>
-          <Text style={[styles.totalAmount, { color: palette.accent }]}>{formatMoney(totalIn)}</Text>
-        </Card>
-        <Card style={styles.totalCard}>
-          <Text style={styles.totalLabel}>You owe</Text>
-          <Text style={[styles.totalAmount, { color: palette.warning }]}>
-            {formatMoney(totalOut)}
-          </Text>
-        </Card>
-      </View>
-
-      <Button
-        label="Split a bill"
-        onPress={() => {
-          setAddThenSplit(true);
-          setExpenseVisible(true);
+      <ScreenTitle
+        title="Split"
+        subtitle="Who owes who, netted out"
+        action={{
+          label: 'Split a bill',
+          icon: 'split',
+          onPress: () => {
+            setAddThenSplit(true);
+            setExpenseVisible(true);
+          },
         }}
       />
-      <Button label="Add a debt" variant="secondary" onPress={() => setAddVisible(true)} />
+
+      {/* Colour only when there is something to act on: a zero is not a debt. */}
+      <StatPair
+        items={[
+          {
+            label: 'Owed to you',
+            value: formatMoney(totalIn),
+            color: totalIn > 0.009 ? palette.accent : undefined,
+          },
+          {
+            label: 'You owe',
+            value: formatMoney(totalOut),
+            color: totalOut > 0.009 ? palette.warning : undefined,
+          },
+        ]}
+      />
 
       {balances.length === 0 ? (
         <Card>
           <EmptyState
             icon="squad"
             title="No open debts"
-            body="Split a bill from Today. Each person nets to one balance."
+            body="Split a bill and each person nets to one balance."
           />
+          <Button label="Add a debt" variant="tonal" onPress={() => setAddVisible(true)} />
         </Card>
       ) : (
-        <Card>
-          <CardTitle>People</CardTitle>
+        <Group title="People" action="Add a debt" onAction={() => setAddVisible(true)}>
           {balances.map((balance) => (
             <ContactRow key={balance.contactId} balance={balance} onPress={() => setDetailFor(balance)} />
           ))}
-        </Card>
+        </Group>
       )}
 
       <ContactSheet
@@ -156,7 +175,7 @@ export default function SquadScreen() {
  */
 function reliabilityLabel(balance: ContactBalance): { icon: IconName; text: string } | null {
   if (balance.isGhost) return { icon: 'ghost', text: 'ghost — barely counted' };
-  if (balance.settledCount === 0) return { icon: 'clock', text: 'no track record yet' };
+  if (balance.settledCount === 0) return null;
   const days = balance.avgDaysToSettle ?? 0;
   if (days <= 3) {
     return { icon: 'trendUp', text: `pays back in ~${Math.max(1, Math.round(days))}d` };
@@ -172,11 +191,19 @@ function ContactRow({ balance, onPress }: { balance: ContactBalance; onPress: ()
 
   return (
     <Row
-      left={label ? <Icon name={label.icon} size={16} color={palette.textMuted} /> : undefined}
+      left={<Avatar name={balance.name} />}
       title={balance.name}
-      subtitle={[label?.text, balance.openCount > 0 ? `${balance.openCount} open` : null]
-        .filter(Boolean)
-        .join(' · ')}
+      subtitle={
+        Math.abs(balance.netAmount) < 0.01
+          ? 'All square'
+          : [
+              balance.netAmount > 0 ? 'Owes you' : 'You owe',
+              balance.openCount > 1 ? `${balance.openCount} items` : null,
+              label?.text,
+            ]
+              .filter(Boolean)
+              .join(' · ')
+      }
       onPress={onPress}
       right={
         <View style={{ alignItems: 'flex-end' }}>
@@ -468,13 +495,8 @@ function AddDebtSheet({
 }
 
 const styles = StyleSheet.create({
-  totals: { flexDirection: 'row', gap: spacing.sm },
-  totalCard: { flex: 1, alignItems: 'center', gap: 4 },
-  totalLabel: { ...typography.sectionLabel, color: palette.textSecondary },
-  totalAmount: { ...typography.heroCompact, fontSize: 28 },
-
   balanceAmount: { ...typography.bodyBold, fontSize: 16 },
-  aging: { ...typography.micro, color: palette.warning },
+  aging: { ...typography.caption, color: palette.warning },
 
   detailHead: { alignItems: 'center', gap: 4 },
   detailAmount: { ...typography.hero, fontSize: 46 },

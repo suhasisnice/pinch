@@ -197,5 +197,5 @@ const styles = StyleSheet.create({
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   toggleText: { flex: 1 },
   toggleLabel: { ...typography.body, color: palette.textPrimary },
-  toggleHint: { ...typography.micro, color: palette.textMuted, marginTop: 2, lineHeight: 15 },
+  toggleHint: { ...typography.caption, color: palette.textMuted, marginTop: 2 },
 });

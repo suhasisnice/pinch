@@ -4,10 +4,10 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { CaptureInboxRow, TransactionRow } from '../db/types';
-import { acceptCapture, confirmCaptureIsDuplicate } from '../services/captureService';
+import { acceptCapture, confirmCaptureIsDuplicate, senderLabel } from '../services/captureService';
 import { ACCEPT_THRESHOLD } from '../services/parserService';
 import { formatMoney, formatRelative } from '../utils/format';
-import { palette, radii, spacing, typography } from '../theme/theme';
+import { layer, palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Card, EmptyState, Loading, Screen, ScreenTitle } from '../components/ui';
 
 /**
@@ -50,14 +50,14 @@ export default function ReviewScreen() {
 
   if (!captures) {
     return (
-      <Screen scroll={false}>
+      <Screen underHeader scroll={false}>
         <Loading />
       </Screen>
     );
   }
 
   return (
-    <Screen>
+    <Screen underHeader>
       <ScreenTitle
         title="Review"
         subtitle={captures.length === 0 ? 'All clear' : `${captures.length} waiting`}
@@ -81,26 +81,36 @@ export default function ReviewScreen() {
           return (
             <Card key={capture.id}>
               <View style={styles.head}>
-                <Text style={styles.amount}>
+                <View style={styles.flex}>
+                  <Text style={styles.merchant} numberOfLines={1}>
+                    {capture.parsed_merchant ?? 'Unknown'}
+                  </Text>
+                  <Text style={styles.meta} numberOfLines={1}>
+                    {capture.sender ? senderLabel(capture.sender) : capture.source === 'SMS' ? 'SMS' : 'Notification'}{' '}
+                    · {formatRelative(capture.received_at)}
+                  </Text>
+                </View>
+                <Text
+                  style={[styles.amount, capture.parsed_direction === 'CREDIT' && { color: palette.accent }]}
+                >
                   {capture.parsed_direction === 'CREDIT' ? '+' : '−'}
                   {formatMoney(capture.parsed_amount ?? 0)}
                 </Text>
+              </View>
+
+              <View style={styles.tagRow}>
                 {twin ? (
-                  <Text style={styles.dupeTag}>Possible repeat</Text>
+                  <Text style={[styles.tag, styles.tagNeutral]}>Possible repeat</Text>
                 ) : capture.confidence >= ACCEPT_THRESHOLD ? (
                   // Read cleanly — the only question is whether it should
                   // count, not whether it was understood.
-                  <Text style={styles.awaitingTag}>Waiting on you</Text>
+                  <Text style={[styles.tag, styles.tagNeutral]}>Read clearly</Text>
                 ) : (
-                  <Text style={styles.confidence}>{Math.round(capture.confidence * 100)}% sure</Text>
+                  <Text style={[styles.tag, styles.tagWarn]}>
+                    {Math.round(capture.confidence * 100)}% sure
+                  </Text>
                 )}
               </View>
-
-              <Text style={styles.merchant}>{capture.parsed_merchant ?? 'Unknown'}</Text>
-              <Text style={styles.meta}>
-                {capture.source === 'SMS' ? 'SMS' : 'Notification'} · {capture.sender ?? 'unknown'} ·{' '}
-                {formatRelative(capture.received_at)}
-              </Text>
 
               <View style={styles.raw}>
                 <Text style={styles.rawText}>{capture.raw_text}</Text>
@@ -128,7 +138,7 @@ export default function ReviewScreen() {
                     />
                     <Button
                       label="Different"
-                      variant="secondary"
+                      variant="tonal"
                       onPress={async () => {
                         await acceptCapture(capture.id);
                         load();
@@ -143,8 +153,8 @@ export default function ReviewScreen() {
               ) : (
                 <View style={styles.actions}>
                   <Button
-                    label="Not a transaction"
-                    variant="ghost"
+                    label="Not a payment"
+                    variant="tonal"
                     onPress={() => rejectWithOptionToBlock(capture, load)}
                     style={styles.flex}
                   />
@@ -190,8 +200,8 @@ function rejectWithOptionToBlock(capture: CaptureInboxRow, reload: () => void) {
   }
 
   void showDialog({
-    title: 'Not a transaction',
-    message: `Should Pinch keep reading messages from ${sender}?`,
+    title: 'Not a payment',
+    message: `Should Pinch keep reading messages from ${senderLabel(sender)}?`,
     actions: [
       { label: 'Cancel', value: 'cancel', variant: 'ghost' },
       { label: 'Just this one', value: 'once', variant: 'secondary' },
@@ -211,28 +221,36 @@ function rejectWithOptionToBlock(capture: CaptureInboxRow, reload: () => void) {
 }
 
 const styles = StyleSheet.create({
-  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  amount: { ...typography.display, color: palette.textPrimary },
-  confidence: { ...typography.micro, color: palette.warning },
-  dupeTag: { ...typography.micro, color: palette.info },
-  awaitingTag: { ...typography.micro, color: palette.accent },
+  head: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  amount: { ...typography.cardTitle, fontSize: 22, lineHeight: 28, color: palette.textPrimary },
+  tagRow: { flexDirection: 'row', marginTop: spacing.sm },
+  tag: {
+    ...typography.caption,
+    fontWeight: '600',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: radii.pill,
+    overflow: 'hidden',
+  },
+  tagWarn: { color: palette.warning, backgroundColor: layer(palette.warning, 0.14) },
+  tagNeutral: { color: palette.textSecondary, backgroundColor: palette.surfaceElevated },
   dupeQuestion: {
     ...typography.caption,
     color: palette.textSecondary,
     lineHeight: 18,
     marginTop: spacing.sm,
   },
-  dupeHint: { ...typography.micro, color: palette.textMuted, marginTop: spacing.xs },
-  merchant: { ...typography.cardTitle, color: palette.textPrimary, marginTop: spacing.xs },
-  meta: { ...typography.micro, color: palette.textMuted, marginTop: 2 },
+  dupeHint: { ...typography.caption, color: palette.textMuted, marginTop: spacing.xs },
+  merchant: { ...typography.cardTitle, color: palette.textPrimary },
+  meta: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
 
   raw: {
     backgroundColor: palette.surfaceElevated,
     borderRadius: radii.md,
-    padding: spacing.sm,
+    padding: spacing.sm + 4,
     marginTop: spacing.sm,
   },
-  rawText: { ...typography.micro, color: palette.textSecondary, lineHeight: 16 },
+  rawText: { ...typography.caption, color: palette.textSecondary, lineHeight: 18 },
 
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   flex: { flex: 1 },

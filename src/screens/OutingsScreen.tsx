@@ -73,9 +73,12 @@ export default function OutingsScreen() {
 
   return (
     <Screen refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.textSecondary} />}>
-      <ScreenTitle title="Outings" subtitle="Group spending, kept together" />
+      <ScreenTitle
+        title="Outings"
+        subtitle="Group spending, kept together"
+        action={{ label: 'Start', onPress: () => setCreateVisible(true) }}
+      />
 
-      <Button label="Start an outing" onPress={() => setCreateVisible(true)} />
 
       {outings.length === 0 ? (
         <Card>
@@ -132,7 +135,7 @@ function OutingCard({ outing, onPress }: { outing: OutingSummary; onPress: () =>
   return (
     <Card onPress={onPress}>
       <View style={styles.outingHead}>
-        <LabelIconBadge label={outing.emoji} color={palette.info} />
+        <LabelIconBadge label={outing.emoji} />
         <View style={styles.outingHeadText}>
           <Text style={styles.outingName}>{outing.name}</Text>
           <Text style={styles.outingMeta}>
@@ -151,7 +154,7 @@ function OutingCard({ outing, onPress }: { outing: OutingSummary; onPress: () =>
         <>
           <ProgressBar
             fraction={outing.budgetFraction ?? 0}
-            color={overBudget ? palette.danger : (outing.budgetFraction ?? 0) > 0.8 ? palette.warning : palette.info}
+            color={overBudget ? palette.danger : (outing.budgetFraction ?? 0) > 0.8 ? palette.warning : palette.accent}
           />
           <Text style={[styles.outingBudget, overBudget && { color: palette.danger }]}>
             {overBudget
@@ -241,7 +244,7 @@ function CreateOutingSheet({
             <Icon
               name={choice}
               size={20}
-              color={icon === choice ? palette.info : palette.textMuted}
+              color={icon === choice ? palette.textPrimary : palette.textMuted}
             />
           </Pressable>
         ))}
@@ -352,7 +355,7 @@ function OutingDetailSheet({
         ) : null}
         <View style={styles.detailStat}>
           <Text style={styles.detailStatLabel}>Reserved</Text>
-          <Text style={[styles.detailStatValue, { color: palette.info }]}>{formatMoney(reserved)}</Text>
+          <Text style={styles.detailStatValue}>{formatMoney(reserved)}</Text>
         </View>
         <View style={styles.detailStat}>
           <Text style={styles.detailStatLabel}>Spent</Text>
@@ -413,7 +416,7 @@ function OutingDetailSheet({
       <Button label="Add an expense" variant="secondary" onPress={() => setAddVisible(true)} />
 
       {candidates.length > 0 ? (
-        <Card style={{ backgroundColor: layer(palette.info, 0.12) }}>
+        <Card style={{ backgroundColor: palette.surfaceElevated }}>
           <CardTitle>Spent during this outing</CardTitle>
           {candidates.map((tx) => (
             <Row
@@ -423,7 +426,7 @@ function OutingDetailSheet({
               right={
                 <Chip
                   label="Add"
-                  color={palette.info}
+
                   onPress={async () => {
                     await db.setTransactionOuting(tx.id, outing.id);
                     await refresh();
@@ -452,7 +455,7 @@ function OutingDetailSheet({
                     <Text style={styles.itemAmount}>{formatMoney(tx.amount)}</Text>
                     <Chip
                       label={alreadySplit ? 'Split again' : 'Split'}
-                      color={palette.info}
+
                       onPress={() => setSplitFor(tx)}
                     />
                   </View>
@@ -580,8 +583,8 @@ function OutingDetailSheet({
 
 const styles = StyleSheet.create({
   sectionLabel: {
-    ...typography.sectionLabel,
-    color: palette.textSecondary,
+    ...typography.cardTitle,
+    color: palette.textPrimary,
     marginTop: spacing.xs,
   },
 
@@ -591,7 +594,7 @@ const styles = StyleSheet.create({
   outingName: { ...typography.cardTitle, color: palette.textPrimary },
   outingMeta: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
   outingTotal: { ...typography.bodyBold, fontSize: 17, color: palette.textPrimary },
-  outingShare: { ...typography.micro, color: palette.textSecondary, marginTop: 2 },
+  outingShare: { ...typography.caption, color: palette.textSecondary, marginTop: 2 },
   outingBudget: { ...typography.caption, color: palette.textSecondary, marginTop: spacing.sm },
 
   iconRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
@@ -605,7 +608,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.border,
   },
-  iconChoiceOn: { borderColor: palette.info, backgroundColor: layer(palette.info, 0.14) },
+  iconChoiceOn: { borderColor: palette.accent, backgroundColor: palette.accentMuted },
   note: { ...typography.caption, color: palette.textMuted, lineHeight: 17 },
   affordability: { ...typography.caption, lineHeight: 17 },
 

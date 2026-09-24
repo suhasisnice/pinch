@@ -105,7 +105,7 @@ export default function ContactPicker({
 
 const styles = StyleSheet.create({
   more: {
-    ...typography.micro,
+    ...typography.caption,
     color: palette.textMuted,
     textAlign: 'center',
     marginTop: spacing.sm,

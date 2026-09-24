@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
   modeButtonOn: { backgroundColor: palette.accentMuted },
   modeLabel: { ...typography.caption, color: palette.textSecondary, fontWeight: '700' },
   modeLabelOn: { color: palette.accent },
-  modeHint: { ...typography.micro, color: palette.textMuted, textAlign: 'center' },
+  modeHint: { ...typography.caption, color: palette.textMuted, textAlign: 'center' },
 
   addRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
   addField: { flex: 1 },
@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
     ...typography.sectionLabel,
     color: palette.textSecondary,
   },
-  quickAddAll: { ...typography.micro, color: palette.accent },
+  quickAddAll: { ...typography.caption, color: palette.accent },
   quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 
   list: { gap: spacing.sm },
