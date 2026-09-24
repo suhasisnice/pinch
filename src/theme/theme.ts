@@ -14,11 +14,20 @@
  *     it is the one accent, used for primary actions and active state, not
  *     decoration.
  *
- *   - The status colours (`danger`, `warning`, `info`, and `categoryColors`)
- *     mean something read in half a second, independent of chrome: ink is
+ *   - The status colours (`good`, `warning`, `danger`, and `categoryColors`)
+ *     mean something read in half a second, independent of chrome: green is
  *     "you are fine", amber is "careful", red is "you are over".
  *     `accentForState` and `balanceColor` are the only things that should
  *     pick between them.
+ *
+ * 0.9.18 — colour that speaks (the user's choice, 2026-09-24: "I want the UI
+ * colours to speak to me a little"). This reverses 0.9.14's "fine is not a
+ * colour". Four jobs, one hue family each, all muted, never decoration:
+ *
+ *   How you're doing   good → warning → danger   (`accentForState`)
+ *   Money in vs out    in is `good`; out stays ink (`amountColor`)
+ *   What you spend on  a small dot per category   (`categoryColor`)
+ *   Where you are      one hue per tab            (`place`)
  */
 
 // ---------------------------------------------------------------------------
@@ -61,6 +70,10 @@ export const palette = {
   danger: DANGER,
   onDanger: onColor(DANGER),
   dangerMuted: layer(DANGER, 0.16),
+
+  /** Healthy: under budget, money in, owed to you. Muted so it never shouts. */
+  good: '#3dd68c',
+  goodMuted: layer('#3dd68c', 0.16),
 
   warning: '#f5a524',
   /** The spec's "Announcement/Informational" blue — previously unused; retired `violet` (a decorative-only tag colour with no financial meaning) in its favour. */
@@ -145,6 +158,22 @@ export function onColor(background: string): string {
   const dark = '#121212';
   const light = '#FFFFFF';
   return contrastRatio(dark, background) >= contrastRatio(light, background) ? dark : light;
+}
+
+/**
+ * Where you are: each tab's hero shape and its tab icon take one hue, so the
+ * tab is recognisable by colour as well as by shape. Today has no fixed hue;
+ * it wears how the day is going (`accentForState`).
+ */
+export const place = {
+  plans: '#a78bfa',
+  wealth: '#2dd4bf',
+  people: '#60a5fa',
+} as const;
+
+/** Money in is green; money out stays ink — spending is normal, not an alarm. */
+export function amountColor(direction: 'DEBIT' | 'CREDIT' | string | null | undefined): string {
+  return direction === 'CREDIT' ? palette.good : palette.textPrimary;
 }
 
 /** One colour per spend category, used consistently across every chart. Unchanged by the Phase 0 token migration — screen-level concern, not a design-token one. */
@@ -441,14 +470,14 @@ export function accentForState(state: TodayState): string {
     case 'CLOSE':
       return palette.warning;
     default:
-      // Fine is not a colour. The number stays ink; colour only arrives
-      // when there is something to notice.
-      return palette.textPrimary;
+      // Fine is green since 0.9.18 (it was ink): the user wanted the colour
+      // to say how things are going, including when they are going well.
+      return palette.good;
   }
 }
 
 /** Colour for a net balance: owed to you is good, owed by you is a liability. */
 export function balanceColor(netAmount: number): string {
   if (Math.abs(netAmount) < 0.01) return palette.textSecondary;
-  return netAmount > 0 ? palette.textPrimary : palette.warning;
+  return netAmount > 0 ? palette.good : palette.warning;
 }

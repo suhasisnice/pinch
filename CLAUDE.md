@@ -107,6 +107,11 @@ Copy is witty but kind. See `docs/DESIGN_DIRECTION.md`.
 Each tab owns one hero *shape* (0.9.17, `src/components/Heroes.tsx`): Today a
 centred ring, Plans jars, Wealth a chart, People faces. Distinction comes from
 shape, not new colours. Don't give a tab another tab's hero.
+**0.9.18 (user-chosen):** colour speaks, which supersedes "fine is not a colour".
+- Healthy is `palette.good` green; money in is green; each category gets a dot; each tab has a hue (`place`).
+- Pick via `accentForState` / `amountColor` / `categoryColor` / `place`; never a literal.
+- The feel layer is `haptics.ts`, the press scale in `ui.tsx`, and `Moment.tsx`.
+- See `docs/DESIGN_DIRECTION.md` §0.9.18.
 - Transitions 150–220ms.
 
 ## Reuse / refactor / rebuild

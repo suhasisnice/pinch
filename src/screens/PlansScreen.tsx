@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { palette, spacing, typography } from '../theme/theme';
+import { palette, place, spacing, typography } from '../theme/theme';
+import { haptic } from '../components/haptics';
 import GoalsScreen from './GoalsScreen';
 import OutingsScreen from './OutingsScreen';
 
@@ -21,7 +22,10 @@ export default function PlansScreen() {
 function PlansSwitch({ value, onChange }: { value: PlanView; onChange: (v: PlanView) => void }) {
   const option = (key: PlanView, label: string) => (
     <Pressable
-      onPress={() => onChange(key)}
+      onPress={() => {
+        if (key !== value) haptic.tick();
+        onChange(key);
+      }}
       hitSlop={10}
       accessibilityRole="tab"
       accessibilityState={{ selected: value === key }}
@@ -40,5 +44,5 @@ function PlansSwitch({ value, onChange }: { value: PlanView; onChange: (v: PlanV
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.lg },
   option: { ...typography.overline, color: palette.textMuted },
-  optionOn: { color: palette.textPrimary },
+  optionOn: { color: place.plans },
 });

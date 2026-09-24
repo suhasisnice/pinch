@@ -9,7 +9,7 @@ import {
   propagateCategoryCorrection,
 } from '../services/classificationService';
 import { formatMoney, formatRelative } from '../utils/format';
-import { palette, radii, spacing, typography } from '../theme/theme';
+import { amountColor, palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Chip, Field, Sheet } from './ui';
 import Icon from './Icon';
 
@@ -249,7 +249,7 @@ export default function TransactionDetailSheet({
         <>
           <View style={styles.summary}>
             <Text style={styles.merchant}>{transaction.merchant}</Text>
-            <Text style={[styles.amount]}>
+            <Text style={[styles.amount, { color: amountColor(transaction.direction) }]}>
               {transaction.direction === 'CREDIT' ? '+' : '−'}
               {formatMoney(transaction.amount)}
             </Text>

@@ -4,7 +4,7 @@ import { RouteProp, useFocusEffect, useRoute } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { TransactionRow } from '../db/types';
 import { formatMoney, formatTime } from '../utils/format';
-import { palette, spacing, typography } from '../theme/theme';
+import { amountColor, categoryColor, palette, spacing, typography } from '../theme/theme';
 import {
   Card,
   Chip,
@@ -199,13 +199,14 @@ export default function TransactionsScreen() {
                 <Row
                   key={tx.id}
                   title={tx.merchant}
+                  mark={categoryColor(tx.category)}
                   subtitle={[
                     tx.category ?? 'Uncategorised',
                     tx.source === 'MANUAL' ? 'added by hand' : formatTime(tx.occurred_at),
                   ].join(' · ')}
                   onPress={() => setDetailFor(tx)}
                   right={
-                    <Text style={styles.amount}>
+                    <Text style={[styles.amount, { color: amountColor(tx.direction) }]}>
                       {tx.direction === 'CREDIT' ? '+' : '−'}
                       {formatMoney(tx.amount)}
                     </Text>

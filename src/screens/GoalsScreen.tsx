@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { showConfirm, showMessage } from '../components/Dialog';
 import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -26,6 +26,8 @@ import {
 import Icon, { GOAL_ICONS } from '../components/Icon';
 import { AnimatedMoney } from '../components/motion';
 import { JarsHero } from '../components/Heroes';
+import { celebrate } from '../components/Moment';
+import { GoalLevel, goalsJustReached } from '../math/moments';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -43,6 +45,7 @@ export default function GoalsScreen({ top }: { top?: React.ReactNode } = {}) {
   const [totalInvested, setTotalInvested] = useState(0);
   // The engine's figure, not a second calculation — Plans and Today must agree.
   const [totalReserved, setTotalReserved] = useState(0);
+  const lastLevels = useRef<GoalLevel[] | null>(null);
 
   const load = useCallback(async () => {
     const [nextGoals, roundUp, snapshot, invested] = await Promise.all([
@@ -52,6 +55,16 @@ export default function GoalsScreen({ top }: { top?: React.ReactNode } = {}) {
       db.getTotalInvested(),
     ]);
     setGoals(nextGoals);
+    const levels = nextGoals.map((g) => ({
+      id: g.id,
+      name: g.name,
+      saved: g.savedAmount,
+      target: g.targetAmount,
+    }));
+    for (const g of goalsJustReached(lastLevels.current, levels)) {
+      celebrate(`${g.name} is fully funded. Lovely.`);
+    }
+    lastLevels.current = levels;
     setRoundUpGoal(roundUp);
     setReserveCapped(snapshot.goalReserveCapped);
     setTotalReserved(snapshot.budget.goalReserve + (snapshot.budget.planReserve ?? 0));

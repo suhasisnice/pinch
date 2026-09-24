@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { showConfirm, showMessage } from '../components/Dialog';
 import { AppState, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { haptic } from '../components/haptics';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { TransactionRow } from '../db/types';
@@ -703,7 +704,10 @@ function Toggle({
       </View>
       <Switch
         value={value}
-        onValueChange={onChange}
+        onValueChange={(next) => {
+          haptic.toggle(next);
+          onChange(next);
+        }}
         // On is white, like every other "yes" in the app; coral stays rare.
         trackColor={{ false: palette.surfaceElevated, true: palette.textPrimary }}
         thumbColor={value ? palette.background : palette.textSecondary}

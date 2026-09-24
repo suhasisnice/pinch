@@ -1,4 +1,12 @@
-import { categoryColors, onColor, palette } from '../src/theme/theme';
+import {
+  accentForState,
+  amountColor,
+  balanceColor,
+  categoryColors,
+  onColor,
+  palette,
+  place,
+} from '../src/theme/theme';
 
 /**
  * Contrast is a property of the palette, so it can be checked like any other
@@ -38,6 +46,13 @@ describe('palette contrast', () => {
     // surface it is ever placed on. If anything is going to fail, it is this.
     ['textMuted on a raised surface', palette.textMuted, palette.surfaceElevated],
     ['accent as a link on a card', palette.accent, palette.surface],
+    // 0.9.18: colour now carries meaning in text too (money in, owed to you,
+    // a tab's own hue), so each of those has to be readable as text.
+    ['good as an amount on the page', palette.good, palette.background],
+    ['warning as an amount on the page', palette.warning, palette.background],
+    ['plans hue on the page', place.plans, palette.background],
+    ['wealth hue on the page', place.wealth, palette.background],
+    ['people hue on the page', place.people, palette.background],
   ];
 
   it.each(bodyPairs)('%s clears AA', (_label, foreground, background) => {
@@ -77,6 +92,34 @@ describe('onColor', () => {
   it('clears AA on every category colour a chip could be tinted with', () => {
     for (const tint of Object.values(categoryColors)) {
       expect(contrast(onColor(tint), tint)).toBeGreaterThanOrEqual(AA);
+    }
+  });
+});
+
+describe('colour roles (0.9.18)', () => {
+  it('reads how the day is going as green, amber, red', () => {
+    expect(accentForState('STEADY')).toBe(palette.good);
+    expect(accentForState('FRESH')).toBe(palette.good);
+    expect(accentForState('CLOSE')).toBe(palette.warning);
+    expect(accentForState('OVER')).toBe(palette.danger);
+  });
+
+  it('colours money in, and leaves money out as ink', () => {
+    expect(amountColor('CREDIT')).toBe(palette.good);
+    expect(amountColor('DEBIT')).toBe(palette.textPrimary);
+  });
+
+  it('owed to you is green, you owe is amber, settled is quiet', () => {
+    expect(balanceColor(500)).toBe(palette.good);
+    expect(balanceColor(-500)).toBe(palette.warning);
+    expect(balanceColor(0)).toBe(palette.textSecondary);
+  });
+
+  it('gives each tab a hue of its own, none of them a status colour', () => {
+    const hues = Object.values(place);
+    expect(new Set(hues).size).toBe(hues.length);
+    for (const hue of hues) {
+      expect([palette.good, palette.warning, palette.danger, palette.accent]).not.toContain(hue);
     }
   });
 });

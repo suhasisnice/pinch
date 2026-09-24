@@ -140,9 +140,7 @@ export default function LinkedGroupRow({
             >
               <Dot
                 color={
-                  member.direction === 'CREDIT'
-                    ? palette.textPrimary
-                    : categoryColor(member.category)
+                  member.direction === 'CREDIT' ? palette.good : categoryColor(member.category)
                 }
                 size={8}
               />
@@ -152,7 +150,7 @@ export default function LinkedGroupRow({
               <Text
                 style={[
                   styles.memberAmount,
-                  member.direction === 'CREDIT' && { color: palette.textPrimary },
+                  member.direction === 'CREDIT' && { color: palette.good },
                 ]}
               >
                 {member.direction === 'CREDIT' ? '+' : '−'}

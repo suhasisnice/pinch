@@ -15,14 +15,23 @@ const HEIGHT = 64;
 
 /**
  * This week at a glance: one column per day, measured against the daily
- * limit (the faint line). Under it and the day is quiet; over it and it
- * turns amber; today is the one lit column.
+ * limit (the faint line). Under it and the day is a soft green; over it and
+ * it turns amber; today is the one fully lit column, in today's own colour.
  *
  * It replaces a thin progress bar that said one thing — how much of today is
  * gone — with a picture of the rhythm that produced today's number, which is
  * the thing a person can actually change.
  */
-export default function WeekStrip({ days, limit }: { days: WeekDay[]; limit: number }) {
+export default function WeekStrip({
+  days,
+  limit,
+  todayColor = palette.good,
+}: {
+  days: WeekDay[];
+  limit: number;
+  /** Today's column wears how today is going, like the ring above it. */
+  todayColor?: string;
+}) {
   const peak = Math.max(limit * 1.4, ...days.map((d) => d.total), 1);
   const limitY = Math.min(HEIGHT, (limit / peak) * HEIGHT);
 
@@ -38,7 +47,14 @@ export default function WeekStrip({ days, limit }: { days: WeekDay[]; limit: num
       <View style={styles.chart}>
         {limit > 0 ? <View style={[styles.limit, { bottom: limitY }]} /> : null}
         {days.map((day, i) => (
-          <Column key={i} day={day} limit={limit} height={(day.total / peak) * HEIGHT} index={i} />
+          <Column
+            key={i}
+            day={day}
+            limit={limit}
+            height={(day.total / peak) * HEIGHT}
+            index={i}
+            todayColor={todayColor}
+          />
         ))}
       </View>
       <View style={styles.labels}>
@@ -57,11 +73,13 @@ function Column({
   limit,
   height,
   index,
+  todayColor,
 }: {
   day: WeekDay;
   limit: number;
   height: number;
   index: number;
+  todayColor: string;
 }) {
   const reduced = useReducedMotion();
   const grow = useRef(new Animated.Value(reduced ? 1 : 0)).current;
@@ -86,8 +104,8 @@ function Column({
     : over
       ? palette.warning
       : day.isToday
-        ? palette.accent
-        : layer(palette.textPrimary, 0.22);
+        ? todayColor
+        : layer(palette.good, 0.34);
   // A day with nothing spent still gets a stub, so the week reads as seven
   // days rather than as gaps.
   const target = day.isFuture ? 4 : Math.max(4, height);

@@ -32,6 +32,7 @@ import { formatMoney } from './src/utils/format';
 import { palette, spacing, typography } from './src/theme/theme';
 import Icon from './src/components/Icon';
 import { LockGate } from './src/security/AppLock';
+import { MomentHost } from './src/components/Moment';
 
 type Status = { phase: 'LOADING' } | { phase: 'READY' } | { phase: 'ERROR'; message: string };
 
@@ -264,6 +265,7 @@ export default function App() {
       <StatusBar barStyle="light-content" backgroundColor={palette.background} />
       <LockGate>
         <RootNavigator />
+        <MomentHost />
       </LockGate>
       {/* Mounted last so dialogs sit above everything, including sheets. */}
       <DialogHost />

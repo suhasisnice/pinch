@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Line, Polygon, Polyline } from 'react-native-svg';
-import { AnimatedMoney } from './motion';
+import { AnimatedMoney, FadeSlideIn, useReducedMotion } from './motion';
 import { formatMoney, formatMoneyCompact } from '../utils/format';
-import { layer, palette, spacing, typography } from '../theme/theme';
+import { layer, palette, place, spacing, typography } from '../theme/theme';
 
 /**
  * One hero shape per tab, so each tab is recognisable before you read a word
@@ -15,12 +15,42 @@ import { layer, palette, spacing, typography } from '../theme/theme';
  *   People  faces         who owes whom                    FacesHero
  *
  * Today stays centred; the other three are left-aligned, so even the layout
- * of the number is part of where you are. Still ink: the shapes carry the
- * distinction, not new colours.
+ * of the number is part of where you are.
+ *
+ * Since 0.9.18 each shape also wears its tab's hue (`place`): jars violet,
+ * the chart teal. People's faces take the money colours instead — green for
+ * owed to you, amber for what you owe — because there the colour is the news.
+ * The numeral stays ink everywhere: the number is the hero, colour frames it.
+ *
+ * Each shape arrives the way it means: jars fill from the bottom, the chart
+ * draws left to right, faces step in one by one. Once, on first show, and
+ * not at all with reduce-motion on.
  */
 
+/** A 0→1 value that runs once, after `delay`; 1 immediately with reduce-motion. */
+function useArrival(delay = 0, ms = 600) {
+  const reduced = useReducedMotion();
+  const value = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (reduced) {
+      value.setValue(1);
+      return;
+    }
+    const animation = Animated.timing(value, {
+      toValue: 1,
+      duration: ms,
+      delay,
+      easing: Easing.bezier(0.2, 0, 0, 1),
+      useNativeDriver: false,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [value, delay, ms, reduced]);
+  return value;
+}
+
 /** The number, left-aligned, with its label beside the baseline. */
-function Figure({ amount, label }: { amount: number; label: string }) {
+function Figure({ amount, label, hue }: { amount: number; label: string; hue: string }) {
   return (
     <View style={styles.figure}>
       <AnimatedMoney
@@ -29,7 +59,7 @@ function Figure({ amount, label }: { amount: number; label: string }) {
         numberOfLines={1}
         adjustsFontSizeToFit
       />
-      <Text style={styles.figureLabel}>{label}</Text>
+      <Text style={[styles.figureLabel, { color: hue }]}>{label}</Text>
     </View>
   );
 }
@@ -67,7 +97,7 @@ export function JarsHero({
   const shown = goals.slice(0, MAX_JARS);
   return (
     <View style={styles.hero}>
-      <Figure amount={amount} label={label} />
+      <Figure amount={amount} label={label} hue={place.plans} />
       {shown.length > 0 ? (
         <View
           style={styles.jars}
@@ -75,23 +105,47 @@ export function JarsHero({
             .map((g) => `${g.name} ${Math.round(fraction(g.saved, g.target) * 100)}%`)
             .join(', ')}
         >
-          {shown.map((goal) => {
-            const f = fraction(goal.saved, goal.target);
-            return (
-              <View key={goal.name} style={styles.jarColumn}>
-                <Text style={styles.jarPct}>{Math.round(f * 100)}%</Text>
-                <View style={styles.jar}>
-                  <View style={[styles.jarFill, { height: Math.max(2, f * JAR_HEIGHT) }]} />
-                </View>
-                <Text style={styles.jarName} numberOfLines={2}>
-                  {goal.name}
-                </Text>
-              </View>
-            );
-          })}
+          {shown.map((goal, i) => (
+            <Jar key={goal.name} goal={goal} index={i} />
+          ))}
         </View>
       ) : null}
       <Words line={line} meta={meta} />
+    </View>
+  );
+}
+
+function Jar({
+  goal,
+  index,
+}: {
+  goal: { name: string; saved: number; target: number };
+  index: number;
+}) {
+  const f = fraction(goal.saved, goal.target);
+  const fill = useArrival(80 + index * 70);
+  const full = f >= 1;
+  return (
+    <View style={styles.jarColumn}>
+      <Text style={[styles.jarPct, full && styles.jarDone]}>
+        {full ? 'Done' : `${Math.round(f * 100)}%`}
+      </Text>
+      <View style={[styles.jar, full && styles.jarFull]}>
+        <Animated.View
+          style={[
+            styles.jarFill,
+            {
+              height: fill.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, Math.max(2, f * JAR_HEIGHT)],
+              }),
+            },
+          ]}
+        />
+      </View>
+      <Text style={styles.jarName} numberOfLines={2}>
+        {goal.name}
+      </Text>
     </View>
   );
 }
@@ -136,6 +190,7 @@ export function ChartHero({
 }) {
   const [width, setWidth] = useState(0);
   const enough = history.length >= 2;
+  const draw = useArrival(120, 700);
 
   let chart: React.ReactNode = null;
   if (enough && width > 0) {
@@ -153,29 +208,38 @@ export function ChartHero({
     const path = points.map((p) => `${p.x},${p.y}`).join(' ');
     const last = points[points.length - 1];
     const floor = CHART_HEIGHT - pad;
+    // Drawn left to right: a window that widens over the finished chart.
     chart = (
-      <Svg width={width} height={CHART_HEIGHT}>
-        <Polygon
-          points={`${points[0].x},${floor} ${path} ${last.x},${floor}`}
-          fill={layer(palette.textPrimary, 0.06)}
-        />
-        <Line x1={0} y1={floor} x2={width} y2={floor} stroke={palette.border} strokeWidth={1} />
-        <Polyline
-          points={path}
-          fill="none"
-          stroke={palette.textPrimary}
-          strokeWidth={2}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-        <Circle cx={last.x} cy={last.y} r={4} fill={palette.textPrimary} />
-      </Svg>
+      <Animated.View
+        style={{
+          height: CHART_HEIGHT,
+          overflow: 'hidden',
+          width: draw.interpolate({ inputRange: [0, 1], outputRange: [0, width] }),
+        }}
+      >
+        <Svg width={width} height={CHART_HEIGHT}>
+          <Polygon
+            points={`${points[0].x},${floor} ${path} ${last.x},${floor}`}
+            fill={layer(place.wealth, 0.1)}
+          />
+          <Line x1={0} y1={floor} x2={width} y2={floor} stroke={palette.border} strokeWidth={1} />
+          <Polyline
+            points={path}
+            fill="none"
+            stroke={place.wealth}
+            strokeWidth={2}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+          <Circle cx={last.x} cy={last.y} r={4} fill={place.wealth} />
+        </Svg>
+      </Animated.View>
     );
   }
 
   return (
     <View style={styles.hero}>
-      <Figure amount={amount} label={label} />
+      <Figure amount={amount} label={label} hue={place.wealth} />
       {enough ? (
         <View
           style={styles.chart}
@@ -230,35 +294,36 @@ export function FacesHero({
 
   return (
     <View style={styles.hero}>
-      <Figure amount={amount} label={label} />
+      <Figure amount={amount} label={label} hue={place.people} />
       {open.length > 0 ? (
         <View style={styles.faces}>
-          {open.map((person) => {
+          {open.map((person, i) => {
             // Size says how much, so the biggest debt is the biggest face.
             const size = FACE_MIN + (FACE_MAX - FACE_MIN) * (Math.abs(person.amount) / biggest);
             const theyOwe = person.amount > 0;
             return (
-              <View
-                key={person.name}
-                style={styles.faceColumn}
-                accessibilityLabel={`${person.name} ${theyOwe ? 'owes you' : 'is owed'} ${formatMoney(Math.abs(person.amount))}`}
-              >
+              <FadeSlideIn key={person.name} delay={60 + i * 60} distance={8}>
                 <View
-                  style={[
-                    styles.face,
-                    { width: size, height: size, borderRadius: size / 2 },
-                    theyOwe ? styles.faceOwesYou : styles.faceYouOwe,
-                  ]}
+                  style={styles.faceColumn}
+                  accessibilityLabel={`${person.name} ${theyOwe ? 'owes you' : 'is owed'} ${formatMoney(Math.abs(person.amount))}`}
                 >
-                  <Text style={[styles.initials, !theyOwe && styles.initialsYouOwe]}>
-                    {initials(person.name)}
+                  <View
+                    style={[
+                      styles.face,
+                      { width: size, height: size, borderRadius: size / 2 },
+                      theyOwe ? styles.faceOwesYou : styles.faceYouOwe,
+                    ]}
+                  >
+                    <Text style={[styles.initials, !theyOwe && styles.initialsYouOwe]}>
+                      {initials(person.name)}
+                    </Text>
+                  </View>
+                  <Text style={[styles.faceAmount, theyOwe ? styles.good : styles.owe]}>
+                    {theyOwe ? '+' : '−'}
+                    {formatMoneyCompact(Math.abs(person.amount))}
                   </Text>
                 </View>
-                <Text style={styles.faceAmount}>
-                  {theyOwe ? '+' : '−'}
-                  {formatMoneyCompact(Math.abs(person.amount))}
-                </Text>
-              </View>
+              </FadeSlideIn>
             );
           })}
         </View>
@@ -292,9 +357,10 @@ const styles = StyleSheet.create({
   meta: { ...typography.caption, color: palette.textMuted },
 
   // Jars
-  jars: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md },
+  jars: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   jarColumn: { flex: 1, maxWidth: 72, alignItems: 'center', gap: spacing.xs },
   jarPct: { ...typography.caption, color: palette.textSecondary },
+  jarDone: { color: place.plans, fontWeight: '600' },
   jar: {
     width: '100%',
     height: JAR_HEIGHT,
@@ -304,7 +370,8 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     overflow: 'hidden',
   },
-  jarFill: { width: '100%', backgroundColor: palette.textPrimary },
+  jarFull: { borderColor: place.plans },
+  jarFill: { width: '100%', backgroundColor: place.plans },
   jarName: {
     ...typography.caption,
     color: palette.textMuted,
@@ -316,16 +383,18 @@ const styles = StyleSheet.create({
   chart: { gap: spacing.xs },
   chartMonths: { flexDirection: 'row', justifyContent: 'space-between' },
   chartMonth: { ...typography.caption, color: palette.textMuted },
-  chartMonthNow: { color: palette.textPrimary },
+  chartMonthNow: { color: place.wealth },
 
   // Faces
   faces: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md, flexWrap: 'wrap' },
   faceColumn: { alignItems: 'center', gap: spacing.xs },
   face: { alignItems: 'center', justifyContent: 'center' },
-  faceOwesYou: { backgroundColor: palette.textPrimary },
-  // Money you owe is the one place People uses the accent: it is the thing to act on.
-  faceYouOwe: { borderWidth: 1.5, borderColor: palette.accent },
+  // Owed to you: a filled green face. You owe: an amber ring, the thing to act on.
+  faceOwesYou: { backgroundColor: palette.good },
+  faceYouOwe: { borderWidth: 1.5, borderColor: palette.warning },
   initials: { ...typography.bodyBold, color: palette.background },
-  initialsYouOwe: { color: palette.accent },
-  faceAmount: { ...typography.caption, color: palette.textSecondary },
+  initialsYouOwe: { color: palette.warning },
+  faceAmount: { ...typography.caption },
+  good: { color: palette.good },
+  owe: { color: palette.warning },
 });
