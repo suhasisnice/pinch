@@ -54,14 +54,13 @@ export default function ReconcileSheet({
 
       <Text style={styles.body}>
         {missingSpend
-          ? 'Your bank has less than this ledger expects, so something was spent that never reached the app — cash, a payment with no message, or one that was misread.'
-          : 'Your bank has more than this ledger expects, so something arrived that never reached the app.'}
+          ? 'Your bank has less than Pinch expects. Something was spent it never saw — cash, or a missed message.'
+          : 'Your bank has more than Pinch expects. Something arrived it never saw.'}
       </Text>
 
       <Button label="Look for the message" variant="secondary" onPress={onFindIt} />
       <Text style={styles.hint}>
-        Checks anything waiting in Review, and any message that was never turned into a
-        transaction.
+        Checks Review and unread messages.
       </Text>
 
       <Button
@@ -70,14 +69,12 @@ export default function ReconcileSheet({
         onPress={() => onAddIt(amount, missingSpend ? 'DEBIT' : 'CREDIT')}
       />
       <Text style={styles.hint}>
-        Recorded as an adjustment, so it is never mistaken for a purchase you categorised or an
-        allowance you were paid.
+        Saved as an adjustment, not a purchase.
       </Text>
 
       <Button label="Leave it" variant="ghost" onPress={onIgnore} />
       <Text style={styles.hint}>
-        Stops the reminder until the gap changes. Worth doing when you know what it was and it
-        does not matter.
+        Hides this until the gap changes.
       </Text>
     </Sheet>
   );

@@ -131,8 +131,7 @@ function UpdateBalanceSheet({
   return (
     <Sheet visible={visible} onClose={onClose} title="Bank balance">
       <Text style={styles.intro}>
-        Check your banking app and type what it says. This is kept separate from your budget —
-        it is what you have, not what you may spend.
+        Type what your banking app shows. It's what you have, not what you can spend.
       </Text>
 
       <Field
@@ -148,8 +147,7 @@ function UpdateBalanceSheet({
           <Icon name="info" size={15} color={palette.warning} />
           <Text style={styles.driftText}>
             {formatMoney(Math.abs(drift))}{' '}
-            {drift < 0 ? 'less' : 'more'} than Pinch expected. That gap is usually cash spending,
-            or a message it could not read — worth a look in Transactions if it keeps growing.
+            {drift < 0 ? 'less' : 'more'} than expected — usually cash, or a message Pinch missed.
           </Text>
         </View>
       ) : null}

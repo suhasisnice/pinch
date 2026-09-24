@@ -99,8 +99,8 @@ export default function MarkAsLoanSheet({
     >
       <Text style={styles.intro}>
         {lending
-          ? `${formatMoney(transaction.amount)} to ${transaction.merchant}. Recording who owes it means it stops counting as money you spent on yourself, and starts counting as money on its way back.`
-          : `${formatMoney(transaction.amount)} from ${transaction.merchant}. Recording it means it is not treated as allowance you can spend.`}
+          ? `${formatMoney(transaction.amount)} to ${transaction.merchant}. It stops counting as your spending.`
+          : `${formatMoney(transaction.amount)} from ${transaction.merchant}. It won't count as money to spend.`}
       </Text>
 
       {suggestions.length > 0 ? (

@@ -68,7 +68,7 @@ export default function ReviewScreen() {
           <EmptyState
             icon="check"
             title="Nothing to review"
-            body="Anything Pinch can't read confidently lands here so it never guesses at your numbers."
+            body="Anything Pinch isn't sure about waits here."
           />
         </Card>
       ) : (
@@ -112,9 +112,8 @@ export default function ReviewScreen() {
                       uses your contact name, the bank uses the registered one
                       — so this cannot be settled automatically either way. */}
                   <Text style={styles.dupeQuestion}>
-                    You already have {formatMoney(twin.amount)} from {twin.merchant},{' '}
-                    {formatRelative(twin.occurred_at)}, captured from{' '}
-                    {twin.source === 'SMS' ? 'SMS' : 'a notification'}. Is this the same payment?
+                    Same as {formatMoney(twin.amount)} from {twin.merchant},{' '}
+                    {formatRelative(twin.occurred_at)}?
                   </Text>
                   <View style={styles.actions}>
                     <Button
@@ -138,7 +137,7 @@ export default function ReviewScreen() {
                     />
                   </View>
                   <Text style={styles.dupeHint}>
-                    "Same one" keeps the payment you already have and drops this repeat of it.
+                    Same one keeps the original.
                   </Text>
                 </>
               ) : (

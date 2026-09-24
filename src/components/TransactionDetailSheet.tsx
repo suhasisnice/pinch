@@ -184,7 +184,7 @@ export default function TransactionDetailSheet({
     void showConfirm({
       title: 'Delete this transaction?',
       message:
-        'It stops counting toward your spending. You can bring it back from Settings › Ignored.',
+        'It stops counting. Bring it back from Settings.',
       confirmLabel: 'Delete',
       destructive: true,
     }).then((ok) => {
@@ -295,7 +295,7 @@ export default function TransactionDetailSheet({
                 onPress={() => onLinkReimbursement(transaction)}
               />
               <Text style={styles.loanHint}>
-                Pick what it covered and the two show as one line at what was actually yours.
+                Pick what it covered to see your real share.
               </Text>
             </>
           ) : null}
@@ -312,8 +312,8 @@ export default function TransactionDetailSheet({
               />
               <Text style={styles.loanHint}>
                 {transaction.direction === 'DEBIT'
-                  ? 'Records who owes it back, so it stops counting as money spent on yourself.'
-                  : 'Records that you owe it, so it is not treated as allowance to spend.'}
+                  ? 'Stops counting as your spending.'
+                  : "Won't count as money to spend."}
               </Text>
             </>
           ) : null}

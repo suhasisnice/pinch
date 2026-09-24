@@ -13,7 +13,7 @@ import { canIAfford, daysUntilBroke, shouldRaiseDiscrepancy } from '../math/budg
 import { TransactionRow } from '../db/types';
 import { formatMoney, formatRelative } from '../utils/format';
 import { accentForState, categoryColor, layer, palette, radii, spacing, typography } from '../theme/theme';
-import { SectionHeader,
+import { Group,
   Button,
   Card,
   CardTitle,
@@ -145,9 +145,8 @@ export default function TodayScreen() {
             <Text style={styles.troubleTitle}>Your numbers look wrong</Text>
           </View>
           <Text style={styles.troubleBody}>
-            You are {formatMoney(-snapshot.budget.spendablePool)} past an allowance of{' '}
-            {formatMoney(snapshot.budget.allowance)}. That usually means imported messages were
-            counted as spending when they were not real transactions.
+            {formatMoney(-snapshot.budget.spendablePool)} past your {formatMoney(snapshot.budget.allowance)}{' '}
+            allowance. Usually a message was counted that wasn't a real payment.
           </Text>
           <View style={styles.troubleActions}>
             <Button
@@ -247,8 +246,8 @@ export default function TodayScreen() {
             <Icon name="info" size={13} color={palette.warning} />
             <Text style={styles.consistencyText}>
               {snapshot.balanceConsistency.discrepancy > 0
-                ? `Your bank balance has ${formatMoney(snapshot.balanceConsistency.discrepancy)} more than this accounts for. Tap to sort it out.`
-                : `Your bank balance has ${formatMoney(-snapshot.balanceConsistency.discrepancy)} less than this accounts for — a payment may be missing. Tap to sort it out.`}
+                ? `Bank shows ${formatMoney(snapshot.balanceConsistency.discrepancy)} more than this. Sort it out`
+                : `Bank shows ${formatMoney(-snapshot.balanceConsistency.discrepancy)} less — a payment may be missing`}
             </Text>
           </Pressable>
         ) : null}
@@ -277,7 +276,7 @@ export default function TodayScreen() {
                 ? `You'd drop to ${formatMoney(verdict.newDailyLimit)}/day for ${snapshot.daysRemaining} days.`
                 : `That's ${formatMoney(Math.abs(verdict.newDailyLimit * snapshot.daysRemaining))} more than you have left.`}
               {verdict.daysOfTypicalSpending
-                ? ` About ${verdict.daysOfTypicalSpending.toFixed(1)} days of your normal spending.`
+                ? ` ${verdict.daysOfTypicalSpending.toFixed(1)} normal days.`
                 : ''}
             </Text>
           </View>
@@ -306,17 +305,16 @@ export default function TodayScreen() {
       </FadeSlideIn>
 
       <FadeSlideIn delay={210}>
-      <View>
-        <SectionHeader
-          title="Today's spending"
-          action="See all"
-          onAction={() => navigation.navigate('Transactions')}
-        />
+      <Group
+        title="Today's spending"
+        action="See all"
+        onAction={() => navigation.navigate('Transactions')}
+      >
         {today.length === 0 ? (
           <EmptyState
             icon="empty"
             title="Nothing yet today"
-            body="Captured payments land here automatically, or add one by hand."
+            body="Payments show up here on their own."
           />
         ) : (
           today.map((tx) => {
@@ -360,15 +358,15 @@ export default function TodayScreen() {
             );
           })
         )}
-      </View>
+      </Group>
       </FadeSlideIn>
 
       {brokeIn !== null && brokeIn < snapshot.daysRemaining ? (
         <Card style={{ backgroundColor: layer(palette.warning, 0.12) }}>
           <Text style={styles.projection}>
-            At your current pace you run out in{' '}
-            <Text style={{ color: palette.warning, fontWeight: '800' }}>{brokeIn} days</Text>, with{' '}
-            {snapshot.daysRemaining} left in the period.
+            At this pace, money runs out in{' '}
+            <Text style={{ color: palette.warning, fontWeight: '800' }}>{brokeIn} days</Text>, not{' '}
+            {snapshot.daysRemaining}.
           </Text>
         </Card>
       ) : null}

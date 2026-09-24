@@ -119,8 +119,7 @@ export default function FreshStartSheet({
         <View style={styles.historyNote}>
           <Icon name="insights" size={14} color={palette.textMuted} />
           <Text style={styles.historyText}>
-            Last {HISTORY_WINDOW_DAYS} days, for context: {historyLine(history)}. Doesn't set your
-            number — that part's still yours.
+            Last {HISTORY_WINDOW_DAYS} days: {historyLine(history)}.
           </Text>
         </View>
       ) : null}
@@ -156,8 +155,8 @@ export default function FreshStartSheet({
           <Text style={styles.toggleLabel}>Also delete past transactions</Text>
           <Text style={styles.toggleHint}>
             {counts
-              ? `Off by default — your ${counts.transactions} old transactions stay for Insights, but none of them count against this budget.`
-              : 'Old transactions stay for Insights but do not count against this budget.'}
+              ? `Your ${counts.transactions} old transactions stay in Insights but won't count here.`
+              : "Old transactions stay in Insights but won't count here."}
           </Text>
         </View>
         <Switch

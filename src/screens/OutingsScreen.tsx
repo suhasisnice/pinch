@@ -82,7 +82,7 @@ export default function OutingsScreen() {
           <EmptyState
             icon="outings"
             title="No outings yet"
-            body="Start one before you head out and everything you spend gets tagged to it automatically — then settle up with everyone in one go."
+            body="Start one before you head out. Spends get tagged, and you settle up once."
           />
         </Card>
       ) : null}
@@ -261,7 +261,7 @@ function CreateOutingSheet({
         </Text>
       ) : null}
       <Text style={styles.note}>
-        While this is open, anything you spend is tagged to it automatically.
+        Spends are tagged to it while it's open.
       </Text>
       <Button label={saving ? 'Starting…' : 'Start'} onPress={save} disabled={!canSave || saving} />
     </Sheet>
