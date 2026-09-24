@@ -13,5 +13,7 @@ android {
   defaultConfig {
     versionCode 2
     versionName '0.2.0'
+    // Applied to the app's R8 pass too, so release minification keeps them.
+    consumerProguardFiles 'proguard-rules.pro'
   }
 }
