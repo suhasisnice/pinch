@@ -11,6 +11,7 @@ import {
   TextInputProps,
   View,
   ViewStyle,
+  type RefreshControlProps,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -45,7 +46,7 @@ export function Screen({
 }: {
   children: React.ReactNode;
   scroll?: boolean;
-  refreshControl?: React.ReactElement;
+  refreshControl?: React.ReactElement<RefreshControlProps>;
   /**
    * A stack screen whose navigation header already clears the status bar.
    * Insetting again left a status-bar-sized gap under the back arrow.

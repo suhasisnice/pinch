@@ -19,8 +19,11 @@ import { countUnresolvedRawEvents, getRejectionBreakdown } from '../db/dbService
 import { PARSER_RULES_VERSION } from '../services/revalidationService';
 import { revalidateHistory } from '../services/revalidationService';
 import {
+  clearPersonalSettings,
+  getAppLock,
   getMonthlyAllowance,
   getNotificationSettings,
+  setAppLock,
   setMonthlyAllowance,
   setNotificationSettings,
 } from '../settings/settingsStore';
@@ -31,6 +34,8 @@ import { palette, spacing, typography } from '../theme/theme';
 import { Button, Field, Group, Loading, Row, Screen, ScreenTitle } from '../components/ui';
 import Icon from '../components/Icon';
 import FreshStartSheet from '../components/FreshStartSheet';
+import BackupSheet from '../components/BackupSheet';
+import { canUseAppLock, confirmIdentity } from '../security/AppLock';
 import appConfig from '../../app.json';
 
 export default function SettingsScreen() {
@@ -52,6 +57,9 @@ export default function SettingsScreen() {
   // the old number back. That is what "the budget is stuck" looked like.
   const [budgetEdited, setBudgetEdited] = useState(false);
   const [freshVisible, setFreshVisible] = useState(false);
+  const [lockOn, setLockOn] = useState(false);
+  const [lockAvailable, setLockAvailable] = useState(false);
+  const [backupMode, setBackupMode] = useState<'SAVE' | 'RESTORE' | null>(null);
 
   const refreshPermissions = useCallback(() => {
     setSmsGranted(hasSmsPermission());
@@ -68,6 +76,8 @@ export default function SettingsScreen() {
       db.getExcludedTransactions(),
     ]);
     setBlocked(blockRows);
+    setLockOn(await getAppLock());
+    setLockAvailable(await canUseAppLock());
     setExcluded(excludedRows);
     setCounts(await db.countData());
     if (!budgetEdited) {
@@ -176,7 +186,9 @@ export default function SettingsScreen() {
         goals: everything,
         outings: everything,
         blocklist: everything,
+        personal: everything,
       });
+      if (everything) await clearPersonalSettings();
 
       const parsed = Number(allowance.replace(/[^\d.]/g, ''));
       const days = Number(periodDays.replace(/[^\d]/g, '')) || 30;
@@ -538,6 +550,49 @@ export default function SettingsScreen() {
           onChange={(value) => update({ settleRemindersEnabled: value })}
         />
       </Group>
+
+      <Group
+        title="Privacy"
+        footer="Pinch has no account and no server. A backup file is the only copy of your data that ever leaves this phone, and only when you make one."
+      >
+        {lockAvailable ? (
+          <Toggle
+            key="lock"
+            label="Lock with fingerprint"
+            hint="Asks when Pinch opens"
+            value={lockOn}
+            onChange={async (value) => {
+              // Prove it works before relying on it, so nobody locks themselves out.
+              if (value && !(await confirmIdentity('Turn on the Pinch lock'))) return;
+              await setAppLock(value);
+              setLockOn(value);
+            }}
+          />
+        ) : null}
+        <NavRow
+          key="save-backup"
+          title="Save a backup"
+          subtitle="Encrypted with a passphrase"
+          onPress={() => setBackupMode('SAVE')}
+        />
+        <NavRow
+          key="restore-backup"
+          title="Restore a backup"
+          subtitle="Replaces what is on this phone"
+          onPress={() => setBackupMode('RESTORE')}
+        />
+      </Group>
+
+      <BackupSheet
+        mode={backupMode}
+        onClose={() => setBackupMode(null)}
+        onRestored={() => {
+          setBackupMode(null);
+          setBudgetEdited(false);
+          load();
+          showMessage('Restored', 'Everything from the backup is back.');
+        }}
+      />
 
       <Group
         title="Start over"

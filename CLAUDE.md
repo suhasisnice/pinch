@@ -3,7 +3,8 @@
 ## Project
 
 Offline-first personal finance app for Indian college students, Android-only.
-Expo 51 / React Native 0.74 / TypeScript, `expo-sqlite` for storage, plus a
+Expo 57 / React Native 0.86 / React 19 / TypeScript 6 (upgraded from Expo 51
+in 0.9.17), `expo-sqlite` with SQLCipher for storage, plus a
 custom native module (`modules/pinch-capture`) that captures SMS and
 notifications on-device.
 
@@ -63,7 +64,9 @@ logic into a screen.
 - **A settlement is not income or expense.** The expense was booked when the bill was paid.
 - **Never fabricate a transaction.** Low confidence goes to the review inbox (`CaptureInbox`),
   not the ledger. `ACCEPT_THRESHOLD` in `src/services/parserService.ts` is the gate.
-- **Keep raw evidence.** Do not discard a raw source event because it was merged, rejected or superseded.
+- **Keep raw evidence — of financial messages only.** Do not discard a raw source event because it was
+  merged, rejected or superseded. But a personal SMS is never raw evidence: it is dropped before storage
+  (Play's SMS policy, DPDP data minimisation; narrowed in 0.9.17), and OTP codes are masked.
 
 ## Offline-first
 
@@ -101,6 +104,9 @@ Raycast ink, a coral accent used rarely, "fine is not a colour" (healthy = white
 thin huge numerals, no boxes, one outlined sentence-case action per screen, and
 three tabs (Today / Plans / People), four since 0.9.15 with Wealth (`docs/WEALTH.md`).
 Copy is witty but kind. See `docs/DESIGN_DIRECTION.md`.
+Each tab owns one hero *shape* (0.9.17, `src/components/Heroes.tsx`): Today a
+centred ring, Plans jars, Wealth a chart, People faces. Distinction comes from
+shape, not new colours. Don't give a tab another tab's hero.
 - Transitions 150–220ms.
 
 ## Reuse / refactor / rebuild
@@ -120,6 +126,11 @@ architecture because it already exists.
   self-transfer, refund, failed payment — not just happy paths.
 - Schema changes are forward-only migrations in `src/db/migrations.ts`, keyed on
   `user_version`. Never edit a migration that has already shipped; add the next one.
+- tsconfig targets Metro (`moduleResolution: bundler`); `jest.config.js` overrides it
+  to CommonJS for ts-jest. Keep that override when touching either file.
+- Privacy rules with tests behind them: only financial SMS are ever stored
+  (`FinancialSms.kt` + `smsPrivacy.ts`), OTPs are masked, and "Erase everything"
+  must leave no personal table with rows (`tests/backup.test.ts`). See `docs/PLAY_READINESS.md`.
 - No `tsx`/`ts-node` is installed. To run ad-hoc TypeScript, write it as a jest test.
 
 ## Phase boundary rule

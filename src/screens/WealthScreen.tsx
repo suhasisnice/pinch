@@ -17,11 +17,11 @@ import { BalanceState } from '../db/repos/balance';
 import { PaydayItem } from '../math/payday';
 import { habitLine } from '../math/progress';
 import BalanceCard from '../components/BalanceCard';
+import { ChartHero } from '../components/Heroes';
 import {
   HabitBars,
   InvestSheet,
   Milestones,
-  NetWorthLine,
   PaydayChecklist,
   PlanSheet,
 } from '../components/WealthParts';
@@ -146,13 +146,13 @@ export default function WealthScreen() {
           until then, what has been kept — never a guessed total. */}
       {snap.netWorth !== null ? (
         <>
-          <Hero
+          <ChartHero
             amount={snap.netWorth}
             label="net worth"
+            history={snap.netWorthHistory}
             line={netWorthLine(snap.netWorth, lastMonth)}
             meta={`${formatMoney(balance.projected ?? 0)} in the bank · ${formatMoney(snap.worth)} invested`}
           />
-          <NetWorthLine history={snap.netWorthHistory} />
         </>
       ) : (
         <>

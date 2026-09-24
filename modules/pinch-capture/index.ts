@@ -1,4 +1,8 @@
-import { EventEmitter, Subscription, requireOptionalNativeModule } from 'expo-modules-core';
+import {
+  EventSubscription,
+  LegacyEventEmitter,
+  requireOptionalNativeModule,
+} from 'expo-modules-core';
 import { PermissionsAndroid, Platform } from 'react-native';
 
 export interface CapturedMessage {
@@ -46,7 +50,7 @@ const native = requireOptionalNativeModule<PinchCaptureNative>('PinchCapture');
  */
 export const isCaptureAvailable = Platform.OS === 'android' && native != null;
 
-const emitter = native ? new EventEmitter(native as never) : null;
+const emitter = native ? new LegacyEventEmitter(native as never) : null;
 
 export function hasSmsPermission(): boolean {
   if (!isCaptureAvailable) return false;
@@ -103,9 +107,7 @@ export function hasContactsPermission(): boolean {
 export async function requestContactsPermission(): Promise<boolean> {
   if (!isCaptureAvailable) return false;
   try {
-    const result = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.READ_CONTACTS
-    );
+    const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_CONTACTS);
     return result === 'granted';
   } catch {
     return false;
@@ -178,7 +180,7 @@ export function pendingCount(): number {
 /** Live arrivals while the app is in the foreground. */
 export function addMessageListener(
   handler: (message: CapturedMessage) => void
-): Subscription | null {
+): EventSubscription | null {
   if (!emitter) return null;
   try {
     return emitter.addListener<CapturedMessage>('onMessage', handler);

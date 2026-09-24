@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Polyline } from 'react-native-svg';
 
 import { HoldingSummary } from '../db/repos/holdings';
 import {
@@ -32,59 +31,6 @@ const SHORT_MONTHS = [
   'Nov',
   'Dec',
 ];
-
-// ---------------------------------------------------------------------------
-// Net worth line
-// ---------------------------------------------------------------------------
-
-/**
- * A hairline of net worth by month. No axes, no grid — the figure above it
- * is the number; this is only the direction.
- */
-export function NetWorthLine({ history }: { history: { month: string; value: number }[] }) {
-  const [width, setWidth] = useState(0);
-  if (history.length < 2) return null;
-
-  const height = 56;
-  const pad = 4;
-  const values = history.map((h) => h.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min || 1;
-  const points = history.map((h, i) => {
-    const x = pad + (i * (width - pad * 2)) / (history.length - 1);
-    const y = pad + (1 - (h.value - min) / span) * (height - pad * 2);
-    return { x, y };
-  });
-  const last = points[points.length - 1];
-  const label = (m: string) => SHORT_MONTHS[Number(m.slice(5, 7)) - 1];
-
-  return (
-    <View
-      style={styles.lineWrap}
-      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-      accessibilityLabel={`Net worth over ${history.length} months, from ${formatMoney(values[0])} to ${formatMoney(values[values.length - 1])}`}
-    >
-      {width > 0 ? (
-        <Svg width={width} height={height}>
-          <Polyline
-            points={points.map((p) => `${p.x},${p.y}`).join(' ')}
-            fill="none"
-            stroke={palette.textPrimary}
-            strokeWidth={1.5}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-          <Circle cx={last.x} cy={last.y} r={3} fill={palette.textPrimary} />
-        </Svg>
-      ) : null}
-      <View style={styles.lineLabels}>
-        <Text style={styles.lineLabel}>{label(history[0].month)}</Text>
-        <Text style={styles.lineLabel}>{label(history[history.length - 1].month)}</Text>
-      </View>
-    </View>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Payday checklist
@@ -481,10 +427,6 @@ export function Milestones({
 
 const styles = StyleSheet.create({
   pressed: { opacity: 0.6 },
-
-  lineWrap: { marginTop: spacing.sm, marginBottom: spacing.md },
-  lineLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-  lineLabel: { ...typography.caption, color: palette.textMuted },
 
   payday: { gap: spacing.xs },
   paydayLine: {

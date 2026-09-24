@@ -17,7 +17,6 @@ import {
   Chip,
   Field,
   Group,
-  Hero,
   Loading,
   ProgressBar,
   Screen,
@@ -26,6 +25,7 @@ import {
 } from '../components/ui';
 import Icon, { GOAL_ICONS } from '../components/Icon';
 import { AnimatedMoney } from '../components/motion';
+import { JarsHero } from '../components/Heroes';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -104,9 +104,14 @@ export default function GoalsScreen({ top }: { top?: React.ReactNode } = {}) {
         </View>
       ) : (
         <>
-          <Hero
+          <JarsHero
             amount={totalSaved}
             label="saved so far"
+            goals={goals.map((g) => ({
+              name: g.name,
+              saved: g.savedAmount,
+              target: g.targetAmount,
+            }))}
             line={savingLine(goals)}
             meta={`${formatMoney(totalReserved)} set aside this month${
               totalInvested > 0.009 ? ` · ${formatMoney(totalInvested)} invested` : ''

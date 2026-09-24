@@ -6,6 +6,7 @@ import * as db from '../db/dbService';
 import { ContactBalance, IOUDetail, TransactionRow } from '../db/types';
 import { postTransaction } from '../services/captureService';
 import { sendNudge } from '../utils/nudge';
+import { FacesHero } from '../components/Heroes';
 import { receivableConfidence } from '../math/budget';
 import { formatMoney, formatRelative, daysBetween } from '../utils/format';
 import { balanceColor, palette, radii, spacing, typography } from '../theme/theme';
@@ -16,7 +17,6 @@ import {
   CardTitle,
   Field,
   Group,
-  Hero,
   Loading,
   Row,
   Screen,
@@ -94,9 +94,10 @@ export default function SquadScreen() {
         }}
       />
 
-      <Hero
+      <FacesHero
         amount={totalIn}
         label="owed to you"
+        people={balances.map((b) => ({ name: b.name, amount: b.netAmount }))}
         line={peopleLine(totalIn, totalOut, owedToYou.length)}
         meta={totalOut > 0.009 ? `You owe ${formatMoney(totalOut)}` : 'You owe nobody. Rare.'}
       />
