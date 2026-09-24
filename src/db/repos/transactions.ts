@@ -3,6 +3,16 @@ import { CaptureSource, Direction, TransactionKind, TransactionRow, TransactionS
 import { sameMerchant } from '../../math/merchantClassifier';
 import { sameKnownPerson } from './ious';
 
+/**
+ * occurred_at is stored in UTC, so its first ten characters are the UTC day.
+ * In India that files everything between midnight and 5:30 AM under the day
+ * before. Shifting by the phone's offset first gives the day the user lived.
+ * The offset is taken now; India has no daylight saving, so it is fixed.
+ */
+function localOffset(): string {
+  return `${-new Date().getTimezoneOffset()} minutes`;
+}
+
 export interface NewTransaction {
   amount: number;
   direction: Direction;
@@ -232,12 +242,12 @@ export async function getMonthlySpend(
     `SELECT substr(occurred_at, 1, 7) AS month,
             SUM(amount) AS total,
             COUNT(*) AS count,
-            COUNT(DISTINCT substr(occurred_at, 1, 10)) AS days
+            COUNT(DISTINCT substr(datetime(occurred_at, ?), 1, 10)) AS days
      FROM Transactions
      WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL AND occurred_at >= ?
      GROUP BY month
      ORDER BY month DESC;`,
-    [start.toISOString()]
+    [localOffset(), start.toISOString()]
   );
 }
 
@@ -417,20 +427,20 @@ export async function getSpendByCategory(
   );
 }
 
-/** Daily spend totals for a window, oldest first. Gaps are omitted, not zero-filled. */
+/** Daily spend totals by the phone's local day, oldest first. Gaps are omitted, not zero-filled. */
 export async function getDailySpend(
   startIso: string,
   endIso: string
 ): Promise<Array<{ day: string; total: number }>> {
   const db = getAdapter();
   return db.getAllAsync<{ day: string; total: number }>(
-    `SELECT substr(occurred_at, 1, 10) AS day, SUM(amount) AS total
+    `SELECT substr(datetime(occurred_at, ?), 1, 10) AS day, SUM(amount) AS total
      FROM Transactions
      WHERE kind = 'SPEND' AND excluded_at IS NULL AND transfer_pair_id IS NULL AND non_spend_reason IS NULL
        AND occurred_at >= ? AND occurred_at < ?
      GROUP BY day
      ORDER BY day ASC;`,
-    [startIso, endIso]
+    [localOffset(), startIso, endIso]
   );
 }
 

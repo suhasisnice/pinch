@@ -18,6 +18,7 @@ import {
   detectRecurring,
 } from '../math/insights';
 import { sipOccurrences, sipReserve } from '../math/wealth';
+import { localDay } from '../math/recovery';
 import { DEFAULT_PAY_PLAN, Payday, paydayFromData } from '../math/payday';
 import { getCushionGoalId, getPayPlan } from '../settings/settingsStore';
 import {
@@ -220,7 +221,7 @@ export async function getBudgetSnapshot(
     periodEnd: period.endsOn,
     daysRemaining: period.daysRemaining,
     avgDailyBurn: averageDailySpend(daily),
-    streakDays: computeStreak(daily, dayStartLimit, nowIso.slice(0, 10)),
+    streakDays: computeStreak(daily, dayStartLimit, localDay(now)),
     totalReceivable,
     totalPayable,
     pendingCaptures,

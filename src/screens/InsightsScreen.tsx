@@ -37,6 +37,7 @@ import {
 } from '../components/ui';
 import Icon from '../components/Icon';
 import { lastCompletedWeek } from '../math/weeklyRecap';
+import { localDay } from '../math/recovery';
 import { weekRange } from './RecapScreen';
 
 type CategoryCost = Awaited<ReturnType<typeof db.getCategoryCost>>[number];
@@ -221,7 +222,7 @@ export default function InsightsScreen() {
     daysRemaining: snapshot.daysRemaining,
     endLabel,
     daily,
-    today: new Date().toISOString().slice(0, 10),
+    today: localDay(new Date()),
   });
 
   const typical = typicalDay(daily);
