@@ -7,9 +7,9 @@ import {
   postTransaction,
   postTransfer,
 } from '../services/captureService';
-import { CATEGORIES } from '../db/schema';
 import { OutingSummary } from '../db/repos/outings';
 import { Button, Chip, Field, Sheet } from './ui';
+import CategoryPicker, { CategoryChoice } from './CategoryPicker';
 import { palette, spacing, typography } from '../theme/theme';
 import ContactPicker from './ContactPicker';
 import { isCaptureAvailable } from '../../modules/pinch-capture';
@@ -88,7 +88,7 @@ export default function AddExpenseSheet({
   const [type, setType] = useState<TxnType>('EXPENSE');
   const [amount, setAmount] = useState('');
   const [merchant, setMerchant] = useState('');
-  const [category, setCategory] = useState<string | null>(null);
+  const [choice, setChoice] = useState<CategoryChoice>({ category: null, subcategory: null });
   const [outingId, setOutingId] = useState<number | null>(defaultOutingId);
   const [outings, setOutings] = useState<OutingSummary[]>([]);
   const [saving, setSaving] = useState(false);
@@ -118,7 +118,7 @@ export default function AddExpenseSheet({
     setType(defaultType);
     setAmount(defaultAmount);
     setMerchant('');
-    setCategory(null);
+    setChoice({ category: null, subcategory: null });
     setOutingId(defaultOutingId);
     setFromLabel('');
     setToLabel('');
@@ -182,7 +182,8 @@ export default function AddExpenseSheet({
         amount: parsedAmount,
         direction,
         merchant: merchant.trim(),
-        category: type === 'EXPENSE' ? category : null,
+        category: type === 'EXPENSE' ? choice.category : null,
+        subcategory: type === 'EXPENSE' ? choice.subcategory : null,
         outingId: type === 'EXPENSE' ? outingId : null,
         source: 'MANUAL',
         kind: type === 'REFUND' ? 'REFUND' : undefined,
@@ -237,21 +238,7 @@ export default function AddExpenseSheet({
         />
       ) : null}
 
-      {type === 'EXPENSE' ? (
-        <View style={styles.group}>
-          <Text style={styles.groupLabel}>Category</Text>
-          <View style={styles.chipWrap}>
-            {CATEGORIES.map((option) => (
-              <Chip
-                key={option}
-                label={option}
-                selected={category === option}
-                onPress={() => setCategory(category === option ? null : option)}
-              />
-            ))}
-          </View>
-        </View>
-      ) : null}
+      {type === 'EXPENSE' ? <CategoryPicker value={choice} onChange={setChoice} /> : null}
 
       {type === 'EXPENSE' && outings.length > 0 ? (
         <View style={styles.group}>

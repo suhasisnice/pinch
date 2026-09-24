@@ -1,6 +1,13 @@
 import { getAdapter } from '../connection';
 import { CaptureInboxRow, CaptureStatus, Direction } from '../types';
-import { classifyTokens, tokenize, TokenWeights } from '../../math/merchantClassifier';
+import { tokenize, TokenWeights } from '../../math/merchantClassifier';
+import { NAME_WORDS } from '../../math/categoryTaxonomy';
+import {
+  categorise,
+  CategoriseInput,
+  CategoriserKnowledge,
+  CategoryDecision,
+} from '../../math/categoriser';
 
 export interface NewCapture {
   rawText: string;
@@ -123,35 +130,98 @@ export async function pruneCaptures(days = 45): Promise<number> {
 // ---------------------------------------------------------------------------
 
 /**
- * Best category for a merchant, by longest matching pattern so that a
- * specific rule ("dominos") beats a generic one ("mess") when both match.
+ * Everything the categoriser needs from the database, loaded in one go so a
+ * batch (the backfill, the legacy sweep) can reuse it across many rows.
+ */
+export async function loadCategoriserKnowledge(): Promise<CategoriserKnowledge> {
+  const db = getAdapter();
+  const [rules, weights, people] = await Promise.all([
+    db.getAllAsync<{ pattern: string; category: string; subcategory: string | null; is_payee: number }>(
+      `SELECT pattern, category, subcategory, is_payee FROM MerchantRules;`
+    ),
+    getCategoryTokenWeights(),
+    db.getAllAsync<{ name: string }>(
+      `SELECT name FROM Contacts UNION SELECT alias AS name FROM ContactAliases;`
+    ),
+  ]);
+  return {
+    rules: rules.map((r) => ({
+      pattern: r.pattern,
+      category: r.category,
+      subcategory: r.subcategory,
+      isPayee: r.is_payee === 1,
+    })),
+    weights,
+    people: people.map((p) => p.name),
+  };
+}
+
+/**
+ * The categoriser's full answer for one payment: category, sub-category,
+ * whether it is certain or a guess, and who the payee was. See
+ * src/math/categoriser.ts.
+ */
+export async function categoriseTransaction(
+  input: CategoriseInput,
+  knowledge?: CategoriserKnowledge
+): Promise<CategoryDecision | null> {
+  return categorise(input, knowledge ?? (await loadCategoriserKnowledge()));
+}
+
+/**
+ * What the user taught about this merchant, or a brand the app knows by
+ * name — the two answers that need no guessing. Null otherwise.
  */
 export async function categoriseMerchant(merchant: string): Promise<string | null> {
-  const db = getAdapter();
-  const row = await db.getFirstAsync<{ category: string }>(
-    `SELECT category FROM MerchantRules
-     WHERE instr(lower(?), lower(pattern)) > 0
-     ORDER BY length(pattern) DESC
-     LIMIT 1;`,
-    [merchant]
-  );
-  return row?.category ?? null;
+  const decision = await categoriseTransaction({ merchant });
+  return decision && (decision.basis === 'learned' || decision.basis === 'brand') && decision.source !== 'GUESS'
+    ? decision.category
+    : null;
 }
 
 /**
  * Teaches the categoriser from a correction. The merchant name itself becomes
- * the pattern, so it outranks the generic keyword that mis-fired.
+ * the pattern, matched on whole words (see categoriser.ts), so it outranks
+ * any dictionary word that mis-fired.
  */
-export async function learnMerchantRule(merchant: string, category: string): Promise<void> {
-  const db = getAdapter();
+export async function learnMerchantRule(
+  merchant: string,
+  category: string,
+  subcategory: string | null = null
+): Promise<void> {
   const pattern = merchant.trim().toLowerCase();
   if (!pattern) return;
+  await upsertRule(pattern, category, subcategory, false);
+}
 
+/**
+ * Teaches the category for one person — stored against their UPI handle and
+ * their name, never spread across the words in the name.
+ */
+export async function learnPayeeRule(
+  keys: string[],
+  category: string,
+  subcategory: string | null = null
+): Promise<void> {
+  for (const key of keys) await upsertRule(key, category, subcategory, true);
+}
+
+async function upsertRule(
+  pattern: string,
+  category: string,
+  subcategory: string | null,
+  isPayee: boolean
+): Promise<void> {
+  const db = getAdapter();
   await db.runAsync(
-    `INSERT INTO MerchantRules (pattern, category, hit_count, created_at)
-     VALUES (?, ?, 1, ?)
-     ON CONFLICT(pattern) DO UPDATE SET category = excluded.category, hit_count = hit_count + 1;`,
-    [pattern, category, new Date().toISOString()]
+    `INSERT INTO MerchantRules (pattern, category, subcategory, is_payee, hit_count, created_at)
+     VALUES (?, ?, ?, ?, 1, ?)
+     ON CONFLICT(pattern) DO UPDATE SET
+       category = excluded.category,
+       subcategory = excluded.subcategory,
+       is_payee = excluded.is_payee,
+       hit_count = hit_count + 1;`,
+    [pattern, category, subcategory, isPayee ? 1 : 0, new Date().toISOString()]
   );
 }
 
@@ -176,19 +246,12 @@ export async function getCategoryTokenWeights(): Promise<TokenWeights> {
 }
 
 /**
- * Best category for a merchant MerchantRules has no exact pattern for.
- *
- * Tries the precise, user-taught table first — a direct correction should
- * always win over a generic word guess — and only reaches for the token
- * classifier when that comes back empty.
+ * Best category for a merchant, by the whole cascade — guesses included.
+ * Kept for callers that only want the name; new code wants
+ * categoriseTransaction, which also says how sure it is.
  */
 export async function smartCategoriseMerchant(merchant: string): Promise<string | null> {
-  const exact = await categoriseMerchant(merchant);
-  if (exact) return exact;
-
-  const weights = await getCategoryTokenWeights();
-  const result = classifyTokens(tokenize(merchant), weights);
-  return result?.category ?? null;
+  return (await categoriseTransaction({ merchant }))?.category ?? null;
 }
 
 /**
@@ -213,7 +276,9 @@ const CORRECTION_WEIGHT = 5;
  * which is what lets the next unfamiliar café get it right on day one.
  */
 export async function bumpTokenWeights(merchant: string, category: string): Promise<void> {
-  const tokens = tokenize(merchant);
+  // A person's name never teaches a category, even inside a shop's name:
+  // "Kumar Tea Stall" says "tea", not "kumar".
+  const tokens = tokenize(merchant).filter((token) => !NAME_WORDS.has(token));
   if (tokens.length === 0) return;
 
   const db = getAdapter();

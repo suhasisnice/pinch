@@ -452,10 +452,17 @@ export function ProgressBar({
   fraction,
   color = palette.textPrimary,
   height = 8,
+  marker,
 }: {
   fraction: number;
   color?: string;
   height?: number;
+  /**
+   * Where the bar should be by now, 0..1 — a thin tick across the track.
+   * When the fill falls short of it, the gap between them is drawn in the
+   * warning colour, so "behind" reads as a distance, not a mood.
+   */
+  marker?: number | null;
 }) {
   const clamped = Math.max(0, Math.min(1, Number.isFinite(fraction) ? fraction : 0));
   const reduced = useReducedMotion();
@@ -481,8 +488,20 @@ export function ProgressBar({
     return () => animation.stop();
   }, [clamped, progress, reduced]);
 
-  return (
+  const pace =
+    marker != null && Number.isFinite(marker) ? Math.max(0, Math.min(1, marker)) : null;
+  const behind = pace !== null && pace > clamped + 0.005;
+
+  const track = (
     <View style={[styles.progressTrack, { height, borderRadius: height / 2 }]}>
+      {behind ? (
+        <View
+          style={[
+            styles.progressGap,
+            { left: `${clamped * 100}%`, width: `${(pace - clamped) * 100}%` },
+          ]}
+        />
+      ) : null}
       <Animated.View
         style={{
           width: progress.interpolate({
@@ -496,7 +515,24 @@ export function ProgressBar({
       />
     </View>
   );
+  if (pace === null) return track;
+
+  return (
+    <View style={{ paddingVertical: PACE_TICK_OVERHANG }}>
+      {track}
+      <View
+        style={[
+          styles.progressTick,
+          { left: `${pace * 100}%`, height: height + PACE_TICK_OVERHANG * 2 },
+          behind && { backgroundColor: palette.warning },
+        ]}
+      />
+    </View>
+  );
 }
+
+/** How far the pace tick stands proud of the track, above and below. */
+const PACE_TICK_OVERHANG = 3;
 
 export function EmptyState({
   icon,
@@ -1072,6 +1108,19 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: palette.surfaceElevated,
     overflow: 'hidden',
+  },
+  progressGap: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    backgroundColor: layer(palette.warning, 0.45),
+  },
+  progressTick: {
+    position: 'absolute',
+    top: 0,
+    width: 2,
+    marginLeft: -1,
+    backgroundColor: palette.textSecondary,
   },
 
   empty: { alignItems: 'center', paddingVertical: spacing.lg, gap: spacing.sm },

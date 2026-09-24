@@ -5,7 +5,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { GoalProgress } from '../db/repos/goals';
 import { getRoundUpGoalId, setRoundUpGoalId } from '../settings/settingsStore';
-import { estimatedCompletionDate, goalTrackingStatus } from '../math/budget';
+import { estimatedCompletionDate, goalPace, goalTrackingStatus } from '../math/budget';
 import { getBudgetSnapshot } from '../services/budgetService';
 import { getMonthlyAllowance } from '../settings/settingsStore';
 import { formatMoney } from '../utils/format';
@@ -214,6 +214,9 @@ function GoalRow({
   const status = goal.isComplete
     ? null
     : goalTrackingStatus(goal.savedAmount, goal.targetAmount, goal.createdAt, goal.deadline);
+  const pace = goal.isComplete
+    ? null
+    : goalPace(goal.savedAmount, goal.targetAmount, goal.createdAt, goal.deadline);
   const projected =
     !goal.deadline && !goal.isComplete
       ? estimatedCompletionDate(goal.savedAmount, goal.targetAmount, goal.createdAt)
@@ -223,18 +226,21 @@ function GoalRow({
     ? 'Done. All of it.'
     : overdue
       ? `Deadline passed ${Math.abs(daysLeft!)} days ago. No judgement.`
-      : [
-          status === 'BEHIND' ? 'A bit behind' : status === 'ON_TRACK' ? 'On track' : null,
-          // Only a deadline makes a daily amount meaningful; open goals show a date.
-          daysLeft !== null ? `${formatMoney(perDay)} a day` : null,
-          daysLeft !== null
-            ? `${daysLeft} days left`
-            : projected
-              ? `by ${monthYear(projected)}`
-              : null,
-        ]
-          .filter(Boolean)
-          .join(' · ');
+      : status === 'BEHIND' && pace
+        ? // Behind: how far, and what fixes it, in one line.
+          `${formatMoney(pace.behindBy)} behind · ${formatMoney(pace.perMonth)}/mo gets you there by ${monthYear(pace.deadline)}`
+        : [
+            status === 'ON_TRACK' ? 'On track' : null,
+            // Only a deadline makes a daily amount meaningful; open goals show a date.
+            daysLeft !== null ? `${formatMoney(perDay)} a day` : null,
+            daysLeft !== null
+              ? `${daysLeft} days left`
+              : projected
+                ? `by ${monthYear(projected)}`
+                : null,
+          ]
+            .filter(Boolean)
+            .join(' · ');
 
   return (
     <Pressable
@@ -254,8 +260,11 @@ function GoalRow({
       </View>
       <ProgressBar
         fraction={goal.fraction}
-        color={overdue || status === 'BEHIND' ? palette.warning : palette.textPrimary}
-        height={2}
+        color={overdue ? palette.warning : palette.textPrimary}
+        height={4}
+        // A goal started this week has no pace worth marking yet; a tick
+        // at the very edge reads as a rendering glitch.
+        marker={pace && pace.expectedFraction >= 0.02 ? pace.expectedFraction : null}
       />
       <View style={styles.goalFoot}>
         <Text style={[styles.goalDetail, status === 'BEHIND' && { color: palette.warning }]}>

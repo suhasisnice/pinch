@@ -31,26 +31,12 @@ export async function initDatabase(
 ): Promise<void> {
   adapter = customAdapter ?? (await createExpoAdapter(databaseName));
   await initSchema(adapter);
-  await seedMerchantRules(adapter);
+  // No merchant rules are seeded any more: MerchantRules holds only what the
+  // user taught, and the built-in knowledge is the whole-word brand
+  // dictionary in src/math/categoryTaxonomy.ts (see migration v20).
 }
 
 /** Test-only escape hatch to reset module state between test files. */
 export function __resetDatabaseForTests(): void {
   adapter = null;
-}
-
-/**
- * Inserts the built-in merchant->category rules once. `INSERT OR IGNORE`
- * against the UNIQUE pattern means a user's own edit to a rule is never
- * clobbered on a later launch.
- */
-async function seedMerchantRules(db: DbAdapter): Promise<void> {
-  const { DEFAULT_MERCHANT_RULES } = await import('./schema');
-  const now = new Date().toISOString();
-  for (const rule of DEFAULT_MERCHANT_RULES) {
-    await db.runAsync(
-      `INSERT OR IGNORE INTO MerchantRules (pattern, category, created_at) VALUES (?, ?, ?);`,
-      [rule.pattern, rule.category, now]
-    );
-  }
 }

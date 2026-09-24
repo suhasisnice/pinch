@@ -6,6 +6,7 @@ import {
   removesFromSpending,
 } from '../math/classification';
 import { sameMerchant } from '../math/merchantClassifier';
+import { categorise, CategoryDecision, readPayee } from '../math/categoriser';
 
 export interface ClassificationResult {
   applied: Array<{ id: number; merchant: string; amount: number; reason: NonSpendReason }>;
@@ -58,7 +59,7 @@ async function applyNonSpendClassification(
 
   if (reason === 'CASH_WITHDRAWAL') {
     // Still spending; it only wants an honest category.
-    if (row.category !== 'Cash') await db.setTransactionCategory(row.id, 'Cash');
+    if (row.category !== 'Cash') await db.setTransactionCategory(row.id, 'Cash', { source: 'SURE' });
     return null;
   }
 
@@ -111,21 +112,61 @@ export async function classifyNewTransaction(
   return applyNonSpendClassification(row, cardTracked);
 }
 
+/** What a correction is about, beyond its merchant name. */
+export interface CorrectionContext {
+  subcategory?: string | null;
+  /** The message it came from — it may name the payee's UPI handle. */
+  rawText?: string | null;
+}
+
 /**
- * Teaches the categoriser from a category the user set or corrected by hand.
+ * Teaches the categoriser from a category the user set, corrected or
+ * confirmed by hand.
  *
- * Feeds both learning tables: the exact-match one (so this merchant is right
- * next time, with certainty) and the token-weight one (so what the words in
- * its name mean generalises to merchants never seen before). A blank
- * category is not a correction — there is nothing to learn from "cleared" —
- * so it is a no-op rather than teaching the tables to forget.
+ * For a shop, both learning tables are fed: the exact-merchant rule (so this
+ * place is right next time, with certainty) and the token weights (so what
+ * the words in its name mean generalises to places never seen before).
+ *
+ * For a person, only a per-person rule is written, against their UPI handle
+ * and their name. Their name's words are never learned — "Ramesh Kumar" is
+ * Food because of what Ramesh sells, not because of what "kumar" means, and
+ * teaching it otherwise would file every Kumar the user pays as Food.
+ *
+ * A blank category is not a correction — there is nothing to learn from
+ * "cleared" — so it is a no-op rather than teaching the tables to forget.
  */
 export async function learnFromCategoryCorrection(
   merchant: string,
-  category: string | null
+  category: string | null,
+  context: CorrectionContext = {}
 ): Promise<void> {
   if (!category) return;
-  await Promise.all([db.learnMerchantRule(merchant, category), db.bumpTokenWeights(merchant, category)]);
+  const subcategory = context.subcategory ?? null;
+  const knowledge = await db.loadCategoriserKnowledge();
+  const payee = readPayee({ merchant, rawText: context.rawText }, knowledge);
+
+  if (payee.kind === 'PERSON') {
+    await db.learnPayeeRule(payee.keys, category, subcategory);
+    return;
+  }
+  await Promise.all([
+    db.learnMerchantRule(merchant, category, subcategory),
+    db.bumpTokenWeights(merchant, category),
+  ]);
+}
+
+/**
+ * The user agreed with a guess. It stops being shown as one, and counts as
+ * teaching — a confirmed guess is as good a signal as a correction.
+ */
+export async function confirmCategoryGuess(transactionId: number): Promise<void> {
+  const row = await db.getTransactionById(transactionId);
+  if (!row || !row.category) return;
+  await db.confirmTransactionCategory(transactionId);
+  await learnFromCategoryCorrection(row.merchant, row.category, {
+    subcategory: row.subcategory,
+    rawText: row.raw_text,
+  });
 }
 
 export interface CategoryPropagationResult {
@@ -135,27 +176,34 @@ export interface CategoryPropagationResult {
 
 /**
  * Applies a category correction to every other transaction that is plausibly
- * the same merchant, not just the one that was just edited.
+ * the same payee, not just the one that was just edited.
  *
  * learnFromCategoryCorrection only ever taught the classifier for the next
  * time this merchant shows up — a visit to the same restaurant chain from
  * months ago, already sitting there with whatever category it was first
  * (wrongly) given, was never revisited. Unlike backfillCategories, this is
- * allowed to overwrite an existing category: correcting one instance by
+ * allowed to overwrite an automatic category: correcting one instance by
  * hand is the strongest signal the app ever gets, stronger than whatever
- * guess is already sitting on the others.
+ * guess is already sitting on the others. It does not overwrite another row
+ * the user also set by hand — two visits to Amazon can honestly be Shopping
+ * once and Groceries the next.
  *
- * Matching is fuzzy (see sameMerchant) because the same place rarely shows
- * up written identically twice — an SMS truncates it, a notification
- * capitalises it differently, a VPA handle drops the spaces.
+ * For a shop, matching is fuzzy (see sameMerchant), because the same place
+ * rarely shows up written identically twice. For a person it is exact —
+ * same UPI handle, or same name — since two different people can easily
+ * share most of a name.
  */
 export async function propagateCategoryCorrection(
   merchant: string,
   category: string | null,
-  excludeTransactionId?: number
+  excludeTransactionId?: number,
+  context: CorrectionContext = {}
 ): Promise<CategoryPropagationResult> {
   if (!category) return { updated: 0 };
 
+  const subcategory = context.subcategory ?? null;
+  const knowledge = await db.loadCategoriserKnowledge();
+  const payee = readPayee({ merchant, rawText: context.rawText }, knowledge);
   const all = await db.getAllTransactions();
   let updated = 0;
 
@@ -163,10 +211,18 @@ export async function propagateCategoryCorrection(
     if (row.id === excludeTransactionId) continue;
     if (row.direction !== 'DEBIT' || row.kind !== 'SPEND') continue;
     if (row.excluded_at !== null || row.transfer_pair_id !== null) continue;
-    if (row.category === category) continue;
-    if (!sameMerchant(row.merchant, merchant)) continue;
+    if (row.category_source === 'USER') continue;
+    if (row.category === category && row.subcategory === subcategory) continue;
 
-    await db.setTransactionCategory(row.id, category);
+    const same =
+      payee.kind === 'PERSON'
+        ? readPayee({ merchant: row.merchant, rawText: row.raw_text }, knowledge).keys.some((key) =>
+            payee.keys.includes(key)
+          )
+        : sameMerchant(row.merchant, merchant);
+    if (!same) continue;
+
+    await db.setTransactionCategory(row.id, category, { subcategory, source: 'USER' });
     updated += 1;
   }
 
@@ -180,76 +236,162 @@ export interface CategoryBackfillResult {
   merchantsRecognised: number;
   /** Distinct merchant names it could not place, left as they were. */
   merchantsUnrecognised: number;
+  /** Categories set before 0.9.21 that the new categoriser re-checked. */
+  legacyResolved: number;
+  /** Of those, how many it changed. */
+  legacyChanged: number;
 }
 
 /**
- * Gives a category to spending that was recorded before there was anything
- * able to categorise it.
+ * The substring rules every install was seeded with before 0.9.21, frozen
+ * here for one job: recognising a category that only ever came from one of
+ * them. "Motorola" filed as Transport because it contains "ola" is not a
+ * decision anyone made, and should not survive as a guess once the rule that
+ * made it is gone. Never used to categorise anything.
+ */
+const PRE_0921_SEED_RULES: ReadonlyArray<[pattern: string, category: string]> = [
+  ['swiggy', 'Food'], ['zomato', 'Food'], ['zepto', 'Food'], ['blinkit', 'Food'],
+  ['instamart', 'Food'], ['dominos', 'Food'], ['mcdonald', 'Food'], ['starbucks', 'Food'],
+  ['cafe', 'Food'], ['canteen', 'Food'], ['mess', 'Food'], ['uber', 'Transport'],
+  ['ola', 'Transport'], ['rapido', 'Transport'], ['irctc', 'Transport'], ['redbus', 'Transport'],
+  ['metro', 'Transport'], ['petrol', 'Transport'], ['amazon', 'Shopping'], ['flipkart', 'Shopping'],
+  ['myntra', 'Shopping'], ['ajio', 'Shopping'], ['decathlon', 'Shopping'],
+  ['netflix', 'Subscriptions'], ['spotify', 'Subscriptions'], ['prime', 'Subscriptions'],
+  ['hotstar', 'Subscriptions'], ['youtube', 'Subscriptions'], ['jio', 'Subscriptions'],
+  ['airtel', 'Subscriptions'], ['bookmyshow', 'Outing'], ['pvr', 'Outing'], ['inox', 'Outing'],
+  ['cinepolis', 'Outing'], ['bar', 'Outing'], ['brewery', 'Outing'], ['pharmacy', 'Health'],
+  ['apollo', 'Health'], ['pharmeasy', 'Health'], ['hospital', 'Health'], ['medical', 'Health'],
+  ['book', 'Academics'], ['stationery', 'Academics'], ['xerox', 'Academics'],
+  ['udemy', 'Academics'], ['coursera', 'Academics'], ['bescom', 'Bills'], ['bwssb', 'Bills'],
+  ['nobroker', 'Rent'], ['nobrokerhood', 'Bills'], ['stanza', 'Rent'], ['nestaway', 'Rent'],
+  ['bmtc', 'Transport'], ['namma yatri', 'Transport'],
+];
+
+/** Whether an old category is exactly what a pre-0.9.21 substring rule would have said. */
+function cameFromOldSeed(merchant: string, category: string): boolean {
+  const lower = merchant.toLowerCase();
+  let best: readonly [string, string] | null = null;
+  for (const rule of PRE_0921_SEED_RULES) {
+    if (lower.includes(rule[0]) && (!best || rule[0].length > best[0].length)) best = rule;
+  }
+  return best !== null && best[1] === category;
+}
+
+function isSpendRow(row: TransactionRow): boolean {
+  return (
+    row.direction === 'DEBIT' &&
+    row.kind === 'SPEND' &&
+    row.excluded_at === null &&
+    row.transfer_pair_id === null &&
+    row.non_spend_reason === null
+  );
+}
+
+/**
+ * Gives a category to spending recorded before anything could categorise
+ * it, and re-checks every category set before 0.9.21.
  *
- * The token classifier runs inside postTransaction, so it only ever sees
- * transactions captured after it shipped. Everything already in the ledger —
- * which, on a real install, is most of it — stayed Uncategorised no matter
- * how good the classifier got. Insights is built almost entirely on category
- * breakdown, so that one gap was enough to make the whole screen read as
- * empty.
+ * The first job: the categoriser runs inside postTransaction, so it only
+ * ever sees transactions captured after it shipped. Everything already in
+ * the ledger stayed Uncategorised however good it got — and Insights, built
+ * almost entirely on category breakdown, read as empty because of it.
  *
- * Only fills blanks. A category the user set by hand is never overwritten,
- * and neither is one an earlier run already worked out.
+ * The second: a category from before 0.9.21 (LEGACY) could have come from
+ * the user or from the old substring rules, and nothing recorded which. One
+ * that matches something the user taught comes back as USER. Otherwise the
+ * new categoriser gets its say; if it has none, a category that only an old
+ * substring rule could have produced is cleared, and anything else is kept
+ * but shown as a guess to confirm.
  *
- * Grouped by merchant rather than run per row: the classifier reloads the
- * whole token table on each call, and a ledger of a thousand transactions
- * holds far fewer than a thousand distinct shop names. Grouping is fuzzy
- * (see sameMerchant), so a chain captured under several slightly different
- * spellings — a truncated SMS, a differently-capitalised notification — is
- * still one lookup and one answer rather than several unrecognised ones.
+ * A category the user set by hand is never overwritten.
+ *
+ * Blanks are grouped by merchant: a ledger of a thousand transactions holds
+ * far fewer than a thousand distinct shop names, and grouping is fuzzy (see
+ * sameMerchant), so a chain captured under several spellings still gets one
+ * answer rather than several unrecognised ones.
  */
 export async function backfillCategories(): Promise<CategoryBackfillResult> {
-  const all = await db.getAllTransactions();
+  const [all, knowledge] = await Promise.all([
+    db.getAllTransactions(),
+    db.loadCategoriserKnowledge(),
+  ]);
 
-  const needing = all.filter(
-    (row) =>
-      row.category === null &&
-      row.direction === 'DEBIT' &&
-      row.kind === 'SPEND' &&
-      row.excluded_at === null &&
-      row.transfer_pair_id === null &&
-      row.non_spend_reason === null
-  );
+  const result: CategoryBackfillResult = {
+    categorised: 0,
+    merchantsRecognised: 0,
+    merchantsUnrecognised: 0,
+    legacyResolved: 0,
+    legacyChanged: 0,
+  };
 
-  const clusters: Array<{ names: string[]; ids: number[] }> = [];
+  for (const row of all) {
+    if (row.category_source !== 'LEGACY' || !row.category) continue;
+    result.legacyResolved += 1;
+    if (!isSpendRow(row)) {
+      await db.setTransactionCategory(row.id, row.category, {
+        subcategory: row.subcategory,
+        source: 'SURE',
+      });
+      continue;
+    }
+    const decision = categorise({ merchant: row.merchant, rawText: row.raw_text }, knowledge);
+    if (decision) {
+      if (decision.category !== row.category) result.legacyChanged += 1;
+      await db.setTransactionCategory(row.id, decision.category, {
+        subcategory: decision.subcategory,
+        source: decision.source,
+      });
+    } else if (cameFromOldSeed(row.merchant, row.category)) {
+      await db.setTransactionCategory(row.id, null);
+      row.category = null;
+      result.legacyChanged += 1;
+    } else {
+      await db.setTransactionCategory(row.id, row.category, { source: 'GUESS' });
+    }
+  }
+
+  const needing = all.filter((row) => row.category === null && isSpendRow(row));
+
+  const clusters: Array<{ names: string[]; rows: TransactionRow[] }> = [];
   for (const row of needing) {
     const key = row.merchant.trim();
     if (!key) continue;
     const cluster = clusters.find((c) => c.names.some((name) => sameMerchant(name, key)));
     if (cluster) {
       if (!cluster.names.includes(key)) cluster.names.push(key);
-      cluster.ids.push(row.id);
+      cluster.rows.push(row);
     } else {
-      clusters.push({ names: [key], ids: [row.id] });
+      clusters.push({ names: [key], rows: [row] });
     }
   }
 
-  const result: CategoryBackfillResult = {
-    categorised: 0,
-    merchantsRecognised: 0,
-    merchantsUnrecognised: 0,
-  };
-
   for (const cluster of clusters) {
-    let category: string | null = null;
-    for (const name of cluster.names) {
-      category = await db.smartCategoriseMerchant(name);
-      if (category) break;
+    // One answer for the whole cluster when it is a shop. People are decided
+    // row by row: two payees can share a name closely enough to cluster, and
+    // a per-person rule is keyed exactly.
+    let shared: CategoryDecision | null = null;
+    for (const row of cluster.rows) {
+      const decision = categorise({ merchant: row.merchant, rawText: row.raw_text }, knowledge);
+      if (decision && decision.payee.kind !== 'PERSON') {
+        shared = decision;
+        break;
+      }
     }
-    if (!category) {
-      result.merchantsUnrecognised += 1;
-      continue;
-    }
-    result.merchantsRecognised += 1;
-    for (const id of cluster.ids) {
-      await db.setTransactionCategory(id, category);
+
+    let any = false;
+    for (const row of cluster.rows) {
+      const decision =
+        shared ?? categorise({ merchant: row.merchant, rawText: row.raw_text }, knowledge);
+      if (!decision) continue;
+      await db.setTransactionCategory(row.id, decision.category, {
+        subcategory: decision.subcategory,
+        source: decision.source,
+      });
       result.categorised += 1;
+      any = true;
     }
+    if (any) result.merchantsRecognised += 1;
+    else result.merchantsUnrecognised += 1;
   }
 
   return result;

@@ -148,6 +148,7 @@ export function milestoneTitle(key: string): string {
 const DISCRETIONARY = new Set([
   'Food',
   'Shopping',
+  'Personal care',
   'Outing',
   'Subscriptions',
   'Entertainment',

@@ -124,13 +124,24 @@ describe('propagateCategoryCorrection', () => {
     expect((await db.getTransactionById(old))?.category).toBe('Food');
   });
 
-  it('overwrites a category that was already set, unlike backfillCategories', async () => {
+  it('overwrites an automatic category, unlike backfillCategories', async () => {
     const wronglyTagged = await spend('CORNER HOU');
-    await db.setTransactionCategory(wronglyTagged, 'Shopping');
+    await db.setTransactionCategory(wronglyTagged, 'Shopping', { source: 'SURE' });
 
     await propagateCategoryCorrection('Corner House', 'Food', undefined);
 
     expect((await db.getTransactionById(wronglyTagged))?.category).toBe('Food');
+    expect((await db.getTransactionById(wronglyTagged))?.category_source).toBe('USER');
+  });
+
+  it('never overwrites another visit the user also set by hand', async () => {
+    // Two trips to the same shop can honestly be two different things.
+    const setByHand = await spend('Amazon');
+    await db.setTransactionCategory(setByHand, 'Groceries', { source: 'USER' });
+
+    await propagateCategoryCorrection('Amazon', 'Shopping', undefined);
+
+    expect((await db.getTransactionById(setByHand))?.category).toBe('Groceries');
   });
 
   it('leaves an unrelated merchant alone', async () => {

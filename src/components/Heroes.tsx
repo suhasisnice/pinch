@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Line, Polygon, Polyline } from 'react-native-svg';
 import { AnimatedMoney, FadeSlideIn, useReducedMotion } from './motion';
 import { formatMoney, formatMoneyCompact } from '../utils/format';
 import { layer, palette, place, spacing, typography } from '../theme/theme';
+import { MASK } from '../security/MoneyReveal';
 
 /**
  * One hero shape per tab, so each tab is recognisable before you read a word
@@ -50,7 +51,35 @@ function useArrival(delay = 0, ms = 600) {
 }
 
 /** The number, left-aligned, with its label beside the baseline. */
-function Figure({ amount, label, hue }: { amount: number; label: string; hue: string }) {
+function Figure({
+  amount,
+  label,
+  hue,
+  masked = false,
+  onReveal,
+}: {
+  amount: number;
+  label: string;
+  hue: string;
+  /** Hidden until revealed — see security/MoneyReveal.tsx. */
+  masked?: boolean;
+  onReveal?: () => void;
+}) {
+  if (masked) {
+    return (
+      <Pressable
+        style={styles.figure}
+        onPress={onReveal}
+        accessibilityRole="button"
+        accessibilityLabel={`${label} hidden. Show it`}
+      >
+        <Text style={styles.figureNumeral} numberOfLines={1}>
+          {MASK}
+        </Text>
+        <Text style={[styles.figureLabel, { color: hue }]}>{label} · tap to show</Text>
+      </Pressable>
+    );
+  }
   return (
     <View style={styles.figure}>
       <AnimatedMoney
@@ -180,6 +209,8 @@ export function ChartHero({
   history,
   line,
   meta,
+  masked = false,
+  onReveal,
 }: {
   amount: number;
   label: string;
@@ -187,6 +218,9 @@ export function ChartHero({
   history: { month: string; value: number }[];
   line?: string;
   meta?: string;
+  /** Hides the figure (the chart keeps its shape, never its numbers). */
+  masked?: boolean;
+  onReveal?: () => void;
 }) {
   const [width, setWidth] = useState(0);
   const enough = history.length >= 2;
@@ -239,12 +273,16 @@ export function ChartHero({
 
   return (
     <View style={styles.hero}>
-      <Figure amount={amount} label={label} hue={place.wealth} />
+      <Figure amount={amount} label={label} hue={place.wealth} masked={masked} onReveal={onReveal} />
       {enough ? (
         <View
           style={styles.chart}
           onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-          accessibilityLabel={`${label} over ${history.length} months, from ${formatMoney(history[0].value)} to ${formatMoney(history[history.length - 1].value)}`}
+          accessibilityLabel={
+            masked
+              ? `${label} over ${history.length} months`
+              : `${label} over ${history.length} months, from ${formatMoney(history[0].value)} to ${formatMoney(history[history.length - 1].value)}`
+          }
         >
           {chart}
           <View style={styles.chartMonths}>

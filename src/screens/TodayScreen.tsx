@@ -9,9 +9,11 @@ import {
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as db from '../db/dbService';
+import { rowCategoryLabel } from '../math/categoryTaxonomy';
 import { BudgetSnapshot, getBudgetSnapshot } from '../services/budgetService';
 import { ingestPending } from '../services/captureService';
 import {
+  getCushionGoalId,
   getDismissedDiscrepancy,
   getMonthlyAllowance,
   getNotificationSettings,
@@ -76,6 +78,7 @@ export default function TodayScreen() {
   const [balance, setBalance] = useState<Awaited<ReturnType<typeof db.getBalanceState>> | null>(
     null
   );
+  const [cushion, setCushion] = useState<{ saved: number; target: number } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [addVisible, setAddVisible] = useState(false);
   const [addThenSplit, setAddThenSplit] = useState(false);
@@ -138,6 +141,11 @@ export default function TodayScreen() {
     scheduleHeadsUps(next, settings).catch(() => undefined);
 
     setBalance(await db.getBalanceState());
+    const cushionId = await getCushionGoalId();
+    const cushionGoal = cushionId === null ? null : await db.getGoalById(cushionId);
+    setCushion(
+      cushionGoal ? { saved: cushionGoal.savedAmount, target: cushionGoal.targetAmount } : null
+    );
     setToday(await db.getTransactionsBetween(start.toISOString(), end.toISOString()));
     // One lookup for the whole day rather than one per row.
     setOwedByTx(await db.getOpenReceivableByTransaction());
@@ -332,7 +340,7 @@ export default function TodayScreen() {
                 key={tx.id}
                 title={tx.merchant}
                 mark={categoryColor(tx.category)}
-                subtitle={`${formatTime(tx.occurred_at)} · ${tx.category ?? 'no category'}`}
+                subtitle={`${formatTime(tx.occurred_at)} · ${rowCategoryLabel(tx, 'no category')}`}
                 onPress={() => setDetailFor(tx)}
                 right={
                   <View style={styles.txRight}>
@@ -430,7 +438,7 @@ export default function TodayScreen() {
             text={`${formatMoney(snapshot.protectedMoney)} already spoken for by plans`}
           />
         ) : null}
-        {balance ? <BalanceCard state={balance} onChanged={load} /> : null}
+        {balance ? <BalanceCard state={balance} onChanged={load} cushion={cushion} /> : null}
         {showDiscrepancy && snapshot.balanceConsistency ? (
           <SentenceRow
             onPress={() => setReconcileVisible(true)}

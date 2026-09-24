@@ -483,6 +483,45 @@ export function goalTrackingStatus(
   return actualFraction + SLACK >= expectedFraction ? 'ON_TRACK' : 'BEHIND';
 }
 
+/** Where a goal with a deadline should be by now, and what catching up takes. */
+export interface GoalPace {
+  /** The share of the target a steady saver would have by today, 0..1. */
+  expectedFraction: number;
+  /** Rupees short of that, 0 when on pace or ahead. */
+  behindBy: number;
+  /** A month's saving that finishes on the deadline from here. */
+  perMonth: number;
+  deadline: Date;
+}
+
+const DAYS_PER_MONTH = 30.44;
+
+/**
+ * The pace marker on a goal's bar (fix queue, 0.9.21): the same
+ * time-elapsed line goalTrackingStatus judges against, as a position and
+ * an amount. Null without a deadline, since there is no pace to keep, or
+ * once the deadline has passed, since there is nothing left to pace over.
+ */
+export function goalPace(
+  savedAmount: number,
+  targetAmount: number,
+  createdAt: string,
+  deadline: string | null,
+  now: Date = new Date()
+): GoalPace | null {
+  if (!deadline || targetAmount <= 0) return null;
+  const end = Date.parse(deadline);
+  const totalMs = end - Date.parse(createdAt);
+  const leftMs = end - now.getTime();
+  if (totalMs <= 0 || leftMs <= 0) return null;
+
+  const expectedFraction = Math.max(0, Math.min(1, 1 - leftMs / totalMs));
+  const behindBy = Math.max(0, expectedFraction * targetAmount - savedAmount);
+  const remaining = Math.max(0, targetAmount - savedAmount);
+  const monthsLeft = Math.max(1, leftMs / MS_PER_DAY / DAYS_PER_MONTH);
+  return { expectedFraction, behindBy, perMonth: remaining / monthsLeft, deadline: new Date(end) };
+}
+
 /**
  * A projected finish date for a goal with no deadline, from its current
  * saving rate. Returns null when nothing has been saved yet — there is no

@@ -38,6 +38,12 @@ export interface TransactionFilter {
   customTo: string | null;
   /** Empty means every category, including uncategorised. */
   categories: string[];
+  /**
+   * One level deeper, only when exactly one category is chosen — the
+   * breakdown Insights' drill-down opens onto. NOT_SORTED picks the rows in
+   * that category with no sub-category yet.
+   */
+  subcategory: string | null;
   /** Empty means every source. */
   sources: CaptureSource[];
   minAmount: number | null;
@@ -58,6 +64,7 @@ export const EMPTY_FILTER: TransactionFilter = {
   customFrom: null,
   customTo: null,
   categories: [],
+  subcategory: null,
   sources: [],
   minAmount: null,
   maxAmount: null,
@@ -224,6 +231,11 @@ export function applyTransactionFilter(
       if (!filter.categories.includes(category)) return false;
     }
 
+    if (filter.subcategory !== null && filter.categories.length === 1) {
+      const sub = row.subcategory ?? NOT_SORTED;
+      if (sub !== filter.subcategory) return false;
+    }
+
     if (filter.sources.length > 0 && !filter.sources.includes(row.source)) return false;
 
     if (filter.minAmount !== null && row.amount < filter.minAmount) return false;
@@ -240,6 +252,46 @@ export function applyTransactionFilter(
 
     return true;
   });
+}
+
+/** A category's rows that have no sub-category yet. */
+export const NOT_SORTED = 'Not sorted yet';
+
+export interface SubcategoryShare {
+  subcategory: string;
+  amount: number;
+  count: number;
+  /** Of the category's spending, 0..1. */
+  share: number;
+}
+
+/**
+ * How one category's spending splits one level down, biggest first, with
+ * the unsorted remainder last. Spending only: a refund filed under Food is
+ * not part of what Food cost.
+ */
+export function subcategoryBreakdown(rows: TransactionRow[], category: string): SubcategoryShare[] {
+  const byName = new Map<string, { amount: number; count: number }>();
+  let total = 0;
+  for (const row of rows) {
+    if (row.category !== category || row.direction !== 'DEBIT' || row.kind !== 'SPEND') continue;
+    const key = row.subcategory ?? NOT_SORTED;
+    const entry = byName.get(key) ?? { amount: 0, count: 0 };
+    entry.amount += row.amount;
+    entry.count += 1;
+    byName.set(key, entry);
+    total += row.amount;
+  }
+  return [...byName.entries()]
+    .map(([subcategory, e]) => ({
+      subcategory,
+      amount: e.amount,
+      count: e.count,
+      share: total > 0 ? e.amount / total : 0,
+    }))
+    .sort((a, b) =>
+      a.subcategory === NOT_SORTED ? 1 : b.subcategory === NOT_SORTED ? -1 : b.amount - a.amount
+    );
 }
 
 export interface FilterTotals {

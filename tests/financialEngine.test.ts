@@ -209,6 +209,30 @@ describe('outing reserves', () => {
     expect(await db.getTotalOutingReserved()).toBe(1700);
   });
 
+  it('protects only what is still unspent of an outing reserve (fix queue: set aside looked high)', async () => {
+    // Reserve 2,000 for a trip and spend 1,500 on it: the 1,500 is already
+    // out of the budget as spending, so only 500 is still spoken for.
+    // Before, the full 2,000 stayed protected and the 1,500 was charged twice.
+    const trip = await db.createOuting({ name: 'Goa' });
+    await db.reserveForOuting(trip, 2000);
+    const at = new Date().toISOString();
+    await db.addTransaction({ amount: 1500, direction: 'DEBIT', kind: 'SPEND', merchant: 'Shack', outingId: trip, occurredAt: at });
+    expect(await db.getTotalOutingReserved()).toBe(500);
+
+    // A refund on the trip gives reserve back; overspending never goes negative.
+    await db.addTransaction({ amount: 200, direction: 'CREDIT', kind: 'REFUND', merchant: 'Shack', outingId: trip, occurredAt: at });
+    expect(await db.getTotalOutingReserved()).toBe(700);
+    await db.addTransaction({ amount: 5000, direction: 'DEBIT', kind: 'SPEND', merchant: 'Resort', outingId: trip, occurredAt: at });
+    expect(await db.getTotalOutingReserved()).toBe(0);
+
+    // Excluded rows are not spending.
+    const other = await db.createOuting({ name: 'Movie' });
+    await db.reserveForOuting(other, 400);
+    const junk = await db.addTransaction({ amount: 300, direction: 'DEBIT', kind: 'SPEND', merchant: 'X', outingId: other, occurredAt: at });
+    await db.setTransactionExcluded(junk, true);
+    expect(await db.getTotalOutingReserved()).toBe(400);
+  });
+
   it('stops counting a closed outing toward protected money, but keeps its ledger rows', async () => {
     const outingId = await db.createOuting({ name: 'Old trip' });
     await db.reserveForOuting(outingId, 800);

@@ -99,7 +99,7 @@ export default function FilterSheet({
               key={category}
               label={category}
               selected={filter.categories.includes(category)}
-              onPress={() => set({ categories: toggleIn(filter.categories, category) })}
+              onPress={() => set({ categories: toggleIn(filter.categories, category), subcategory: null })}
             />
           ))}
         </View>

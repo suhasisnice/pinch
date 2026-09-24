@@ -982,6 +982,71 @@ export const V19_SPEND_CAPS: Migration = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// v20 — the categoriser rehaul (0.9.21, docs/CATEGORISER_REHAUL.md).
+//
+// Transactions gain a sub-category and a record of where the category came
+// from: USER (set or confirmed by hand), SURE (applied automatically, with
+// certainty), GUESS (applied, but shown as a guess to confirm), or LEGACY
+// (set before this existed — the revalidation sweep works out which of the
+// others each one really is, since that takes fuzzy matching SQL cannot do).
+//
+// MerchantRules gains a sub-category and a per-person flag. Its seeded rows
+// (hit_count 0 — a correction always writes 1 or more) are dropped: they
+// were substring patterns ("ola", "bar", "jio") and the whole-word brand
+// dictionary in src/math/categoryTaxonomy.ts replaces them.
+//
+// Seed word weights that belong to the three new categories move there.
+// Only exact seed weights (3) move; a word a correction has touched is the
+// user's, and stays where they put it.
+// ---------------------------------------------------------------------------
+const V20_SEED_MOVES: Array<[token: string, from: string, to: string]> = [
+  ...['zepto', 'blinkit', 'instamart', 'bigbasket', 'dmart', 'mart', 'bazaar'].map(
+    (t) => [t, 'Shopping', 'Groceries'] as [string, string, string]
+  ),
+  ['nykaa', 'Shopping', 'Personal care'],
+  ...['irctc', 'redbus', 'indigo', 'ixigo', 'railway', 'railways', 'train', 'flight', 'airlines', 'spicejet', 'vistara', 'ksrtc'].map(
+    (t) => [t, 'Transport', 'Travel'] as [string, string, string]
+  ),
+  ...['gym', 'cultfit', 'cult'].map((t) => [t, 'Subscriptions', 'Personal care'] as [string, string, string]),
+  ...['jiofiber', 'airtel', 'vodafone', 'broadband', 'wifi'].map(
+    (t) => [t, 'Subscriptions', 'Bills'] as [string, string, string]
+  ),
+  ['hostel', 'Academics', 'Rent'],
+];
+
+function buildSeedMoves(): string[] {
+  const statements: string[] = [];
+  for (const [token, from, to] of V20_SEED_MOVES) {
+    statements.push(
+      `INSERT OR IGNORE INTO CategoryTokenWeights (token, category, weight)
+       SELECT token, '${to}', weight FROM CategoryTokenWeights
+       WHERE token = '${token}' AND category = '${from}' AND weight = ${SEED_TOKEN_WEIGHT};`,
+      `DELETE FROM CategoryTokenWeights
+       WHERE token = '${token}' AND category = '${from}' AND weight = ${SEED_TOKEN_WEIGHT};`
+    );
+  }
+  return statements;
+}
+
+export const V20_CATEGORISER: Migration = {
+  version: 20,
+  name: 'categoriser_rehaul',
+  statements: [
+    `ALTER TABLE Transactions ADD COLUMN subcategory TEXT;`,
+    `ALTER TABLE Transactions ADD COLUMN category_source TEXT;`,
+    `UPDATE Transactions SET category_source = CASE
+       WHEN source = 'MANUAL' THEN 'USER'
+       WHEN category = 'Cash' THEN 'SURE'
+       ELSE 'LEGACY' END
+     WHERE category IS NOT NULL;`,
+    `ALTER TABLE MerchantRules ADD COLUMN subcategory TEXT;`,
+    `ALTER TABLE MerchantRules ADD COLUMN is_payee INTEGER NOT NULL DEFAULT 0;`,
+    `DELETE FROM MerchantRules WHERE hit_count = 0;`,
+    ...buildSeedMoves(),
+  ],
+};
+
 export const MIGRATIONS: Migration[] = [
   V1_INITIAL,
   V2_CONTACT_PHONE,
@@ -1002,6 +1067,7 @@ export const MIGRATIONS: Migration[] = [
   V17_PROGRESS,
   V18_SMS_PRIVACY,
   V19_SPEND_CAPS,
+  V20_CATEGORISER,
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

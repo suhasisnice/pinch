@@ -17,6 +17,14 @@ export type TransactionKind = 'SPEND' | 'INCOME' | 'SETTLE_IN' | 'SETTLE_OUT' | 
 
 export type CaptureSource = 'SMS' | 'NOTIFICATION' | 'MANUAL';
 
+/**
+ * How a transaction got its category. USER: set or confirmed by hand.
+ * SURE: applied automatically, with certainty. GUESS: applied, but shown as
+ * a guess until confirmed. LEGACY: set before 0.9.21 recorded this, and
+ * resolved into one of the others by the revalidation sweep.
+ */
+export type CategorySource = 'USER' | 'SURE' | 'GUESS' | 'LEGACY';
+
 export type IOUDirection = 'THEY_OWE_ME' | 'I_OWE_THEM';
 
 /**
@@ -38,6 +46,10 @@ export interface TransactionRow {
   kind: TransactionKind;
   merchant: string;
   category: string | null;
+  /** One level below category ("Delivery" under Food). Null when not known. See migration v20. */
+  subcategory: string | null;
+  /** Where the category came from — see CategorySource. Null when uncategorised. */
+  category_source: CategorySource | null;
   occurred_at: string;
   source: CaptureSource;
   raw_text: string | null;
