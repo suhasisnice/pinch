@@ -24,8 +24,9 @@ import { FindingTone, buildFindings, insightHero } from '../math/insightsSummary
 import { FadeSlideIn } from '../components/motion';
 import MoneyAmount from '../components/Money';
 import { formatMoney, formatMoneyCompact } from '../utils/format';
-import { categoryColor, palette, radii, spacing, typography } from '../theme/theme';
-import { Dot, Group, EmptyState, Loading, Row, Screen, ScreenTitle } from '../components/ui';
+import { palette, radii, spacing, typography } from '../theme/theme';
+import { Group, EmptyState, Loading, Row, Screen, ScreenTitle } from '../components/ui';
+import { CategoryCover } from '../components/Cover';
 import Icon from '../components/Icon';
 import { lastCompletedWeek } from '../math/weeklyRecap';
 import { weekRange } from './RecapScreen';
@@ -282,6 +283,11 @@ export default function InsightsScreen() {
           accessibilityLabel={`Last week, ${weekRange(recapWeek.start, recapWeek.end)}. Open recap`}
           style={({ pressed }) => [styles.recap, pressed && styles.pressed]}
         >
+          {/* Spotify's play button, translated: the one round green control
+              on the screen, and it means "play this". */}
+          <View style={styles.recapPlay}>
+            <Icon name="play" size={18} color={palette.onAccent} />
+          </View>
           <View style={styles.recapText}>
             <Text style={styles.recapTitle}>Your week, in a minute</Text>
             <Text style={styles.recapSub}>{weekRange(recapWeek.start, recapWeek.end)}</Text>
@@ -481,25 +487,27 @@ function WhereItWent({
             }. View spending`}
             style={({ pressed }) => [styles.category, pressed && styles.pressed]}
           >
-            <View style={styles.categoryHead}>
-              <Dot color={categoryColor(cost.category)} size={8} />
-              <Text style={styles.categoryName} numberOfLines={1}>
-                {cost.category}
-              </Text>
-              {shared ? <Text style={styles.categoryPaid}>{formatMoney(cost.paid)}</Text> : null}
-              <Text style={styles.value}>{formatMoney(cost.yours)}</Text>
-            </View>
-            {/* One neutral bar: length is the information, the dot already
+            <CategoryCover category={cost.category} size={36} />
+            <View style={styles.categoryBody}>
+              <View style={styles.categoryHead}>
+                <Text style={styles.categoryName} numberOfLines={1}>
+                  {cost.category}
+                </Text>
+                {shared ? <Text style={styles.categoryPaid}>{formatMoney(cost.paid)}</Text> : null}
+                <Text style={styles.value}>{formatMoney(cost.yours)}</Text>
+              </View>
+              {/* One neutral bar: length is the information, the dot already
                 says which category. Others' share trails it in grey. */}
-            <View style={styles.track}>
-              <View
-                style={[styles.fill, { width: `${Math.max(1, (cost.yours / largest) * 100)}%` }]}
-              />
-              {shared ? (
+              <View style={styles.track}>
                 <View
-                  style={[styles.fillOthers, { width: `${(cost.splitAway / largest) * 100}%` }]}
+                  style={[styles.fill, { width: `${Math.max(1, (cost.yours / largest) * 100)}%` }]}
                 />
-              ) : null}
+                {shared ? (
+                  <View
+                    style={[styles.fillOthers, { width: `${(cost.splitAway / largest) * 100}%` }]}
+                  />
+                ) : null}
+              </View>
             </View>
           </Pressable>
         );
@@ -619,7 +627,7 @@ function AgainstNormal({
         return (
           <Row
             key={shift.category}
-            left={<Dot color={categoryColor(shift.category)} size={8} />}
+            left={<CategoryCover category={shift.category} size={36} />}
             title={shift.category}
             subtitle={`${formatMoney(shift.currentTotal)} · usually ${formatMoney(shift.typicalTotal)}`}
             onPress={() => onOpen(shift.category)}
@@ -730,7 +738,21 @@ const styles = StyleSheet.create({
   },
   value: { ...typography.bodyBold, color: palette.textPrimary },
 
-  category: { gap: 6, paddingVertical: spacing.sm },
+  category: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  categoryBody: { flex: 1, gap: 6 },
+  recapPlay: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: palette.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   categoryHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   categoryName: { ...typography.body, color: palette.textPrimary, flex: 1 },
   categoryPaid: {
@@ -744,7 +766,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     overflow: 'hidden',
   },
-  fill: { height: 4, backgroundColor: palette.textPrimary, borderRadius: 2 },
+  fill: { height: 4, backgroundColor: palette.textSecondary, borderRadius: 2 },
   fillOthers: {
     height: 4,
     backgroundColor: palette.surfaceElevated,

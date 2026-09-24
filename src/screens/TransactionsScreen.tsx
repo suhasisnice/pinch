@@ -4,12 +4,11 @@ import { RouteProp, useFocusEffect, useRoute } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { TransactionRow } from '../db/types';
 import { formatMoney, formatTime } from '../utils/format';
-import { categoryColor, palette, spacing, typography } from '../theme/theme';
+import { palette, spacing, typography } from '../theme/theme';
 import {
   Card,
   Chip,
   ChipRow,
-  Dot,
   EmptyState,
   Group,
   Loading,
@@ -18,6 +17,7 @@ import {
   ScreenTitle,
   SearchBar,
 } from '../components/ui';
+import { CategoryCover } from '../components/Cover';
 import Icon from '../components/Icon';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
 import MarkAsLoanSheet from '../components/MarkAsLoanSheet';
@@ -196,7 +196,7 @@ export default function TransactionsScreen() {
               return (
                 <Row
                   key={tx.id}
-                  left={<Dot color={categoryColor(tx.category)} />}
+                  left={<CategoryCover category={tx.category} />}
                   title={tx.merchant}
                   subtitle={[
                     tx.category ?? 'Uncategorised',

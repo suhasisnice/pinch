@@ -95,3 +95,41 @@ Every screen below was shot before and after its change.
 - The contents of the other sheets. They inherit the new buttons, chips,
   captions and "Done", but their layouts weren't individually redesigned,
   because the preview can't open a sheet from a URL.
+
+## 0.9.13 — colour and rhythm
+
+The 0.9.12 feedback was that the app didn't look "mind-blowing". It was clean
+but mostly grey boxes. Spotify feels alive because it is a wall of artwork, so
+this pass follows the spec's "album art → category visuals" translation and
+adds colour back to every list:
+
+- **Covers** (`src/components/Cover.tsx`). Every row now has a small tile in
+  its own hue: a category for a transaction, or a colour picked from the name
+  for a goal, outing or person. Each tile is one solid, deep tone
+  (`coverTone`) with the icon in the full hue. There are no gradients, and the
+  same thing always gets the same colour.
+- **Goals fill up.** A goal's cover fills from the bottom to its % saved.
+  Savings now leads with **total saved** as the hero, which is the spec's
+  first priority; the held-back amount moved to the line underneath.
+- **Outings are tickets.** The cover is the date (SEP / 24). The live outing
+  has a softly pulsing green "Happening now". Past outings form a compact list
+  instead of one card each.
+- **The week, on Today.** The thin progress bar is replaced by a Monday–Sunday
+  strip (`WeekStrip`):
+  - Each bar is that day's spend against the daily limit, shown as a faint
+    line.
+  - Over-limit days are amber, and today is lit green.
+  - The bars grow in, with a stagger (off under reduce-motion).
+  - Days are summed over the phone's local midnight.
+- **People have colours.** Avatars are tinted per person.
+- **Insights.**
+  - Category rows use covers, and the bars are silver rather than stark white.
+  - The weekly recap entry gets the one round green "play" button.
+
+Green is still only used for state and actions (today, live, play, on track).
+Everything else that is colourful is a category or name hue.
+
+Spec note: the Today and Savings hero amounts are 48–56px, above the spec's
+32–42px range. That was already true before this pass and is kept on purpose,
+because a bigger number is the most effective single change. It is flagged
+here so it is a known deviation, not a silent one.

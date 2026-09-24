@@ -14,7 +14,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+  coverTone,
   elevation,
+  hueFor,
   layer,
   onColor,
   palette,
@@ -676,13 +678,20 @@ export function Avatar({ name, size = 38 }: { name: string; size?: number }) {
       .slice(0, 2)
       .map((word) => word[0]?.toUpperCase() ?? '')
       .join('') || '?';
+  // Each person keeps one colour everywhere, like a contact photo would.
+  const hue = hueFor(name);
   return (
     <View
-      style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}
+      style={[
+        styles.avatar,
+        { width: size, height: size, borderRadius: size / 2, backgroundColor: coverTone(hue) },
+      ]}
       accessibilityElementsHidden
       importantForAccessibility="no"
     >
-      <Text style={[styles.avatarText, { fontSize: Math.round(size * 0.36) }]}>{initials}</Text>
+      <Text style={[styles.avatarText, { fontSize: Math.round(size * 0.36), color: hue }]}>
+        {initials}
+      </Text>
     </View>
   );
 }
@@ -924,7 +933,7 @@ const styles = StyleSheet.create({
   statCell: { flex: 1, paddingHorizontal: spacing.md, gap: 2 },
   statLabel: { ...typography.caption, color: palette.textSecondary },
   statValue: { ...typography.heroCompact, fontSize: 26, lineHeight: 32, color: palette.textPrimary },
-  rowLeft: { width: 38, alignItems: 'center' },
+  rowLeft: { minWidth: 38, alignItems: 'center' },
   rowBody: { flex: 1, gap: 2 },
   rowTitle: { ...typography.bodyBold, color: palette.textPrimary },
   rowSubtitle: { ...typography.caption, color: palette.textSecondary },

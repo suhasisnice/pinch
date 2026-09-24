@@ -14,7 +14,6 @@ import { TransactionRow } from '../db/types';
 import { formatMoney, formatTime } from '../utils/format';
 import {
   accentForState,
-  categoryColor,
   layer,
   palette,
   radii,
@@ -25,7 +24,6 @@ import {
   Group,
   Button,
   Card,
-  Dot,
   EmptyState,
   Loading,
   ProgressBar,
@@ -33,6 +31,7 @@ import {
   Screen,
   ScreenTitle,
 } from '../components/ui';
+import { CategoryCover } from '../components/Cover';
 import AddExpenseSheet from '../components/AddExpenseSheet';
 import SplitModal from '../components/SplitModal';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
@@ -43,6 +42,7 @@ import ReconcileSheet from '../components/ReconcileSheet';
 import QuickReimburseSheet from '../components/QuickReimburseSheet';
 import BalanceCard from '../components/BalanceCard';
 import AffordSheet from '../components/AffordSheet';
+import WeekStrip, { WeekDay } from '../components/WeekStrip';
 import { AnimatedMoney, FadeSlideIn } from '../components/motion';
 import Icon, { IconName } from '../components/Icon';
 
@@ -67,6 +67,7 @@ export default function TodayScreen() {
   const [affordVisible, setAffordVisible] = useState(false);
   const [reimburseFor, setReimburseFor] = useState<TransactionRow | null>(null);
   const [owedByTx, setOwedByTx] = useState<Map<number, number>>(new Map());
+  const [week, setWeek] = useState<WeekDay[]>([]);
   const [reconcileVisible, setReconcileVisible] = useState(false);
   const [showDiscrepancy, setShowDiscrepancy] = useState(false);
   const [adjustmentPrefill, setAdjustmentPrefill] = useState<{
@@ -91,6 +92,7 @@ export default function TodayScreen() {
     setToday(await db.getTransactionsBetween(start.toISOString(), end.toISOString()));
     // One lookup for the whole day rather than one per row.
     setOwedByTx(await db.getOpenReceivableByTransaction());
+    setWeek(await loadWeek(start));
 
     // Dismissing one gap should not silence a different, larger one later.
     const dismissed = await getDismissedDiscrepancy();
@@ -209,9 +211,13 @@ export default function TodayScreen() {
             numberOfLines={1}
             adjustsFontSizeToFit
           />
-          <View style={styles.heroBar}>
-            <ProgressBar fraction={snapshot.today.usedFraction} color={accent} height={4} />
-          </View>
+          {week.length === 7 ? (
+            <WeekStrip days={week} limit={snapshot.today.dailyLimit} />
+          ) : (
+            <View style={styles.heroBar}>
+              <ProgressBar fraction={snapshot.today.usedFraction} color={accent} height={4} />
+            </View>
+          )}
           <View style={styles.heroMetaRow}>
             <Text style={styles.heroSub}>
               {formatMoney(snapshot.today.spentToday)} of {formatMoney(snapshot.today.dailyLimit)}{' '}
@@ -366,7 +372,7 @@ export default function TodayScreen() {
               return (
                 <Row
                   key={tx.id}
-                  left={<Dot color={categoryColor(tx.category)} />}
+                  left={<CategoryCover category={tx.category} />}
                   title={tx.merchant}
                   subtitle={`${tx.category ?? 'Uncategorised'} · ${formatTime(tx.occurred_at)}`}
                   onPress={() => setDetailFor(tx)}
@@ -519,6 +525,33 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 function formatDayMonth(iso: string): string {
   const d = new Date(iso);
   return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+
+const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+/**
+ * Monday to Sunday of the current week, each day's spend summed over the
+ * phone's own midnight-to-midnight (not the UTC day).
+ */
+async function loadWeek(todayStart: Date): Promise<WeekDay[]> {
+  const monday = new Date(todayStart);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  return Promise.all(
+    DAY_LETTERS.map(async (label, i) => {
+      const from = new Date(monday);
+      from.setDate(monday.getDate() + i);
+      const to = new Date(from);
+      to.setDate(from.getDate() + 1);
+      const isFuture = from > todayStart;
+      const rows = isFuture ? [] : await db.getDailySpend(from.toISOString(), to.toISOString());
+      return {
+        label,
+        total: rows.reduce((sum, r) => sum + r.total, 0),
+        isToday: from.getTime() === todayStart.getTime(),
+        isFuture,
+      };
+    })
+  );
 }
 
 /** periodEnd is exclusive (midnight after the last day); name the last day itself. */
