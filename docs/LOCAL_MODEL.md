@@ -7,6 +7,20 @@ The user's rule (2026-09-24): hand every job that can go to the local model to i
 - Ollama 0.34.4, installed with winget. The app runs the server at `http://localhost:11434`.
 - Model: `gpt-oss:20b` (OpenAI, open weights, about 13 GB). On the RTX 4060 (8 GB) it runs partly on the GPU and partly on RAM.
 
+## Which model does what (measured 2026-09-24)
+
+| Job | gpt-oss:20b (low thinking) | qwen2.5-coder:7b |
+|---|---|---|
+| Shrink a failed test log | 16s | **7s** |
+| Write a brief | 19s | **6s** |
+| Explain a commit | 31s | **10s** |
+| Where it runs | 58% CPU / 42% GPU | 100% GPU |
+
+- **Log and explain go to the 7B:** it's faster and just as accurate at pulling facts out.
+- **Brief, handoff and ask go to gpt-oss:** better judgement. But it invented a "Challenges tab" and a `user_id` column that Pinch doesn't have.
+- **Always check** what either model says about Pinch's own structure.
+- **Guesses at the cause of a failure were wrong.** Trust the lines each model pulls out of a log, not its diagnosis.
+
 ## Helpers: `npm run llm -- <job> …`
 
 | Job | Use |

@@ -11,18 +11,35 @@
  *
  * Anything can also come in on stdin:  some-command 2>&1 | node scripts/llm.js log -
  *
- * PINCH_LLM_MODEL overrides the model (default gpt-oss:20b); OLLAMA_HOST the server.
+ * PINCH_LLM_MODEL overrides the model (default: per job, see JOB_MODEL); OLLAMA_HOST the server;
+ * PINCH_LLM_THINK the gpt-oss reasoning effort (low | medium | high, default low).
  * Output is a draft from a small model: check it, never trust it blind.
  */
 const fs = require('fs');
 const { execSync } = require('child_process');
 
 const HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
-const MODEL = process.env.PINCH_LLM_MODEL || 'gpt-oss:20b';
+/**
+ * Per job, from a side-by-side run on 2026-09-24 (docs/LOCAL_MODEL.md): the 7B
+ * fits the GPU and was 2-3x faster with the same accuracy at pulling facts
+ * out; gpt-oss judged better where there is thinking to do.
+ */
+const FAST = 'qwen2.5-coder:7b';
+const SMART = 'gpt-oss:20b';
+const JOB_MODEL = { log: FAST, explain: FAST, brief: SMART, handoff: SMART, ask: SMART };
+/**
+ * gpt-oss reasons before it answers; most of a helper job's time went there.
+ * These jobs are extraction and summary, so low effort is enough. Other
+ * models get no thinking flag (Ollama rejects it for models without one).
+ */
+const THINK = process.env.PINCH_LLM_THINK || 'low';
+/** Keep the model loaded between jobs: loading it takes about a minute. */
+const KEEP_ALIVE = '30m';
 /** Input budget in characters. Keeps the context inside what an 8 GB GPU handles well. */
 const MAX_INPUT = 24_000;
 
 const [job, arg] = process.argv.slice(2);
+const MODEL = process.env.PINCH_LLM_MODEL || JOB_MODEL[job] || SMART;
 
 function readInput(source) {
   if (!source || source === '-') return fs.readFileSync(0, 'utf8');
@@ -107,6 +124,8 @@ async function main() {
       body: JSON.stringify({
         model: MODEL,
         stream: true,
+        keep_alive: KEEP_ALIVE,
+        ...(MODEL.startsWith('gpt-oss') ? { think: THINK } : {}),
         options: { num_ctx: 16384, temperature: 0.2 },
         messages: [
           { role: 'system', content: system },
