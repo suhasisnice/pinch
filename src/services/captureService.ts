@@ -12,6 +12,7 @@ import {
   getRoundUpGoalId,
 } from '../settings/settingsStore';
 import { roundUpAmount } from '../math/budget';
+import { looksLikeInvestment } from '../math/wealth';
 import { formatMoney } from '../utils/format';
 import { classifyNewTransaction } from './classificationService';
 import { checkForTransferMatch } from './transferService';
@@ -91,9 +92,13 @@ async function processMessage(
   });
   if (!parsed) {
     return skip('SKIPPED_NO_PARSE', {
-      rejectReason: explainRejection(message.body, message.source === 'SMS' ? message.sender : null, {
-        source: message.source,
-      }),
+      rejectReason: explainRejection(
+        message.body,
+        message.source === 'SMS' ? message.sender : null,
+        {
+          source: message.source,
+        }
+      ),
     });
   }
 
@@ -134,7 +139,10 @@ async function processMessage(
     { merchant, reference: parsed.reference }
   );
   if (existing) {
-    return skip('SKIPPED_DUPLICATE', { ...parsedFields, rejectReason: `matched transaction #${existing.id}` });
+    return skip('SKIPPED_DUPLICATE', {
+      ...parsedFields,
+      rejectReason: `matched transaction #${existing.id}`,
+    });
   }
 
   // Nothing above could confirm this is the same payment, but the shape of
@@ -160,10 +168,21 @@ async function processMessage(
   // payments that happened weeks ago; `silent` is already how the backfill
   // says it is replaying history rather than reporting something new.
   const settings = await getNotificationSettings();
-  const holdForConfirmation =
-    settings.confirmBeforeLogging && options.silent !== true;
+  const holdForConfirmation = settings.confirmBeforeLogging && options.silent !== true;
 
-  if (unconfirmed || holdForConfirmation || parsed.confidence < ACCEPT_THRESHOLD) {
+  // Looks like money going into (or out of) an investment: always asked,
+  // never decided. Booking it as a spend would charge the budget for money
+  // the user still owns; tagging it silently would be the fabrication
+  // Phase 9 refused. Review asks "Investment?" instead — including during a
+  // backfill, since the answer changes what the history means.
+  const investmentLike = looksLikeInvestment(message.body, merchant);
+
+  if (
+    investmentLike ||
+    unconfirmed ||
+    holdForConfirmation ||
+    parsed.confidence < ACCEPT_THRESHOLD
+  ) {
     const id = await db.recordCapture({
       rawText: message.body,
       source: message.source,
@@ -175,9 +194,13 @@ async function processMessage(
       confidence: parsed.confidence,
       dedupKey,
       possibleDuplicateOf: unconfirmed?.id ?? null,
+      suggestedReason: investmentLike ? 'INVESTMENT' : null,
     });
     if (id === null) {
-      return skip('SKIPPED_DUPLICATE', { ...parsedFields, rejectReason: 'already in the review inbox' });
+      return skip('SKIPPED_DUPLICATE', {
+        ...parsedFields,
+        rejectReason: 'already in the review inbox',
+      });
     }
     await db.recordParsedEvent({
       rawEventId,
@@ -324,7 +347,12 @@ export async function reprocessRawEvent(
   if (!raw) return null;
   return processMessage(
     rawEventId,
-    { source: raw.source, sender: raw.sender ?? '', body: raw.body, receivedAt: Date.parse(raw.receivedAt) },
+    {
+      source: raw.source,
+      sender: raw.sender ?? '',
+      body: raw.body,
+      receivedAt: Date.parse(raw.receivedAt),
+    },
     options
   );
 }
@@ -351,7 +379,12 @@ export async function reprocessUnresolvedRawEvents(limit = 200): Promise<Reproce
     result.checked += 1;
     const outcome = await processMessage(
       raw.id,
-      { source: raw.source, sender: raw.sender ?? '', body: raw.body, receivedAt: Date.parse(raw.receivedAt) },
+      {
+        source: raw.source,
+        sender: raw.sender ?? '',
+        body: raw.body,
+        receivedAt: Date.parse(raw.receivedAt),
+      },
       { silent: true }
     );
     if (outcome === 'POSTED') result.posted += 1;
@@ -398,7 +431,8 @@ export interface PostTransactionInput {
 export async function postTransaction(input: PostTransactionInput): Promise<number | null> {
   const occurredAt = input.occurredAt ?? new Date().toISOString();
   const category =
-    input.category ?? (input.direction === 'DEBIT' ? await db.smartCategoriseMerchant(input.merchant) : null);
+    input.category ??
+    (input.direction === 'DEBIT' ? await db.smartCategoriseMerchant(input.merchant) : null);
 
   let kind: 'SPEND' | 'INCOME' | 'SETTLE_IN' | 'SETTLE_OUT' | 'REFUND';
   if (input.kind) {
@@ -510,7 +544,9 @@ export interface PostTransferInput {
  * — which already filters `transfer_pair_id IS NULL` — excludes both legs
  * exactly as it would for one the parser found on its own.
  */
-export async function postTransfer(input: PostTransferInput): Promise<{ debitId: number; creditId: number }> {
+export async function postTransfer(
+  input: PostTransferInput
+): Promise<{ debitId: number; creditId: number }> {
   const occurredAt = input.occurredAt ?? new Date().toISOString();
 
   const debitId = await db.addTransaction({
@@ -560,7 +596,9 @@ export interface PostLoanInput {
  * expense or windfall income (see `expectedRecovery`/`openPayables` in
  * `math/budget.ts`).
  */
-export async function postLoan(input: PostLoanInput): Promise<{ transactionId: number; iouId: number } | null> {
+export async function postLoan(
+  input: PostLoanInput
+): Promise<{ transactionId: number; iouId: number } | null> {
   const lending = input.direction === 'LENT';
   const transactionId = await postTransaction({
     amount: input.amount,
@@ -604,6 +642,12 @@ export interface PostInvestmentInput {
   /** The platform/fund/broker — "Zerodha", "Groww SIP", "PPF". */
   label: string;
   occurredAt?: string;
+  /** Which holding it went into or came out of (v16). Null/absent = unassigned. */
+  holdingId?: number | null;
+  /** Evidence carried over when this came from a captured message. */
+  source?: 'MANUAL' | 'SMS' | 'NOTIFICATION';
+  rawText?: string | null;
+  dedupKey?: string | null;
 }
 
 /**
@@ -626,9 +670,37 @@ export async function postInvestment(input: PostInvestmentInput): Promise<number
     kind: contribution ? 'SPEND' : 'INCOME',
     merchant: input.label.trim(),
     occurredAt: input.occurredAt,
-    source: 'MANUAL',
+    source: input.source ?? 'MANUAL',
+    rawText: input.rawText ?? null,
+    dedupKey: input.dedupKey ?? null,
   });
   await db.setNonSpendReason(transactionId, 'INVESTMENT');
+  if (input.holdingId) await db.setTransactionHolding(transactionId, input.holdingId);
+  return transactionId;
+}
+
+/**
+ * Review's "Yes, invested": books a captured message as money into (a debit)
+ * or out of (a credit) an investment, keeping the message as evidence.
+ */
+export async function acceptCaptureAsInvestment(
+  captureId: number,
+  holdingId: number | null
+): Promise<number | null> {
+  const capture = await db.getCaptureById(captureId);
+  if (!capture || capture.status !== 'PENDING') return null;
+
+  const transactionId = await postInvestment({
+    amount: capture.parsed_amount ?? 0,
+    direction: capture.parsed_direction === 'CREDIT' ? 'WITHDRAWAL' : 'CONTRIBUTION',
+    label: capture.parsed_merchant ?? 'Investment',
+    occurredAt: capture.received_at,
+    holdingId,
+    source: capture.source,
+    rawText: capture.raw_text,
+    dedupKey: capture.dedup_key,
+  });
+  await db.setCaptureStatus(captureId, 'ACCEPTED', transactionId);
   return transactionId;
 }
 
@@ -641,7 +713,8 @@ async function runSpendSideEffects(
   outingId: number | null,
   silent: boolean
 ): Promise<void> {
-  const goalsCrossed: Array<{ name: string; emoji: string; percent: number; remaining: number }> = [];
+  const goalsCrossed: Array<{ name: string; emoji: string; percent: number; remaining: number }> =
+    [];
 
   try {
     const roundUpGoalId = await getRoundUpGoalId();

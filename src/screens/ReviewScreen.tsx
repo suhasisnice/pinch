@@ -4,11 +4,17 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { CaptureInboxRow, TransactionRow } from '../db/types';
-import { acceptCapture, confirmCaptureIsDuplicate, senderLabel } from '../services/captureService';
+import {
+  acceptCapture,
+  acceptCaptureAsInvestment,
+  confirmCaptureIsDuplicate,
+  senderLabel,
+} from '../services/captureService';
+import { HoldingSummary } from '../db/repos/holdings';
 import { ACCEPT_THRESHOLD } from '../services/parserService';
 import { formatMoney, formatRelative } from '../utils/format';
 import { palette, spacing, typography } from '../theme/theme';
-import { Button, Card, EmptyState, Loading, Screen, TopBar } from '../components/ui';
+import { Button, Card, Chip, ChipRow, EmptyState, Loading, Screen, TopBar } from '../components/ui';
 
 /**
  * The review queue for messages the parser was not confident about, and for
@@ -24,10 +30,21 @@ export default function ReviewScreen() {
   const [captures, setCaptures] = useState<CaptureInboxRow[] | null>(null);
   // Keyed by transaction id, for the "is this the same payment?" question.
   const [maybeDuplicates, setMaybeDuplicates] = useState<Record<number, TransactionRow>>({});
+  const [holdings, setHoldings] = useState<HoldingSummary[]>([]);
+  // Which holding each investment-looking capture goes into, keyed by capture id.
+  const [holdingFor, setHoldingFor] = useState<Record<number, number | null>>({});
 
   const load = useCallback(async () => {
-    const pending = await db.getPendingCaptures();
+    const [pending, allHoldings] = await Promise.all([db.getPendingCaptures(), db.getHoldings()]);
     setCaptures(pending);
+    setHoldings(allHoldings);
+    setHoldingFor(
+      Object.fromEntries(
+        pending
+          .filter((c) => c.suggested_reason === 'INVESTMENT')
+          .map((c) => [c.id, guessHolding(c, allHoldings)])
+      )
+    );
 
     const linked = await Promise.all(
       pending
@@ -96,7 +113,9 @@ export default function ReviewScreen() {
               </View>
 
               <View style={styles.tagRow}>
-                {twin ? (
+                {capture.suggested_reason === 'INVESTMENT' ? (
+                  <Text style={[styles.tag, styles.tagNeutral]}>Looks like investing</Text>
+                ) : twin ? (
                   <Text style={[styles.tag, styles.tagNeutral]}>Possible repeat</Text>
                 ) : capture.confidence >= ACCEPT_THRESHOLD ? (
                   // Read cleanly — the only question is whether it should
@@ -113,7 +132,62 @@ export default function ReviewScreen() {
                 <Text style={styles.rawText}>{capture.raw_text}</Text>
               </View>
 
-              {twin ? (
+              {capture.suggested_reason === 'INVESTMENT' && !twin ? (
+                <>
+                  {/* Asked, never assumed: booked as spending it would charge
+                      the budget for money you still own; tagged silently it
+                      would be a guess. See looksLikeInvestment. */}
+                  {holdings.length > 0 ? (
+                    <View style={styles.holdingPick}>
+                      <Text style={styles.dupeHint}>Into</Text>
+                      <ChipRow>
+                        {holdings.map((h) => (
+                          <Chip
+                            key={h.id}
+                            label={h.name}
+                            selected={holdingFor[capture.id] === h.id}
+                            onPress={() =>
+                              setHoldingFor((prev) => ({
+                                ...prev,
+                                [capture.id]: prev[capture.id] === h.id ? null : h.id,
+                              }))
+                            }
+                          />
+                        ))}
+                      </ChipRow>
+                    </View>
+                  ) : null}
+                  <Button
+                    label={
+                      capture.parsed_direction === 'CREDIT'
+                        ? 'Yes, taken out of an investment'
+                        : 'Yes, invested'
+                    }
+                    onPress={async () => {
+                      await acceptCaptureAsInvestment(capture.id, holdingFor[capture.id] ?? null);
+                      load();
+                    }}
+                    style={styles.investButton}
+                  />
+                  <View style={styles.actions}>
+                    <Button
+                      label="A normal payment"
+                      variant="tonal"
+                      onPress={async () => {
+                        await acceptCapture(capture.id);
+                        load();
+                      }}
+                      style={styles.flex}
+                    />
+                    <Button
+                      label="Not a payment"
+                      variant="tonal"
+                      onPress={() => rejectWithOptionToBlock(capture, load)}
+                      style={styles.flex}
+                    />
+                  </View>
+                </>
+              ) : twin ? (
                 <>
                   {/* Two sources name the same sender differently — a UPI app
                       uses your contact name, the bank uses the registered one
@@ -244,5 +318,26 @@ const styles = StyleSheet.create({
   rawText: { ...typography.caption, color: palette.textSecondary, lineHeight: 18 },
 
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  investButton: { marginTop: spacing.md },
+  holdingPick: { marginTop: spacing.md, gap: spacing.xs },
   flex: { flex: 1 },
 });
+
+/**
+ * A first guess at which holding a message is about: one whose name appears
+ * in the message, else the only holding there is. Just a pre-selected chip —
+ * the user can change it or clear it before saying yes.
+ */
+function guessHolding(capture: CaptureInboxRow, holdings: HoldingSummary[]): number | null {
+  const text = `${capture.raw_text} ${capture.parsed_merchant ?? ''}`.toLowerCase();
+  const named = holdings.find(
+    (h) => h.name.trim().length >= 3 && text.includes(h.name.trim().toLowerCase())
+  );
+  if (named) return named.id;
+  // A monthly plan for exactly this amount is almost certainly the one.
+  const planned = holdings.filter(
+    (h) => h.sipAmount !== null && Math.abs(h.sipAmount - (capture.parsed_amount ?? -1)) < 0.01
+  );
+  if (planned.length === 1) return planned[0].id;
+  return holdings.length === 1 ? holdings[0].id : null;
+}

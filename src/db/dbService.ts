@@ -16,3 +16,4 @@ export * from './repos/maintenance';
 export * from './repos/balance';
 export * from './repos/rawEvents';
 export * from './repos/reimbursements';
+export * from './repos/holdings';

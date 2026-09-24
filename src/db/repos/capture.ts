@@ -14,6 +14,8 @@ export interface NewCapture {
   dedupKey?: string | null;
   /** The transaction this might be a second report of, when that is genuinely unclear. See migration v13. */
   possibleDuplicateOf?: number | null;
+  /** 'INVESTMENT' when it looks like one. Review asks; nothing is tagged automatically. See v16. */
+  suggestedReason?: string | null;
 }
 
 /**
@@ -44,8 +46,8 @@ export async function recordCapture(input: NewCapture): Promise<number | null> {
     const result = await db.runAsync(
       `INSERT INTO CaptureInbox
          (raw_text, source, sender, received_at, parsed_amount, parsed_merchant,
-          parsed_direction, confidence, status, dedup_key, possible_duplicate_of, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?);`,
+          parsed_direction, confidence, status, dedup_key, possible_duplicate_of, suggested_reason, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?);`,
       [
         input.rawText,
         input.source,
@@ -57,6 +59,7 @@ export async function recordCapture(input: NewCapture): Promise<number | null> {
         input.confidence ?? 0,
         input.dedupKey ?? null,
         input.possibleDuplicateOf ?? null,
+        input.suggestedReason ?? null,
         now,
       ]
     );

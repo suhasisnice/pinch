@@ -13,6 +13,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import TodayScreen from '../screens/TodayScreen';
 import PlansScreen from '../screens/PlansScreen';
 import SquadScreen from '../screens/SquadScreen';
+import WealthScreen from '../screens/WealthScreen';
 import InsightsScreen from '../screens/InsightsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import ReviewScreen from '../screens/ReviewScreen';
@@ -34,13 +35,15 @@ export type RootStackParamList = {
 };
 
 /**
- * Three tabs (0.9.14), down from five: one thing per screen. Insights folded
- * into Today; savings and outings share Plans. Route name "Squad" is kept
- * internally; the label is "People".
+ * Four tabs (0.9.15): Today, Plans, Wealth, People. Three in 0.9.14; Wealth
+ * was added as its own tab at the user's explicit choice (docs/WEALTH.md).
+ * Insights folded into Today; savings and outings share Plans. Route name
+ * "Squad" is kept internally; the label is "People".
  */
 export type TabParamList = {
   Today: undefined;
   Plans: undefined;
+  Wealth: undefined;
   Squad: undefined;
 };
 
@@ -65,6 +68,7 @@ const pinchTheme: Theme = {
 const TAB_ICONS: Record<keyof TabParamList, IconName> = {
   Today: 'today',
   Plans: 'goals',
+  Wealth: 'trendUp',
   Squad: 'squad',
 };
 
@@ -99,6 +103,7 @@ function Tabs() {
     >
       <Tab.Screen name="Today" component={TodayScreen} />
       <Tab.Screen name="Plans" component={PlansScreen} />
+      <Tab.Screen name="Wealth" component={WealthScreen} />
       {/* Route name stays "Goals"/"Squad" (internal, used by TabParamList and
           IconName lookups elsewhere) — only the label the user sees changes,
           to PRODUCT_SPEC.md §2's "Savings"/"Split". Renaming the route itself
@@ -120,6 +125,7 @@ const previewLinking: LinkingOptions<RootStackParamList> = {
         screens: {
           Today: 'today',
           Plans: 'plans',
+          Wealth: 'wealth',
           Squad: 'people',
         },
       },

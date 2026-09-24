@@ -149,10 +149,7 @@ export function totalGoalReserve(goals: GoalReserveInput[]): number {
  * number can go negative from real spending or real debt, but never from
  * ambition alone.
  */
-export function cappedGoalReserve(
-  goals: GoalReserveInput[],
-  capacity: number
-): GoalReserveResult {
+export function cappedGoalReserve(goals: GoalReserveInput[], capacity: number): GoalReserveResult {
   const requested = totalGoalReserve(goals);
   if (capacity <= 0) return { reserved: 0, requested, capped: requested > 0 };
 
@@ -185,6 +182,18 @@ export interface BudgetInput {
   goalReserve: number;
   /** Money set aside for outings (see repos/outings.ts's OutingReserves ledger). Optional so every existing caller/test keeps compiling unchanged. */
   outingReserve?: number;
+  /**
+   * Money this period's monthly investment plans still claim (see
+   * math/wealth.ts sipReserve). An allocation, like the goal reserve.
+   */
+  planReserve?: number;
+  /**
+   * Net cash that left for investments this period (contributions minus
+   * withdrawals). Not spending — the money is still yours, in another form —
+   * but it is no longer in the account to spend, so it leaves the pool the
+   * way repaying a friend does.
+   */
+  investedNet?: number;
   daysRemaining: number;
 }
 
@@ -198,7 +207,7 @@ export interface BudgetBreakdown extends BudgetInput {
    * has to change while Today (Phase 3) can read the spec's own term.
    */
   availableBudget: number;
-  /** goalReserve + outingReserve — money spoken for, whichever purpose. */
+  /** goalReserve + outingReserve + planReserve — money spoken for, whichever purpose. */
   protectedMoney: number;
   /** spendablePool / daysRemaining. The headline number. */
   dailyLimit: number;
@@ -221,7 +230,9 @@ export interface BudgetBreakdown extends BudgetInput {
  */
 export function computeBudget(input: BudgetInput): BudgetBreakdown {
   const outingReserve = input.outingReserve ?? 0;
-  const protectedMoney = input.goalReserve + outingReserve;
+  const planReserve = input.planReserve ?? 0;
+  const investedNet = input.investedNet ?? 0;
+  const protectedMoney = input.goalReserve + outingReserve + planReserve;
 
   const spendablePool =
     input.allowance +
@@ -231,6 +242,7 @@ export function computeBudget(input: BudgetInput): BudgetBreakdown {
     input.settledOut +
     input.expectedRecovery -
     input.openPayables -
+    investedNet -
     protectedMoney;
 
   const days = Math.max(1, input.daysRemaining);
@@ -238,6 +250,8 @@ export function computeBudget(input: BudgetInput): BudgetBreakdown {
   return {
     ...input,
     outingReserve,
+    planReserve,
+    investedNet,
     protectedMoney,
     spendablePool,
     availableBudget: spendablePool,
@@ -400,10 +414,7 @@ export function checkBalanceConsistency(
  * The tolerance is the same one that decides a gap is worth mentioning at
  * all, so nothing can resurface that would not have been shown fresh.
  */
-export function shouldRaiseDiscrepancy(
-  discrepancy: number,
-  dismissed: number | null
-): boolean {
+export function shouldRaiseDiscrepancy(discrepancy: number, dismissed: number | null): boolean {
   if (Math.abs(discrepancy) <= BALANCE_CONSISTENCY_TOLERANCE) return false;
   if (dismissed === null) return true;
   return Math.abs(discrepancy - dismissed) > BALANCE_CONSISTENCY_TOLERANCE;

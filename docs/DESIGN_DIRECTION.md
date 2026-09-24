@@ -66,3 +66,7 @@ document wins. See the conflicts section below.
 is a navigation decision that the user has overridden in this conversation.
 That is recorded here, and the product spec should be amended if the user
 confirms it as permanent. None of the financial rules or data model changed.
+
+## 0.9.15: a fourth tab
+
+Wealth was added as its own tab at the user's explicit request, so the app now has four tabs: Today / Plans / Wealth / People. The screen follows this language: a thin hero, hairline groups, one outlined action, and coral only on the current ladder rung. See `docs/WEALTH.md`.

@@ -53,6 +53,7 @@ export default function BudgetBreakdownSheet({
     { label: 'Spending', amount: b.grossSpend, window: periodWindow, positive: false },
     { label: 'Friends paid you back', amount: b.settledIn, window: periodWindow, positive: true },
     { label: 'You paid friends back', amount: b.settledOut, window: periodWindow, positive: false },
+    { label: 'Invested', amount: b.investedNet ?? 0, window: periodWindow, positive: false },
     {
       label: 'Expected back from friends',
       amount: b.expectedRecovery,
@@ -77,6 +78,12 @@ export default function BudgetBreakdownSheet({
       label: 'Set aside for outings',
       amount: b.outingReserve ?? 0,
       window: 'all open outings',
+      positive: false,
+    },
+    {
+      label: 'Set aside for monthly investing',
+      amount: b.planReserve ?? 0,
+      window: 'plans due this period, not yet paid',
       positive: false,
     },
   ].filter((line) => Math.abs(line.amount) > 0.009);

@@ -185,6 +185,8 @@ export interface CaptureInboxRow {
    * inbox asks rather than guessing. See migration v13.
    */
   possible_duplicate_of: number | null;
+  /** 'INVESTMENT' when the message looks like one — a suggestion, never a decision (v16). */
+  suggested_reason?: string | null;
   created_at: string;
 }
 
