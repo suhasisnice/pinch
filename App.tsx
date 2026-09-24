@@ -32,6 +32,7 @@ import { formatMoney } from './src/utils/format';
 import { palette, spacing, typography } from './src/theme/theme';
 import Icon from './src/components/Icon';
 import { LockGate } from './src/security/AppLock';
+import { MoneyRevealProvider } from './src/security/MoneyReveal';
 import { MomentHost } from './src/components/Moment';
 
 type Status = { phase: 'LOADING' } | { phase: 'READY' } | { phase: 'ERROR'; message: string };
@@ -264,8 +265,10 @@ export default function App() {
     <SafeAreaProvider>
       <StatusBar barStyle="light-content" backgroundColor={palette.background} />
       <LockGate>
-        <RootNavigator />
-        <MomentHost />
+        <MoneyRevealProvider>
+          <RootNavigator />
+          <MomentHost />
+        </MoneyRevealProvider>
       </LockGate>
       {/* Mounted last so dialogs sit above everything, including sheets. */}
       <DialogHost />

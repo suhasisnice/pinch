@@ -15,82 +15,8 @@ export async function initSchema(db: DbAdapter): Promise<void> {
   await runMigrations(db);
 }
 
-/** Spend categories. `null` on a transaction means "not yet categorised". */
-export const CATEGORIES = [
-  'Food',
-  'Outing',
-  'Transport',
-  'Shopping',
-  'Subscriptions',
-  'Academics',
-  'Health',
-  'Bills',
-  'Rent',
-  'Other',
-] as const;
-
-export type Category = (typeof CATEGORIES)[number];
-
-/**
- * Seed merchant -> category rules. Deliberately skewed to what actually shows
- * up on an Indian student's statement. Users can override any of these, and a
- * correction upserts into MerchantRules so the fix sticks.
- */
-export const DEFAULT_MERCHANT_RULES: ReadonlyArray<{ pattern: string; category: Category }> = [
-  { pattern: 'swiggy', category: 'Food' },
-  { pattern: 'zomato', category: 'Food' },
-  { pattern: 'zepto', category: 'Food' },
-  { pattern: 'blinkit', category: 'Food' },
-  { pattern: 'instamart', category: 'Food' },
-  { pattern: 'dominos', category: 'Food' },
-  { pattern: 'mcdonald', category: 'Food' },
-  { pattern: 'starbucks', category: 'Food' },
-  { pattern: 'cafe', category: 'Food' },
-  { pattern: 'canteen', category: 'Food' },
-  { pattern: 'mess', category: 'Food' },
-  { pattern: 'uber', category: 'Transport' },
-  { pattern: 'ola', category: 'Transport' },
-  { pattern: 'rapido', category: 'Transport' },
-  { pattern: 'irctc', category: 'Transport' },
-  { pattern: 'redbus', category: 'Transport' },
-  { pattern: 'metro', category: 'Transport' },
-  { pattern: 'petrol', category: 'Transport' },
-  { pattern: 'amazon', category: 'Shopping' },
-  { pattern: 'flipkart', category: 'Shopping' },
-  { pattern: 'myntra', category: 'Shopping' },
-  { pattern: 'ajio', category: 'Shopping' },
-  { pattern: 'decathlon', category: 'Shopping' },
-  { pattern: 'netflix', category: 'Subscriptions' },
-  { pattern: 'spotify', category: 'Subscriptions' },
-  { pattern: 'prime', category: 'Subscriptions' },
-  { pattern: 'hotstar', category: 'Subscriptions' },
-  { pattern: 'youtube', category: 'Subscriptions' },
-  { pattern: 'jio', category: 'Subscriptions' },
-  { pattern: 'airtel', category: 'Subscriptions' },
-  { pattern: 'bookmyshow', category: 'Outing' },
-  { pattern: 'pvr', category: 'Outing' },
-  { pattern: 'inox', category: 'Outing' },
-  { pattern: 'cinepolis', category: 'Outing' },
-  { pattern: 'bar', category: 'Outing' },
-  { pattern: 'brewery', category: 'Outing' },
-  { pattern: 'pharmacy', category: 'Health' },
-  { pattern: 'apollo', category: 'Health' },
-  { pattern: 'pharmeasy', category: 'Health' },
-  { pattern: 'hospital', category: 'Health' },
-  { pattern: 'medical', category: 'Health' },
-  { pattern: 'book', category: 'Academics' },
-  { pattern: 'stationery', category: 'Academics' },
-  { pattern: 'xerox', category: 'Academics' },
-  { pattern: 'udemy', category: 'Academics' },
-  { pattern: 'coursera', category: 'Academics' },
-  { pattern: 'bescom', category: 'Bills' },
-  { pattern: 'bwssb', category: 'Bills' },
-  { pattern: 'nobroker', category: 'Rent' },
-  // Longer, so it outranks "nobroker" above: NoBrokerHood is the apartment
-  // maintenance app, not rent.
-  { pattern: 'nobrokerhood', category: 'Bills' },
-  { pattern: 'stanza', category: 'Rent' },
-  { pattern: 'nestaway', category: 'Rent' },
-  { pattern: 'bmtc', category: 'Transport' },
-  { pattern: 'namma yatri', category: 'Transport' },
-];
+// The categories and everything the categoriser knows about them live in
+// src/math/categoryTaxonomy.ts. Re-exported here because this is where the
+// rest of the app has always imported them from.
+export { CATEGORIES, SUBCATEGORIES } from '../math/categoryTaxonomy';
+export type { Category } from '../math/categoryTaxonomy';

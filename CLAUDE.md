@@ -120,6 +120,11 @@ weekly caps, heads-ups before risky windows — in a savage voice by default (re
 only; "Roast me" in Settings turns it firm). Maths in `src/math/{recovery,patterns,riskWindows}.ts`,
 glue in `src/services/interventionService.ts`, copy in `src/notifications/roasts.ts`
 (roast the spending, never the person). See `docs/INTERVENTIONS.md`.
+**0.9.21 (user-chosen):** categoriser rehaul. There are 13 categories plus sub-categories. The
+category source is USER, SURE or GUESS, and a guess is shown as one until tapped. People are
+learned per payee, never from their name's words. Matching is whole-word only. See
+`docs/CATEGORISER_REHAUL.md`. The same build holds the fix-queue items: a cushion floor, a
+savings bar pace marker, and a biometric reveal (`security/MoneyReveal.tsx`).
 - Transitions 150–220ms.
 
 ## Reuse / refactor / rebuild

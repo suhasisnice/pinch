@@ -1,5 +1,12 @@
 import { getAdapter } from '../connection';
-import { CaptureSource, Direction, TransactionKind, TransactionRow, TransactionStatus } from '../types';
+import {
+  CaptureSource,
+  CategorySource,
+  Direction,
+  TransactionKind,
+  TransactionRow,
+  TransactionStatus,
+} from '../types';
 import { sameMerchant } from '../../math/merchantClassifier';
 import { sameKnownPerson } from './ious';
 
@@ -19,6 +26,9 @@ export interface NewTransaction {
   kind: TransactionKind;
   merchant: string;
   category?: string | null;
+  subcategory?: string | null;
+  /** Where the category came from. Defaults to USER when a category is given. */
+  categorySource?: CategorySource | null;
   occurredAt?: string;
   source?: CaptureSource;
   rawText?: string | null;
@@ -55,15 +65,17 @@ export async function addTransaction(input: NewTransaction): Promise<number> {
 
   const result = await db.runAsync(
     `INSERT INTO Transactions
-       (amount, direction, kind, merchant, category, occurred_at, source,
+       (amount, direction, kind, merchant, category, subcategory, category_source, occurred_at, source,
         raw_text, external_ref, dedup_key, outing_id, note, status, is_adjustment, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
     [
       Math.abs(input.amount),
       input.direction,
       input.kind,
       input.merchant.trim(),
       input.category ?? null,
+      input.category ? (input.subcategory ?? null) : null,
+      input.category ? (input.categorySource ?? 'USER') : null,
       occurredAt,
       input.source ?? 'MANUAL',
       input.rawText ?? null,
@@ -113,9 +125,33 @@ export async function getTransactionsBetween(
   );
 }
 
-export async function setTransactionCategory(id: number, category: string | null): Promise<void> {
+export async function setTransactionCategory(
+  id: number,
+  category: string | null,
+  options: { subcategory?: string | null; source?: CategorySource } = {}
+): Promise<void> {
   const db = getAdapter();
-  await db.runAsync(`UPDATE Transactions SET category = ? WHERE id = ?;`, [category, id]);
+  await db.runAsync(
+    `UPDATE Transactions SET category = ?, subcategory = ?, category_source = ? WHERE id = ?;`,
+    [
+      category,
+      category ? (options.subcategory ?? null) : null,
+      category ? (options.source ?? 'USER') : null,
+      id,
+    ]
+  );
+}
+
+/**
+ * A guessed category the user just agreed with. Nothing about the category
+ * changes; it simply stops being shown as a guess.
+ */
+export async function confirmTransactionCategory(id: number): Promise<void> {
+  const db = getAdapter();
+  await db.runAsync(
+    `UPDATE Transactions SET category_source = 'USER' WHERE id = ? AND category IS NOT NULL;`,
+    [id]
+  );
 }
 
 export async function setTransactionOuting(id: number, outingId: number | null): Promise<void> {
@@ -152,7 +188,9 @@ export async function updateTransaction(
   fields: {
     amount?: number;
     merchant?: string;
+    /** Set by hand, so it is stored as USER — see setTransactionCategory. */
     category?: string | null;
+    subcategory?: string | null;
     occurredAt?: string;
     note?: string | null;
     direction?: Direction;
@@ -173,8 +211,12 @@ export async function updateTransaction(
     params.push(fields.merchant.trim());
   }
   if (fields.category !== undefined) {
-    sets.push('category = ?');
-    params.push(fields.category);
+    sets.push('category = ?', 'subcategory = ?', 'category_source = ?');
+    params.push(
+      fields.category,
+      fields.category ? (fields.subcategory ?? null) : null,
+      fields.category ? 'USER' : null
+    );
   }
   if (fields.occurredAt !== undefined) {
     sets.push('occurred_at = ?');

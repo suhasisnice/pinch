@@ -233,11 +233,26 @@ export async function getReserveHistory(outingId: number): Promise<OutingReserve
  */
 export async function getTotalOutingReserved(): Promise<number> {
   const db = getAdapter();
+  // What is still protected is the reserve minus what has already been spent
+  // on the outing. The spending itself is already out of the budget (it is in
+  // grossSpend like any other), so leaving the reserve at full size charged
+  // every rupee spent on an outing twice until the outing was closed. That was
+  // the "set aside looks high" report (docs/FIX_QUEUE.md). The filters are the
+  // same ones getGrossSpendBetween uses, so the two can never disagree about
+  // what counts as spent.
   const row = await db.getFirstAsync<{ total: number | null }>(
-    `SELECT COALESCE(SUM(r.amount), 0) AS total
-     FROM OutingReserves r
-     JOIN Outings ON Outings.id = r.outing_id
-     WHERE Outings.closed_at IS NULL;`
+    `SELECT COALESCE(SUM(MAX(0, reserved - spent)), 0) AS total FROM (
+       SELECT
+         o.id,
+         COALESCE((SELECT SUM(r.amount) FROM OutingReserves r WHERE r.outing_id = o.id), 0) AS reserved,
+         COALESCE((SELECT SUM(CASE WHEN t.kind = 'SPEND' THEN t.amount ELSE -t.amount END)
+                   FROM Transactions t
+                   WHERE t.outing_id = o.id AND t.kind IN ('SPEND', 'REFUND')
+                     AND t.status = 'COMPLETED' AND t.excluded_at IS NULL
+                     AND t.transfer_pair_id IS NULL AND t.non_spend_reason IS NULL), 0) AS spent
+       FROM Outings o
+       WHERE o.closed_at IS NULL
+     );`
   );
   return row?.total ?? 0;
 }

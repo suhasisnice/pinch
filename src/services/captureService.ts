@@ -410,6 +410,8 @@ export interface PostTransactionInput {
   externalRef?: string | null;
   dedupKey?: string | null;
   category?: string | null;
+  /** Only with `category`, when the user picked one level deeper. */
+  subcategory?: string | null;
   outingId?: number | null;
   /** Set for a credit that repays a specific debt rather than being income. */
   settlesContactId?: number | null;
@@ -435,9 +437,15 @@ export interface PostTransactionInput {
  */
 export async function postTransaction(input: PostTransactionInput): Promise<number | null> {
   const occurredAt = input.occurredAt ?? new Date().toISOString();
-  const category =
-    input.category ??
-    (input.direction === 'DEBIT' ? await db.smartCategoriseMerchant(input.merchant) : null);
+  // A category handed in was picked by a person. Otherwise the categoriser
+  // decides, and says how sure it is — a guess is applied but shown as one.
+  const decision =
+    input.category == null && input.direction === 'DEBIT'
+      ? await db.categoriseTransaction({ merchant: input.merchant, rawText: input.rawText })
+      : null;
+  const category = input.category ?? decision?.category ?? null;
+  const subcategory = input.category ? (input.subcategory ?? null) : (decision?.subcategory ?? null);
+  const categorySource = input.category ? 'USER' : (decision?.source ?? null);
 
   let kind: 'SPEND' | 'INCOME' | 'SETTLE_IN' | 'SETTLE_OUT' | 'REFUND';
   if (input.kind) {
@@ -461,6 +469,8 @@ export async function postTransaction(input: PostTransactionInput): Promise<numb
     kind,
     merchant: input.merchant,
     category,
+    subcategory,
+    categorySource,
     occurredAt,
     source: input.source ?? 'MANUAL',
     rawText: input.rawText ?? null,

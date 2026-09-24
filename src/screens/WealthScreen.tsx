@@ -59,6 +59,8 @@ import {
   TopBar,
 } from '../components/ui';
 import { showConfirm } from '../components/Dialog';
+import { MASK, useMoneyReveal } from '../security/MoneyReveal';
+import CushionFloor from '../components/CushionFloor';
 
 /**
  * Wealth: the slow money, on its own tab (the user's choice — see
@@ -75,6 +77,7 @@ export default function WealthScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [managing, setManaging] = useState<HoldingSummary | null>(null);
+  const { revealed, reveal } = useMoneyReveal();
   const [cushionOpen, setCushionOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [investFor, setInvestFor] = useState<number | null>(null);
@@ -162,12 +165,16 @@ export default function WealthScreen() {
           until then, what has been kept — never a guessed total. */}
       {snap.netWorth !== null ? (
         <>
+          {/* Net worth is built on the bank balance, so it hides with it:
+              the number, the change since last month, and the bank figure. */}
           <ChartHero
             amount={snap.netWorth}
             label="net worth"
             history={snap.netWorthHistory}
-            line={netWorthLine(snap.netWorth, lastMonth)}
-            meta={`${formatMoney(balance.projected ?? 0)} in the bank · ${formatMoney(snap.worth)} invested`}
+            masked={!revealed}
+            onReveal={() => void reveal()}
+            line={revealed ? netWorthLine(snap.netWorth, lastMonth) : undefined}
+            meta={`${revealed ? formatMoney(balance.projected ?? 0) : MASK} in the bank · ${formatMoney(snap.worth)} invested`}
           />
         </>
       ) : (
@@ -238,11 +245,29 @@ export default function WealthScreen() {
           detail={
             ladder.cushion.done
               ? `${formatMoney(ladder.cushion.target)} set aside. Sleep well.`
-              : snap.cushion
+              : snap.cushion && balance.projected !== null && ladder.cushion.saved > 0.009
+                ? 'Kept under your balance, not spent. For the week life happens.'
+                : snap.cushion
                 ? `${formatMoney(ladder.cushion.saved)} of ${formatMoney(ladder.cushion.target)}. For the week life happens.`
                 : `Three months of allowance, about ${formatMoney(ladder.cushion.target)}. For the week life happens.`
           }
-          fraction={snap.cushion && !ladder.cushion.done ? ladder.cushion.fraction : undefined}
+          fraction={
+            snap.cushion && !ladder.cushion.done && balance.projected === null
+              ? ladder.cushion.fraction
+              : undefined
+          }
+          extra={
+            // With a bank balance to draw it under, the cushion is a floor,
+            // not a progress bar: what is below the line is not spendable.
+            snap.cushion && balance.projected !== null && ladder.cushion.saved > 0.009 ? (
+              <CushionFloor
+                balance={balance.projected}
+                saved={ladder.cushion.saved}
+                target={ladder.cushion.target}
+                masked={!revealed}
+              />
+            ) : undefined
+          }
           onPress={
             snap.cushion
               ? () => setCushionOpen(true)
@@ -411,6 +436,7 @@ function Rung({
   detail,
   state,
   fraction,
+  extra,
   onPress,
   action,
 }: {
@@ -419,6 +445,8 @@ function Rung({
   detail: string;
   state: 'done' | 'now' | 'later';
   fraction?: number;
+  /** Drawn under the detail line in place of a bar — the cushion floor. */
+  extra?: React.ReactNode;
   onPress?: () => void;
   action?: string;
 }) {
@@ -438,6 +466,7 @@ function Rung({
             <ProgressBar fraction={fraction} height={2} />
           </View>
         ) : null}
+        {extra ? <View style={styles.rungBar}>{extra}</View> : null}
         {action ? <Text style={styles.rungAction}>{action} →</Text> : null}
       </View>
     </>

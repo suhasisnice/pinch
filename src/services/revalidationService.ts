@@ -47,8 +47,12 @@ const REVALIDATION_KEY = 'pinch.revalidatedRules';
  *     stored rows (a rejected message never became one), but the version
  *     bump is here for the record, and it is what Phase 7's `RawEvents`
  *     sweep (`reprocessUnresolvedRawEvents`) uses to know a fix shipped.
+ * 12 — the categoriser rehaul (0.9.21, docs/CATEGORISER_REHAUL.md). Every
+ *     category set before it is re-checked: substring mistakes ("ola" in
+ *     Motorola) are cleared, the rest gain a sub-category and a certainty,
+ *     and anything the new categoriser can place for the first time is.
  */
-export const PARSER_RULES_VERSION = 11;
+export const PARSER_RULES_VERSION = 12;
 
 export interface RevalidationResult {
   /** Transactions examined: captured, and still carrying their original text. */

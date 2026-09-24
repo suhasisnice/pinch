@@ -34,24 +34,31 @@ export async function seedDemoData(now: Date = new Date()): Promise<void> {
     now: new Date(now.getTime() - 16 * DAY),
   });
 
-  const spend = (
+  // The demo's categories come from the real categoriser, so the demo shows
+  // sub-categories and the odd guess the way a real ledger would. The
+  // category listed per row is only the fallback for one it cannot place.
+  const spend = async (
     daysAgo: number,
     hour: number,
     amount: number,
     merchant: string,
     category: string | null,
     source: 'MANUAL' | 'SMS' | 'NOTIFICATION' = 'NOTIFICATION'
-  ) =>
-    db.addTransaction({
+  ) => {
+    const decision = await db.categoriseTransaction({ merchant });
+    return db.addTransaction({
       amount,
       direction: 'DEBIT',
       kind: 'SPEND',
       merchant,
-      category,
+      category: decision?.category ?? category,
+      subcategory: decision?.subcategory ?? null,
+      categorySource: decision?.source ?? 'USER',
       occurredAt: at(daysAgo, hour),
       source,
       rawText: source === 'MANUAL' ? null : `Paid Rs.${amount} to ${merchant}`,
     });
+  };
 
   // A month of ordinary spending.
   const routine: Array<[number, number, number, string, string | null]> = [
@@ -65,7 +72,7 @@ export async function seedDemoData(now: Date = new Date()): Promise<void> {
     [3, 11, 899, 'Amazon', 'Shopping'],
     [3, 19, 85, 'Namma Yatri', 'Transport'],
     [4, 9, 40, 'Campus Canteen', 'Food'],
-    [4, 23, 240, 'Swiggy Instamart', 'Food'],
+    [4, 23, 240, 'Swiggy Instamart', 'Groceries'],
     [5, 12, 1450, 'Sapna Book House', 'Academics'],
     [6, 21, 2400, 'Toit Brewpub', 'Outing'],
     [7, 9, 40, 'Campus Canteen', 'Food'],

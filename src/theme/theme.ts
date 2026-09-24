@@ -179,6 +179,9 @@ export function amountColor(direction: 'DEBIT' | 'CREDIT' | string | null | unde
 /** One colour per spend category, used consistently across every chart. Unchanged by the Phase 0 token migration — screen-level concern, not a design-token one. */
 export const categoryColors: Record<string, string> = {
   Food: '#FF8A5B',
+  Groceries: '#BEF264',
+  Travel: '#818CF8',
+  'Personal care': '#E879F9',
   Outing: '#A78BFA',
   Transport: '#60A5FA',
   Shopping: '#F472B6',

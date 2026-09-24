@@ -19,6 +19,8 @@ function tx(overrides: Partial<TransactionRow>): TransactionRow {
     kind: 'SPEND',
     merchant: 'Swiggy',
     category: 'Food',
+    subcategory: null,
+    category_source: null,
     occurred_at: new Date(2026, 8, 24, 12, 0).toISOString(),
     source: 'SMS',
     raw_text: null,
@@ -239,5 +241,34 @@ describe('totals for what is showing', () => {
 
   it('is all zeroes for an empty list', () => {
     expect(summariseFiltered([])).toEqual({ count: 0, net: 0, out: 0, in: 0 });
+  });
+});
+
+describe('subcategoryBreakdown (0.9.21)', () => {
+  it('splits one category by sub-category, biggest first, unsorted last', () => {
+    const { subcategoryBreakdown, NOT_SORTED } = jest.requireActual('../src/math/transactionFilter');
+    const rows = [
+      tx({ id: 1, amount: 300, category: 'Food', subcategory: 'Delivery' }),
+      tx({ id: 2, amount: 100, category: 'Food', subcategory: null }),
+      tx({ id: 3, amount: 500, category: 'Food', subcategory: 'Dining out' }),
+      tx({ id: 4, amount: 900, category: 'Shopping', subcategory: 'Online' }),
+      tx({ id: 5, amount: 50, category: 'Food', subcategory: 'Delivery', direction: 'CREDIT', kind: 'REFUND' }),
+    ];
+    const shares = subcategoryBreakdown(rows, 'Food');
+    expect(shares.map((s: { subcategory: string }) => s.subcategory)).toEqual(['Dining out', 'Delivery', NOT_SORTED]);
+    expect(shares[0].share).toBeCloseTo(500 / 900);
+  });
+
+  it('filters to one sub-category only when one category is chosen', () => {
+    const rows = [
+      tx({ id: 1, category: 'Food', subcategory: 'Delivery' }),
+      tx({ id: 2, category: 'Food', subcategory: 'Dining out' }),
+    ];
+    const shown = applyTransactionFilter(
+      rows,
+      { ...EMPTY_FILTER, categories: ['Food'], subcategory: 'Delivery' },
+      { now: NOW, periodStart: null, periodEnd: null }
+    );
+    expect(shown.map((r) => r.id)).toEqual([1]);
   });
 });

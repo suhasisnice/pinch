@@ -6,6 +6,8 @@ import { formatMoney } from '../utils/format';
 import { layer, palette, radii, spacing, typography } from '../theme/theme';
 import { Button, Field, Sheet } from './ui';
 import Icon from './Icon';
+import { MASK, useMoneyReveal } from '../security/MoneyReveal';
+import CushionFloor from './CushionFloor';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -24,16 +26,20 @@ function when(iso: string): string {
  *
  * Hidden by default. A balance is the one figure on this screen that is
  * nobody else's business, and phones get glanced at. The row lives inside
- * Today's "This period" group; tap it to reveal, "Update" to record a new figure.
+ * Today's "This period" group; tap it and a fingerprint or face reveals it
+ * (see security/MoneyReveal.tsx), "Update" to record a new figure.
  */
 export default function BalanceCard({
   state,
   onChanged,
+  cushion,
 }: {
   state: BalanceState;
   onChanged: () => void;
+  /** The emergency cushion, drawn as a floor under the balance once it holds something. */
+  cushion?: { saved: number; target: number } | null;
 }) {
-  const [shown, setShown] = useState(false);
+  const { revealed: shown, reveal, hide } = useMoneyReveal();
   const [editing, setEditing] = useState(false);
 
   const value = state.projected;
@@ -50,7 +56,7 @@ export default function BalanceCard({
       <View style={styles.row}>
         <Pressable
           style={({ pressed }) => [styles.main, pressed && styles.pressed]}
-          onPress={() => (value === null ? setEditing(true) : setShown((v) => !v))}
+          onPress={() => (value === null ? setEditing(true) : shown ? hide() : void reveal())}
           accessibilityRole="button"
           accessibilityLabel={
             value === null ? 'Add your bank balance' : shown ? 'Hide balance' : 'Show balance'
@@ -64,7 +70,7 @@ export default function BalanceCard({
           </View>
           {value === null ? null : (
             <View style={styles.valueRow}>
-              <Text style={styles.value}>{shown ? formatMoney(value) : '••••••'}</Text>
+              <Text style={styles.value}>{shown ? formatMoney(value) : MASK}</Text>
               <Icon name={shown ? 'eye' : 'eyeOff'} size={15} color={palette.textMuted} />
             </View>
           )}
@@ -79,6 +85,11 @@ export default function BalanceCard({
           <Text style={styles.updateText}>{value === null ? 'Add' : 'Update'}</Text>
         </Pressable>
       </View>
+      {value !== null && cushion && cushion.saved > 0.009 ? (
+        <View style={styles.floor}>
+          <CushionFloor balance={value} saved={cushion.saved} target={cushion.target} masked={!shown} />
+        </View>
+      ) : null}
 
       <UpdateBalanceSheet
         visible={editing}
@@ -169,6 +180,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   pressed: { opacity: 0.6 },
+  floor: { paddingBottom: spacing.sm },
   text: { flex: 1, gap: 2 },
   title: { ...typography.body, color: palette.textPrimary },
   meta: { ...typography.caption, color: palette.textMuted },

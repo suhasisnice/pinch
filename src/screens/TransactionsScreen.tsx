@@ -5,6 +5,7 @@ import * as db from '../db/dbService';
 import { TransactionRow } from '../db/types';
 import { formatMoney, formatTime } from '../utils/format';
 import { amountColor, categoryColor, palette, spacing, typography } from '../theme/theme';
+import { rowCategoryLabel } from '../math/categoryTaxonomy';
 import {
   Card,
   Chip,
@@ -29,8 +30,10 @@ import { LedgerItem, ReimbursementLink, groupLinkedTransactions } from '../math/
 import {
   EMPTY_FILTER,
   TransactionFilter,
+  NOT_SORTED,
   activeFilterCount,
   applyTransactionFilter,
+  subcategoryBreakdown,
   summariseFiltered,
 } from '../math/transactionFilter';
 
@@ -108,6 +111,23 @@ export default function TransactionsScreen() {
     [rows, filter, period, owedByTx]
   );
 
+  // With one category chosen, how it splits one level down. Worked out from
+  // everything else the filter says, but not the sub-category itself, so the
+  // breakdown stays whole while one line of it is picked.
+  const onlyCategory = filter.categories.length === 1 ? filter.categories[0] : null;
+  const breakdown = useMemo(() => {
+    if (!onlyCategory || onlyCategory === 'Uncategorised') return [];
+    const withoutSub = applyTransactionFilter(rows ?? [], { ...filter, subcategory: null }, {
+      now: new Date(),
+      periodStart: period?.start ?? null,
+      periodEnd: period?.end ?? null,
+      owedByTransaction: owedByTx,
+    });
+    const shares = subcategoryBreakdown(withoutSub, onlyCategory);
+    // Nothing to break down when every row is still unsorted.
+    return shares.some((s) => s.subcategory !== NOT_SORTED) ? shares : [];
+  }, [rows, filter, period, owedByTx, onlyCategory]);
+
   // A repayment and what it paid back fold into one line at the net, filed
   // under the day it was squared up. Only what the filter is showing takes
   // part — see groupLinkedTransactions.
@@ -171,6 +191,31 @@ export default function TransactionsScreen() {
         placeholder="Search merchants"
       />
 
+      {breakdown.length > 0 && onlyCategory ? (
+        <Group title={`Inside ${onlyCategory}`}>
+          {breakdown.map((share) => {
+            const picked = filter.subcategory === share.subcategory;
+            return (
+              <Row
+                key={share.subcategory}
+                title={share.subcategory}
+                mark={share.subcategory === NOT_SORTED ? undefined : categoryColor(onlyCategory)}
+                subtitle={`${Math.round(share.share * 100)}% · ${share.count} ${share.count === 1 ? 'payment' : 'payments'}`}
+                onPress={() =>
+                  setFilter({ ...filter, subcategory: picked ? null : share.subcategory })
+                }
+                right={
+                  <View style={styles.shareRight}>
+                    <Text style={styles.amount}>{formatMoney(share.amount)}</Text>
+                    {picked ? <Icon name="check" size={16} color={palette.textPrimary} /> : null}
+                  </View>
+                }
+              />
+            );
+          })}
+        </Group>
+      ) : null}
+
       {filter.showIgnored ? (
         <Text style={styles.note}>Removed from your totals. Open one to put it back.</Text>
       ) : null}
@@ -201,7 +246,7 @@ export default function TransactionsScreen() {
                   title={tx.merchant}
                   mark={categoryColor(tx.category)}
                   subtitle={[
-                    tx.category ?? 'Uncategorised',
+                    rowCategoryLabel(tx),
                     tx.source === 'MANUAL' ? 'added by hand' : formatTime(tx.occurred_at),
                   ].join(' · ')}
                   onPress={() => setDetailFor(tx)}
@@ -302,4 +347,5 @@ function formatDay(day: string): string {
 const styles = StyleSheet.create({
   note: { ...typography.caption, color: palette.textMuted },
   amount: { ...typography.body, color: palette.textPrimary },
+  shareRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
 });

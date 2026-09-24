@@ -94,6 +94,9 @@ const GLYPHS = {
 
   // Spend categories — these match the keys in theme.categoryColors.
   Food: material('silverware-fork-knife'),
+  Groceries: material('basket-outline'),
+  Travel: material('bag-suitcase-outline'),
+  'Personal care': material('face-man-shimmer-outline'),
   Outing: material('party-popper'),
   Transport: material('bus'),
   Shopping: feather('shopping-bag'),

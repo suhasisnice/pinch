@@ -66,18 +66,27 @@ export default function BudgetBreakdownSheet({
       window: 'all open debts',
       positive: false,
     },
+    // Two lines, not one: money actually saved this period, and money only
+    // held back so the goals stay on pace. Shown as one "set aside" figure it
+    // read as far more than had been saved.
     {
-      label: 'Set aside for goals',
-      amount: b.goalReserve,
+      label: 'Saved toward goals',
+      amount: snapshot.goalSavedThisPeriod,
+      window: periodWindow,
+      positive: false,
+    },
+    {
+      label: 'Held back to keep goals on pace',
+      amount: Math.max(0, b.goalReserve - snapshot.goalSavedThisPeriod),
       window: snapshot.goalReserveCapped
-        ? `held back from ${formatMoney(snapshot.goalReserveRequested)} your goals asked for`
-        : 'all active goals',
+        ? `capped, your goals asked for ${formatMoney(snapshot.goalReserveRequested)}`
+        : 'not saved yet, only kept out of spending',
       positive: false,
     },
     {
       label: 'Set aside for outings',
       amount: b.outingReserve ?? 0,
-      window: 'all open outings',
+      window: 'open outings, less what you already spent on them',
       positive: false,
     },
     {

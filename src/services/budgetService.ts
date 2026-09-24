@@ -48,6 +48,12 @@ export interface BudgetSnapshot {
   /** What goals asked for before the ceiling was applied. */
   goalReserveRequested: number;
   /**
+   * The part of the goal reserve that is money actually put toward goals this
+   * period. The rest is held back to keep goals on pace and has not been
+   * saved yet. Shown apart so "set aside" is never read as "saved".
+   */
+  goalSavedThisPeriod: number;
+  /**
    * The actual observed balance from BalanceSnapshots, projected forward —
    * null until the user has typed one in at least once. Never derived from
    * the period ledger: PRODUCT_SPEC §1.1 calls this "the actual
@@ -228,6 +234,10 @@ export async function getBudgetSnapshot(
     payday,
     goalReserveCapped: goalReserveResult.capped,
     goalReserveRequested: goalReserveResult.requested,
+    goalSavedThisPeriod: Math.min(
+      goalReserve,
+      goals.reduce((sum, goal) => sum + (goalContributions.get(goal.id) ?? 0), 0)
+    ),
     bankBalance,
     availableBudget: budget.availableBudget,
     protectedMoney: budget.protectedMoney,

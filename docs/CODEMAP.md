@@ -96,6 +96,8 @@ Drafted by the local model (gpt-oss:20b) from each file's header and exports on 
 - `src/math/insights.ts` — Insight calculations: micro‑transactions, late night, categories, streaks
 - `src/math/insightsSummary.ts` — Human‑readable findings and hero metrics derived from insights
 - `src/math/merchantClassifier.ts` — Naïve Bayes merchant name classification and similarity checks
+- `src/math/categoriser.ts` — the categoriser (0.9.21): categorise, readPayee, findVpa; learned → brand → keyword → words cascade with SURE/GUESS tiers.
+- `src/math/categoryTaxonomy.ts` — CATEGORIES, SUBCATEGORIES, BRANDS, KEYWORDS, NAME_WORDS, categoryLabel, rowCategoryLabel.
 - `src/math/moments.ts` — Small state change detectors for goals and milestones
 - `src/math/patterns.ts` — exports SpendItem, CapScope, Callout, constants, keyFor, tally, findCallouts, SpendCap, CapLevel, capLevel, capMatches, capCrossing, suggestedCap
 - `src/math/payday.ts` — exports PayPlan, DEFAULT_PAY_PLAN, MAX_PLAN_SHARE, PaydayKey, PaydayItem, PaydayInput, Payday, roundPlan, clampPlan, payday, splitAcrossGoals, paydayFromData
@@ -138,6 +140,7 @@ Drafted by the local model (gpt-oss:20b) from each file's header and exports on 
 ## src/security
 
 - `src/security/AppLock.tsx` — app lock gate, identity confirmation, and lock status utilities
+- `src/security/MoneyReveal.tsx` — MoneyRevealProvider/useMoneyReveal: bank balance + net worth hidden until biometric reveal; hides on background.
 
 ## src/services
 
@@ -173,3 +176,5 @@ Drafted by the local model (gpt-oss:20b) from each file's header and exports on 
 - `src/utils/format.ts` — exports formatAmount, formatMoney, formatTime, and related formatting helpers
 - `src/utils/nudge.ts` — exports sendNudge and re‑exports nudge message builders and sanitiser.
 - `src/utils/nudgeMessage.ts` — exports buildNudgeMessage, sanitizePhoneForWhatsApp, normalizePhoneForWhatsApp, buildWhatsAppUrl.
+- `src/components/CategoryPicker.tsx` — two-level category picker (top level, then optional sub-category).
+- `src/components/CushionFloor.tsx` — the cushion drawn as a floor under the bank balance.

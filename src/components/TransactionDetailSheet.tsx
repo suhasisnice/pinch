@@ -3,14 +3,16 @@ import { showConfirm, showDialog } from './Dialog';
 import { StyleSheet, Text, View } from 'react-native';
 import * as db from '../db/dbService';
 import { TransactionRow } from '../db/types';
-import { CATEGORIES } from '../db/schema';
+import { categoryLabel } from '../math/categoryTaxonomy';
 import {
+  confirmCategoryGuess,
   learnFromCategoryCorrection,
   propagateCategoryCorrection,
 } from '../services/classificationService';
 import { formatMoney, formatRelative } from '../utils/format';
 import { amountColor, palette, radii, spacing, typography } from '../theme/theme';
-import { Button, Chip, Field, Sheet } from './ui';
+import { Button, Field, Sheet } from './ui';
+import CategoryPicker, { CategoryChoice } from './CategoryPicker';
 import Icon from './Icon';
 
 /**
@@ -51,7 +53,7 @@ function kindLabel(t: TransactionRow): string {
     case 'SETTLE_OUT':
       return 'Repayment made';
     default:
-      return t.category ?? 'Uncategorised';
+      return categoryLabel(t.category, t.subcategory);
   }
 }
 
@@ -75,7 +77,7 @@ export default function TransactionDetailSheet({
 }) {
   const [amount, setAmount] = useState('');
   const [merchant, setMerchant] = useState('');
-  const [category, setCategory] = useState<string | null>(null);
+  const [choice, setChoice] = useState<CategoryChoice>({ category: null, subcategory: null });
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -83,13 +85,17 @@ export default function TransactionDetailSheet({
     if (!transaction) return;
     setAmount(String(transaction.amount));
     setMerchant(transaction.merchant);
-    setCategory(transaction.category);
+    setChoice({ category: transaction.category, subcategory: transaction.subcategory });
     setEditing(false);
   }, [transaction]);
 
   if (!transaction) return null;
 
   const isCaptured = transaction.source !== 'MANUAL';
+  const isGuess =
+    transaction.category_source === 'GUESS' &&
+    transaction.category !== null &&
+    transaction.kind === 'SPEND';
   const parsedAmount = Number(amount.replace(/[^\d.]/g, ''));
   const canSave = Number.isFinite(parsedAmount) && parsedAmount > 0 && merchant.trim().length > 0;
 
@@ -98,24 +104,40 @@ export default function TransactionDetailSheet({
     setBusy(true);
     try {
       const trimmedMerchant = merchant.trim();
-      const categoryChanged = category !== transaction!.category;
+      const { category, subcategory } = choice;
+      const categoryChanged =
+        category !== transaction!.category || subcategory !== transaction!.subcategory;
       await db.updateTransaction(transaction!.id, {
         amount: parsedAmount,
         merchant: trimmedMerchant,
-        category,
+        ...(categoryChanged ? { category, subcategory } : {}),
       });
       if (categoryChanged) {
         // A category set by hand is the strongest signal the app ever gets —
         // stronger than its own guess, right or wrong. Feed it back so the
         // next message from this merchant, and eventually similarly-named
         // ones, do not need the same correction again...
-        await learnFromCategoryCorrection(trimmedMerchant, category);
+        // A person is learned as that person, never through their name's
+        // words; the original message can name their UPI handle.
+        const context = { subcategory, rawText: transaction!.raw_text };
+        await learnFromCategoryCorrection(trimmedMerchant, category, context);
         // ...and reach every other visit to the same place already sitting
         // in the ledger, not just future ones. Matching is fuzzy, since the
         // same chain rarely gets written identically twice.
-        await propagateCategoryCorrection(trimmedMerchant, category, transaction!.id);
+        await propagateCategoryCorrection(trimmedMerchant, category, transaction!.id, context);
       }
       setEditing(false);
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** "Yes, that's right" on a guess. Teaches as much as a correction. */
+  async function confirmGuess() {
+    setBusy(true);
+    try {
+      await confirmCategoryGuess(transaction!.id);
       onChanged();
     } finally {
       setBusy(false);
@@ -225,19 +247,7 @@ export default function TransactionDetailSheet({
         <>
           <Field label="Amount" value={amount} onChangeText={setAmount} keyboardType="numeric" />
           <Field label="Merchant" value={merchant} onChangeText={setMerchant} />
-          <View style={styles.group}>
-            <Text style={styles.groupLabel}>Category</Text>
-            <View style={styles.chipWrap}>
-              {CATEGORIES.map((option) => (
-                <Chip
-                  key={option}
-                  label={option}
-                  selected={category === option}
-                  onPress={() => setCategory(category === option ? null : option)}
-                />
-              ))}
-            </View>
-          </View>
+          <CategoryPicker value={choice} onChange={setChoice} />
           <Button
             label={busy ? 'Saving…' : 'Save changes'}
             onPress={saveEdits}
@@ -275,6 +285,29 @@ export default function TransactionDetailSheet({
               </Text>
             </View>
           </View>
+
+          {isGuess ? (
+            <View style={styles.guess}>
+              <Text style={styles.guessText}>
+                Looks like {categoryLabel(transaction.category, transaction.subcategory)}. Right?
+              </Text>
+              <View style={styles.actions}>
+                <Button
+                  label="Yes"
+                  variant="secondary"
+                  onPress={confirmGuess}
+                  disabled={busy}
+                  style={styles.flex}
+                />
+                <Button
+                  label="Change"
+                  variant="ghost"
+                  onPress={() => setEditing(true)}
+                  style={styles.flex}
+                />
+              </View>
+            </View>
+          ) : null}
 
           {transaction.raw_text ? (
             <View style={styles.rawBox}>
@@ -387,10 +420,6 @@ const styles = StyleSheet.create({
   excludeBlock: { gap: spacing.sm, alignItems: 'center' },
   loanHint: { ...typography.caption, color: palette.textMuted },
 
-  group: { gap: spacing.sm },
-  groupLabel: {
-    ...typography.sectionLabel,
-    color: palette.textSecondary,
-  },
-  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  guess: { gap: spacing.sm },
+  guessText: { ...typography.body, color: palette.textSecondary, textAlign: 'center' },
 });
