@@ -133,16 +133,33 @@ export async function contributeToGoal(
   goalId: number,
   amount: number,
   source: 'ROUNDUP' | 'MANUAL' | 'AUTO' = 'MANUAL',
-  transactionId?: number | null
+  transactionId?: number | null,
+  /** Backdates the contribution — the period sweep files leftovers under the period they came from. */
+  createdAt?: string
 ): Promise<number> {
   if (amount === 0) return 0;
   const db = getAdapter();
   const result = await db.runAsync(
     `INSERT INTO GoalContributions (goal_id, amount, source, transaction_id, created_at)
      VALUES (?, ?, ?, ?, ?);`,
-    [goalId, amount, source, transactionId ?? null, new Date().toISOString()]
+    [goalId, amount, source, transactionId ?? null, createdAt ?? new Date().toISOString()]
   );
   return result.lastInsertRowId;
+}
+
+/** Net contributions per goal made within a window — what each goal took out of that period. */
+export async function getGoalContributionsBetween(
+  startIso: string,
+  endIso: string
+): Promise<Map<number, number>> {
+  const db = getAdapter();
+  const rows = await db.getAllAsync<{ goal_id: number; total: number }>(
+    `SELECT goal_id, SUM(amount) AS total FROM GoalContributions
+     WHERE created_at >= ? AND created_at < ?
+     GROUP BY goal_id;`,
+    [startIso, endIso]
+  );
+  return new Map(rows.map((r) => [r.goal_id, r.total]));
 }
 
 export async function getContributions(goalId: number): Promise<GoalContributionRow[]> {

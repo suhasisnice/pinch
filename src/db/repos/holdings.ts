@@ -208,3 +208,14 @@ export async function getInvestingHistory(): Promise<{ firstAt: string | null; m
   );
   return { firstAt: row?.first_at ?? null, months: row?.months ?? 0 };
 }
+
+/** Money put into investments within a window — contributions only, withdrawals ignored. */
+export async function getContributedBetween(startIso: string, endIso: string): Promise<number> {
+  const db = getAdapter();
+  const row = await db.getFirstAsync<{ total: number | null }>(
+    `SELECT COALESCE(SUM(amount), 0) AS total FROM Transactions
+     WHERE direction = 'DEBIT' AND ${INVESTMENT_ROWS} AND occurred_at >= ? AND occurred_at < ?;`,
+    [startIso, endIso]
+  );
+  return row?.total ?? 0;
+}

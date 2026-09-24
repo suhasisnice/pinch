@@ -76,6 +76,20 @@ export interface GoalReserveInput {
   daysUntilDeadline: number | null;
   /** Days left in the current budget period. */
   daysRemainingInPeriod: number;
+  /**
+   * Net contributions made within the current period. Money saved in an
+   * earlier period came out of that period's allowance, not this one's, so
+   * holding it back again would charge the same rupees twice. When absent
+   * (older callers, pure tests), everything saved is treated as this
+   * period's — the original behaviour.
+   */
+  savedThisPeriod?: number;
+  /**
+   * False when a pay-yourself-first plan is in force: the plan decides how
+   * much goes to goals, so the automatic pacing share is switched off and
+   * only money actually set aside this period is held.
+   */
+  paced?: boolean;
 }
 
 /**
@@ -97,7 +111,12 @@ export interface GoalReserveInput {
  */
 export function goalReserve(goal: GoalReserveInput): number {
   const stillNeeded = Math.max(0, goal.targetAmount - goal.savedAmount);
-  const alreadySetAside = Math.min(goal.savedAmount, goal.targetAmount);
+  const alreadySetAside =
+    goal.savedThisPeriod !== undefined
+      ? goal.savedThisPeriod
+      : Math.min(goal.savedAmount, goal.targetAmount);
+
+  if (goal.paced === false) return alreadySetAside;
 
   if (goal.daysUntilDeadline === null) {
     // Open-ended: treat as a gentle 90-day horizon rather than claiming everything.

@@ -1,5 +1,10 @@
 import * as db from '../db/dbService';
-import { setCushionGoalId, setMonthlyAllowance, setOnboarded } from '../settings/settingsStore';
+import {
+  setCushionGoalId,
+  setMonthlyAllowance,
+  setOnboarded,
+  setPayPlan,
+} from '../settings/settingsStore';
 import { postInvestment } from '../services/captureService';
 
 /**
@@ -136,26 +141,55 @@ export async function seedDemoData(now: Date = new Date()): Promise<void> {
     rawText: 'Rs 12000 credited',
   });
 
-  // Savings.
+  // Four earlier budget periods, so the habit bars have a history to show.
+  const currentStart = new Date(now.getTime() - 16 * DAY);
+  currentStart.setHours(0, 0, 0, 0);
+  for (let k = 4; k >= 1; k -= 1) {
+    const startsOn = new Date(currentStart.getTime() - k * 30 * DAY).toISOString();
+    const endsOn = new Date(currentStart.getTime() - (k - 1) * 30 * DAY).toISOString();
+    await db.createBudgetPeriod({ startsOn, endsOn, allowance: 15000 });
+  }
+  const ago = (days: number) => new Date(now.getTime() - days * DAY).toISOString();
+
+  // Savings, built up over the months rather than all today — a goal only
+  // holds back what was set aside in the current period.
   const laptop = await db.createGoal({ name: 'New laptop', targetAmount: 45000, emoji: 'laptop' });
-  await db.contributeToGoal(laptop, 3500);
+  for (const [amount, days] of [
+    [1000, 100],
+    [1000, 70],
+    [1000, 40],
+    [500, 25],
+  ]) {
+    await db.contributeToGoal(laptop, amount, 'MANUAL', null, ago(days));
+  }
   const goa = await db.createGoal({
     name: 'Goa trip',
     targetAmount: 8000,
     emoji: 'beach',
     deadline: new Date(now.getTime() + 60 * DAY).toISOString(),
   });
-  await db.contributeToGoal(goa, 1200);
+  await db.contributeToGoal(goa, 600, 'MANUAL', null, ago(40));
+  await db.contributeToGoal(goa, 600, 'MANUAL', null, ago(22));
 
-  // Wealth: a cushion part-filled, a monthly index fund seven months in, a
-  // little gold, and one SIP message waiting to be confirmed.
+  // Wealth: pay-yourself-first switched on, the cushion filling a little
+  // more each month (this month's slice already set aside), a monthly index
+  // fund seven months in, a little gold, and one SIP message to confirm.
   const cushion = await db.createGoal({
     name: 'Emergency fund',
     targetAmount: 45000,
     emoji: 'savings',
   });
-  await db.contributeToGoal(cushion, 6000);
+  for (const [amount, days] of [
+    [800, 110],
+    [1200, 80],
+    [1500, 50],
+    [1500, 20],
+    [1500, 8],
+  ]) {
+    await db.contributeToGoal(cushion, amount, 'MANUAL', null, ago(days));
+  }
   await setCushionGoalId(cushion);
+  await setPayPlan({ enabled: true, cushionPct: 0.1, goalsPct: 0.05, investPct: 0 });
   const index = await db.createHolding({
     name: 'Nifty 50 index fund',
     kind: 'MUTUAL_FUND',
@@ -172,6 +206,17 @@ export async function seedDemoData(now: Date = new Date()): Promise<void> {
       occurredAt: d.toISOString(),
     });
   }
+  // Net worth as it was written down in earlier months, and the first
+  // milestones on the dates they were reached.
+  const history = [18200, 21400, 23900, 26100, 28700];
+  for (let i = 0; i < history.length; i += 1) {
+    await db.recordNetWorth(
+      history[i],
+      new Date(now.getFullYear(), now.getMonth() - (history.length - i), 20)
+    );
+  }
+  await db.markMilestone('FIRST_INVEST', new Date(now.getFullYear(), now.getMonth() - 7, 5));
+  await db.markMilestone('FIRST_1K', new Date(now.getTime() - 100 * DAY));
   await db.setHoldingValue(index, 7640, new Date(now.getTime() - 9 * DAY).toISOString());
   const gold = await db.createHolding({ name: 'Digital gold', kind: 'GOLD' });
   await postInvestment({
