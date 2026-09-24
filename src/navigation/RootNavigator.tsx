@@ -20,7 +20,9 @@ import ReviewScreen from '../screens/ReviewScreen';
 import TransactionsScreen from '../screens/TransactionsScreen';
 import RecapScreen from '../screens/RecapScreen';
 import Icon, { IconName } from '../components/Icon';
-import { palette, typography } from '../theme/theme';
+import { palette, place, typography } from '../theme/theme';
+import { useTodayTone } from '../theme/todayTone';
+import { haptic } from '../components/haptics';
 
 export type RootStackParamList = {
   Tabs: NavigatorScreenParams<TabParamList> | undefined;
@@ -72,11 +74,31 @@ const TAB_ICONS: Record<keyof TabParamList, IconName> = {
   Squad: 'squad',
 };
 
+/**
+ * Where you are (0.9.18): the active tab's icon takes that tab's hue. Today's
+ * hue is the day itself — green, amber or red, the same as its ring.
+ */
+const TAB_HUES: Record<Exclude<keyof TabParamList, 'Today'>, string> = {
+  Plans: place.plans,
+  Wealth: place.wealth,
+  Squad: place.people,
+};
+
+function TabIcon({ route, focused }: { route: keyof TabParamList; focused: boolean }) {
+  const today = useTodayTone();
+  const hue = route === 'Today' ? today : TAB_HUES[route];
+  return <Icon name={TAB_ICONS[route]} size={22} color={focused ? hue : palette.textMuted} />;
+}
+
 function Tabs() {
   return (
     <Tab.Navigator
+      screenListeners={{ tabPress: () => haptic.tick() }}
       screenOptions={({ route }) => ({
         headerShown: false,
+        // A short cross-fade between tabs rather than a hard cut.
+        animation: 'fade',
+        transitionSpec: { animation: 'timing', config: { duration: 180 } },
         tabBarActiveTintColor: palette.textPrimary,
         tabBarInactiveTintColor: palette.textMuted,
         tabBarStyle: {
@@ -88,16 +110,11 @@ function Tabs() {
           paddingTop: 8,
         },
         tabBarLabelStyle: { ...typography.caption, fontSize: 12, fontWeight: '600' },
-        // Active is the green glyph and a white label — no pill behind it.
-        // The pill was Material 3's signature; this app's language is
-        // Spotify's, where the bar is quiet and state is carried by colour
+        // Active is the tab's own hue on the glyph and a white label — no
+        // pill behind it. The bar stays quiet; state is carried by colour
         // and weight alone.
         tabBarIcon: ({ focused }) => (
-          <Icon
-            name={TAB_ICONS[route.name as keyof TabParamList]}
-            size={22}
-            color={focused ? palette.textPrimary : palette.textMuted}
-          />
+          <TabIcon route={route.name as keyof TabParamList} focused={focused} />
         ),
       })}
     >

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Switch, Text, View } from 'react-native';
+import { haptic } from './haptics';
 import * as db from '../db/dbService';
 import { setMonthlyAllowance } from '../settings/settingsStore';
 import { getSpendingHistorySummary, SpendingHistorySummary } from '../services/budgetService';
@@ -163,7 +164,10 @@ export default function FreshStartSheet({
         </View>
         <Switch
           value={forgetHistory}
-          onValueChange={setForgetHistory}
+          onValueChange={(next) => {
+            haptic.toggle(next);
+            setForgetHistory(next);
+          }}
           trackColor={{ false: palette.surfaceElevated, true: palette.danger }}
           thumbColor={palette.textPrimary}
         />

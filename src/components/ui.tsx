@@ -27,6 +27,7 @@ import {
   typography,
 } from '../theme/theme';
 import { AnimatedMoney, duration, easing, usePressScale, useReducedMotion } from './motion';
+import { haptic } from './haptics';
 import Icon, { IconName } from './Icon';
 
 /**
@@ -236,7 +237,10 @@ export function Button({
   return (
     <Animated.View style={[style, press.style]}>
       <Pressable
-        onPress={onPress}
+        onPress={() => {
+          haptic.press();
+          onPress();
+        }}
         disabled={disabled}
         onPressIn={disabled ? undefined : press.onPressIn}
         onPressOut={disabled ? undefined : press.onPressOut}
@@ -320,21 +324,33 @@ export function Chip({
   // A caller-supplied tint can be any colour, so the label is measured
   // against it rather than assumed. See onColor in theme.ts.
   const selectedLabel = color ? onColor(color) : palette.background;
+  const press = usePressScale(0.94);
 
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected }}
-      style={({ pressed }) => [
-        styles.chip,
-        selected && { backgroundColor: selectedBackground },
-        pressed && { opacity: 0.7 },
-      ]}
-    >
-      <Text style={[styles.chipLabel, selected && { color: selectedLabel }]}>{label}</Text>
-    </Pressable>
+    <Animated.View style={press.style}>
+      <Pressable
+        onPress={
+          onPress
+            ? () => {
+                haptic.tick();
+                onPress();
+              }
+            : undefined
+        }
+        onPressIn={press.onPressIn}
+        onPressOut={press.onPressOut}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ selected }}
+        style={({ pressed }) => [
+          styles.chip,
+          selected && { backgroundColor: selectedBackground },
+          pressed && !selected && { backgroundColor: layer(palette.textPrimary, stateLayer.press) },
+        ]}
+      >
+        <Text style={[styles.chipLabel, selected && { color: selectedLabel }]}>{label}</Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -559,20 +575,25 @@ export function Sheet({
 
 export function Row({
   left,
+  mark,
   title,
   subtitle,
   right,
   onPress,
 }: {
   left?: React.ReactNode;
+  /** A small colour dot before the title — a transaction's category. */
+  mark?: string;
   title: string;
   subtitle?: string;
   right?: React.ReactNode;
   onPress?: () => void;
 }) {
+  const press = usePressScale(0.985);
   const content = (
     <>
       {left ? <View style={styles.rowLeft}>{left}</View> : null}
+      {mark ? <View style={[styles.rowMark, { backgroundColor: mark }]} /> : null}
       <View style={styles.rowBody}>
         <Text style={styles.rowTitle} numberOfLines={1}>
           {title}
@@ -590,20 +611,24 @@ export function Row({
   if (!onPress) return <View style={styles.row}>{content}</View>;
 
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={subtitle ? `${title}, ${subtitle}` : title}
-      style={({ pressed }) => [
-        styles.row,
-        pressed && {
-          backgroundColor: layer(palette.textPrimary, 0.05),
-          borderRadius: radii.sm,
-        },
-      ]}
-    >
-      {content}
-    </Pressable>
+    <Animated.View style={press.style}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={press.onPressIn}
+        onPressOut={press.onPressOut}
+        accessibilityRole="button"
+        accessibilityLabel={subtitle ? `${title}, ${subtitle}` : title}
+        style={({ pressed }) => [
+          styles.row,
+          pressed && {
+            backgroundColor: layer(palette.textPrimary, 0.05),
+            borderRadius: radii.sm,
+          },
+        ]}
+      >
+        {content}
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -770,18 +795,48 @@ export function TextLink({
   onPress: () => void;
   accent?: boolean;
 }) {
+  const nudge = useArrowNudge();
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={nudge.onPressIn}
+      onPressOut={nudge.onPressOut}
       hitSlop={10}
       accessibilityRole="link"
       accessibilityLabel={label}
       style={({ pressed }) => [styles.textLink, pressed && { opacity: 0.6 }]}
     >
       <Text style={[styles.textLinkLabel, accent && { color: palette.accent }]}>{label}</Text>
-      <Text style={[styles.textLinkArrow, accent && { color: palette.accent }]}>→</Text>
+      <Animated.Text
+        style={[styles.textLinkArrow, accent && { color: palette.accent }, nudge.style]}
+      >
+        →
+      </Animated.Text>
     </Pressable>
   );
+}
+
+/**
+ * The arrow of a link leans the way it goes while held — a 3px nudge, the
+ * whole of the press response for something that is only words.
+ */
+function useArrowNudge() {
+  const reduced = useReducedMotion();
+  const x = useRef(new Animated.Value(0)).current;
+  const to = (toValue: number) => {
+    if (reduced) return;
+    Animated.timing(x, {
+      toValue,
+      duration: duration.instant,
+      easing,
+      useNativeDriver: true,
+    }).start();
+  };
+  return {
+    onPressIn: () => to(3),
+    onPressOut: () => to(0),
+    style: { transform: [{ translateX: x }] },
+  };
 }
 
 /** A list row that is a sentence, not a label and a value. Tap for detail. */
@@ -794,16 +849,21 @@ export function SentenceRow({
   onPress?: () => void;
   tone?: string;
 }) {
+  const nudge = useArrowNudge();
   const content = (
     <>
       <Text style={[styles.sentenceText, tone ? { color: tone } : null]}>{text}</Text>
-      {onPress ? <Text style={styles.textLinkArrow}>→</Text> : null}
+      {onPress ? (
+        <Animated.Text style={[styles.textLinkArrow, nudge.style]}>→</Animated.Text>
+      ) : null}
     </>
   );
   if (!onPress) return <View style={styles.sentenceRow}>{content}</View>;
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={nudge.onPressIn}
+      onPressOut={nudge.onPressOut}
       accessibilityRole="button"
       accessibilityLabel={text}
       style={({ pressed }) => [styles.sentenceRow, pressed && { opacity: 0.6 }]}
@@ -1143,6 +1203,7 @@ const styles = StyleSheet.create({
     color: palette.textPrimary,
   },
   rowLeft: { minWidth: 38, alignItems: 'center' },
+  rowMark: { width: 8, height: 8, borderRadius: 4, marginRight: 2 },
   rowBody: { flex: 1, gap: 2 },
   rowTitle: { ...typography.bodyBold, color: palette.textPrimary },
   rowSubtitle: { ...typography.caption, color: palette.textSecondary },

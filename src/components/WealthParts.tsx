@@ -13,7 +13,7 @@ import {
 import { HABIT_RATE, milestoneTitle } from '../math/progress';
 import { postInvestment } from '../services/captureService';
 import { formatMoney, formatMoneyCompact } from '../utils/format';
-import { layer, palette, spacing, typography } from '../theme/theme';
+import { layer, palette, place, spacing, typography } from '../theme/theme';
 import { Button, Chip, ChipRow, Field, Sheet, TextLink } from './ui';
 import Icon from './Icon';
 
@@ -445,7 +445,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tickOn: { backgroundColor: palette.textPrimary, borderColor: palette.textPrimary },
+  tickOn: { backgroundColor: place.wealth, borderColor: place.wealth },
   checkText: { ...typography.body, color: palette.textPrimary, flex: 1 },
   checkDone: { color: palette.textMuted },
   checkAction: { ...typography.caption, color: palette.accent },

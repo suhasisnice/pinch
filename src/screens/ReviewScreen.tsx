@@ -13,7 +13,7 @@ import {
 import { HoldingSummary } from '../db/repos/holdings';
 import { ACCEPT_THRESHOLD } from '../services/parserService';
 import { formatMoney, formatRelative } from '../utils/format';
-import { palette, spacing, typography } from '../theme/theme';
+import { amountColor, palette, spacing, typography } from '../theme/theme';
 import { Button, Card, Chip, ChipRow, EmptyState, Loading, Screen, TopBar } from '../components/ui';
 
 /**
@@ -106,7 +106,7 @@ export default function ReviewScreen() {
                     · {formatRelative(capture.received_at)}
                   </Text>
                 </View>
-                <Text style={styles.amount}>
+                <Text style={[styles.amount, { color: amountColor(capture.parsed_direction) }]}>
                   {capture.parsed_direction === 'CREDIT' ? '+' : '−'}
                   {formatMoney(capture.parsed_amount ?? 0)}
                 </Text>

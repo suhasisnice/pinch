@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -15,7 +15,9 @@ import {
 } from '../services/wealthService';
 import { BalanceState } from '../db/repos/balance';
 import { PaydayItem } from '../math/payday';
-import { habitLine } from '../math/progress';
+import { habitLine, milestoneTitle } from '../math/progress';
+import { milestonesJustReached, paydayJustDone } from '../math/moments';
+import { celebrate } from '../components/Moment';
 import BalanceCard from '../components/BalanceCard';
 import { ChartHero } from '../components/Heroes';
 import {
@@ -77,8 +79,22 @@ export default function WealthScreen() {
   const [planOpen, setPlanOpen] = useState(false);
   const [investFor, setInvestFor] = useState<number | null>(null);
 
+  const last = useRef<{ paydayDone: boolean | null; milestones: string[] } | null>(null);
+
   const load = useCallback(async () => {
     const [next, bal] = await Promise.all([getWealthSnapshot(), db.getBalanceState()]);
+    // Moments fire on the change, not on opening the tab to find it done.
+    const paydayDone = next.payday ? next.payday.allDone : null;
+    const keys = next.milestones.map((m) => m.key);
+    if (last.current) {
+      if (paydayJustDone(last.current.paydayDone, paydayDone === true)) {
+        celebrate('Paid yourself first. The rest is yours.');
+      }
+      for (const key of milestonesJustReached(last.current.milestones, keys)) {
+        celebrate(`Milestone: ${milestoneTitle(key)}.`);
+      }
+    }
+    last.current = { paydayDone, milestones: keys };
     setSnap(next);
     setBalance(bal);
   }, []);

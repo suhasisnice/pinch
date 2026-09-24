@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -19,7 +19,15 @@ import {
 import { daysUntilBroke, shouldRaiseDiscrepancy } from '../math/budget';
 import { TransactionRow } from '../db/types';
 import { formatMoney, formatTime } from '../utils/format';
-import { accentForState, palette, spacing, typography } from '../theme/theme';
+import {
+  accentForState,
+  amountColor,
+  categoryColor,
+  palette,
+  spacing,
+  typography,
+} from '../theme/theme';
+import { setTodayTone } from '../theme/todayTone';
 import {
   Button,
   Group,
@@ -109,6 +117,12 @@ export default function TodayScreen() {
     }, [load])
   );
 
+  // The tab bar wears the same colour as the ring.
+  const state = snapshot?.today.state;
+  useEffect(() => {
+    if (state) setTodayTone(accentForState(state));
+  }, [state]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await load();
@@ -190,7 +204,7 @@ export default function TodayScreen() {
                   numberOfLines={1}
                   adjustsFontSizeToFit
                 />
-                <Text style={styles.ringLabel}>left today</Text>
+                <Text style={[styles.ringLabel, { color: tone }]}>left today</Text>
               </Ring>
             </View>
             <Text style={styles.quip}>{todayQuip(snapshot, runsOutEarly ? brokeIn : null)}</Text>
@@ -247,11 +261,12 @@ export default function TodayScreen() {
               <Row
                 key={tx.id}
                 title={tx.merchant}
+                mark={categoryColor(tx.category)}
                 subtitle={`${formatTime(tx.occurred_at)} · ${tx.category ?? 'no category'}`}
                 onPress={() => setDetailFor(tx)}
                 right={
                   <View style={styles.txRight}>
-                    <Text style={styles.txAmount}>
+                    <Text style={[styles.txAmount, { color: amountColor(tx.direction) }]}>
                       {tx.direction === 'CREDIT' ? '+' : ''}
                       {formatMoney(tx.amount)}
                     </Text>
@@ -285,7 +300,7 @@ export default function TodayScreen() {
                 ? '. Nothing dramatic.'
                 : '. Quiet week.'}
           </Text>
-          <WeekStrip days={week} limit={snapshot.today.dailyLimit} />
+          <WeekStrip days={week} limit={snapshot.today.dailyLimit} todayColor={tone} />
         </Section>
       ) : null}
 

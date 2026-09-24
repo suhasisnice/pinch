@@ -24,7 +24,7 @@ import { FindingTone, buildFindings, insightHero } from '../math/insightsSummary
 import { FadeSlideIn } from '../components/motion';
 import MoneyAmount from '../components/Money';
 import { formatMoney, formatMoneyCompact } from '../utils/format';
-import { palette, radii, spacing, typography } from '../theme/theme';
+import { categoryColor, palette, radii, spacing, typography } from '../theme/theme';
 import {
   Group,
   EmptyState,
@@ -499,11 +499,18 @@ function WhereItWent({
                 {shared ? <Text style={styles.categoryPaid}>{formatMoney(cost.paid)}</Text> : null}
                 <Text style={styles.value}>{formatMoney(cost.yours)}</Text>
               </View>
-              {/* One neutral bar: length is the information, the dot already
-                says which category. Others' share trails it in grey. */}
+              {/* Length is the information; the bar wears its category's
+                colour (0.9.18), the same as the dot beside a payment of it.
+                Others' share trails it in grey. */}
               <View style={styles.track}>
                 <View
-                  style={[styles.fill, { width: `${Math.max(1, (cost.yours / largest) * 100)}%` }]}
+                  style={[
+                    styles.fill,
+                    {
+                      width: `${Math.max(1, (cost.yours / largest) * 100)}%`,
+                      backgroundColor: categoryColor(cost.category),
+                    },
+                  ]}
                 />
                 {shared ? (
                   <View
@@ -631,10 +638,11 @@ function AgainstNormal({
           <Row
             key={shift.category}
             title={shift.category}
+            mark={categoryColor(shift.category)}
             subtitle={`${formatMoney(shift.currentTotal)} · usually ${formatMoney(shift.typicalTotal)}`}
             onPress={() => onOpen(shift.category)}
             right={
-              <Text style={[styles.value, { color: up ? palette.warning : palette.textSecondary }]}>
+              <Text style={[styles.value, { color: up ? palette.warning : palette.good }]}>
                 {up ? '+' : '−'}
                 {formatMoneyCompact(diff)}
               </Text>

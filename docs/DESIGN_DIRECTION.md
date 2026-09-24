@@ -5,6 +5,38 @@ on 2026-09-24, after saying the 0.9.12/0.9.13 UI looked "AI-generated" and
 "not my style". Where it conflicts with `SPOTIFY_FINANCE_UI_PROMPT.md`, this
 document wins. See the conflicts section below.
 
+## 0.9.18 — colour that speaks, and a feel layer
+
+The user, after using 0.9.17 on the phone: "it works but UI needs to be
+tinkered with so I can feel the app", then "I want the UI colours to speak to
+me a little". Chosen by MCQ on 2026-09-24. **This supersedes "Fine is not a
+colour" below.** Colour now has four jobs, one each, all muted:
+
+| Job | Colour | Where |
+|---|---|---|
+| How you're doing | green `good` → amber → red | Today's ring, its label, today's week bar, Today's tab icon |
+| Money in vs out | in is green; out stays ink | every amount in a list, the detail sheet, Review, linked groups |
+| What you spend on | the category hue, as an 8px dot | transaction rows (`Row mark`), Insights' category bars and shifts |
+| Where you are | Plans violet, Wealth teal, People blue (`place`) | the hero label, jars, chart, Wealth's ticks, the active tab icon |
+
+People's faces use the money colours (green for owed to you, amber for you owe),
+not the tab hue: on that screen the colour is the news. Numerals stay ink.
+
+Feel ("subtle, Linear-like"):
+
+- **Press:** rows, chips and buttons scale slightly while held; a link's arrow leans 3px forward.
+- **Haptics:** Android view haptics (`src/components/haptics.ts`), which follow the phone's touch-feedback setting.
+  - A tick for tabs, chips and the Plans switch.
+  - Toggle on/off for switches, and a key press for buttons.
+  - Nothing on plain rows.
+- **Motion:**
+  - Tabs cross-fade (180ms).
+  - Jars fill from the bottom, the chart draws left to right, and faces step in.
+  - All of it happens once and is skipped with reduce-motion on.
+- **Moments** (`src/components/Moment.tsx`): one line rises above the tab bar with a confirm haptic.
+  - It fires for payday done, a goal fully funded, or a milestone.
+  - It fires only on the change itself, never when you open a tab and find something already done (`src/math/moments.ts`).
+
 ## What made it feel AI-generated (the user's own diagnosis)
 
 - Boxes everywhere: a card around every concept.
