@@ -16,3 +16,10 @@ Before building either one, ask the user what they want (MCQ with mock-ups). Don
       CUSHION slice) and how it is presented.
 - [ ] **Redesign the savings bar.** How savings progress is drawn (the goal jars and progress bars
       on Plans and Savings), using the user's input.
+
+## Features
+
+- [ ] **Biometrics to see the bank balance.** Hide the balance by default and reveal it with a
+      fingerprint or face unlock. This is separate from the whole-app lock added in 0.9.17
+      (`LockGate`), so reuse its biometric code. Things to decide with the user: which figures
+      are hidden (only the bank balance, or net worth too), and how long a reveal lasts.
