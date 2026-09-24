@@ -1,10 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 import { palette } from '../theme/theme';
 import { useReducedMotion } from './motion';
-
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 /**
  * A hairline ring that empties as the day's money is spent — the one visual
@@ -32,6 +30,14 @@ export default function Ring({
   const reduced = useReducedMotion();
   const target = Math.max(0, Math.min(1, Number.isFinite(fraction) ? fraction : 0));
   const progress = useRef(new Animated.Value(reduced ? target : 0)).current;
+  // The lit fraction as plain state, fed by the animation. An animated SVG
+  // component broke on React 19 / react-native-svg 15.15 (web and new arch);
+  // a listener works everywhere and the ring is one element, so it is cheap.
+  const [shown, setShown] = useState(reduced ? target : 0);
+  useEffect(() => {
+    const id = progress.addListener(({ value }) => setShown(value));
+    return () => progress.removeListener(id);
+  }, [progress]);
 
   useEffect(() => {
     if (reduced) {
@@ -49,10 +55,7 @@ export default function Ring({
   const r = (size - stroke) / 2 - 10;
   const c = size / 2;
   const circumference = 2 * Math.PI * r;
-  const dashOffset = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [circumference, 0],
-  });
+  const dashOffset = circumference * (1 - shown);
 
   return (
     <View style={{ width: size, height: size }}>
@@ -75,7 +78,7 @@ export default function Ring({
           fill="none"
         />
         {/* Starts at twelve o'clock and runs clockwise, like a clock face. */}
-        <AnimatedCircle
+        <Circle
           cx={c}
           cy={c}
           r={r}
@@ -95,7 +98,7 @@ export default function Ring({
 
 const styles = StyleSheet.create({
   center: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 36,

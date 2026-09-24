@@ -4,21 +4,19 @@
     "lib": [
       "ES2020"
     ],
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "module": "preserve",
+    "moduleResolution": "bundler",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "declaration": false,
-    "outDir": "dist",
-    "rootDir": ".",
     "jsx": "react-native",
     "types": [
       "jest",
       "node"
-    ]
+    ],
+    "noEmit": true
   },
   "include": [
     "src",

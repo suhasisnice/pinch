@@ -135,3 +135,30 @@ export async function getPayPlan(fallback: PayPlan): Promise<PayPlan> {
 export async function setPayPlan(plan: PayPlan): Promise<void> {
   await AsyncStorage.setItem(PAY_PLAN_KEY, JSON.stringify(plan));
 }
+
+const APP_LOCK_KEY = 'pinch.appLock';
+
+/** Whether opening Pinch asks for the phone's fingerprint, face or PIN. */
+export async function getAppLock(): Promise<boolean> {
+  return (await AsyncStorage.getItem(APP_LOCK_KEY)) === 'on';
+}
+
+export async function setAppLock(on: boolean): Promise<void> {
+  await AsyncStorage.setItem(APP_LOCK_KEY, on ? 'on' : 'off');
+}
+
+/**
+ * "Erase everything": forgets what Pinch knows about the person — their
+ * split, goal pointers and dismissed notes. The allowance, notification
+ * preferences and the app lock are how the app is set up, not personal
+ * data, and are kept so the fresh start still works the way they like.
+ */
+export async function clearPersonalSettings(): Promise<void> {
+  await AsyncStorage.multiRemove([
+    ROUNDUP_KEY,
+    DISMISSED_GAP_KEY,
+    CUSHION_KEY,
+    RETURN_RATE_KEY,
+    PAY_PLAN_KEY,
+  ]);
+}

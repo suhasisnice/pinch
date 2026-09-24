@@ -1,6 +1,22 @@
 /** @type {import('ts-jest').JestConfigWithTsJest} */
 module.exports = {
   preset: 'ts-jest',
+  transform: {
+    // The app's tsconfig targets the Metro bundler (module: preserve); Jest
+    // runs plain CommonJS on Node, so tests compile with that instead.
+    '^.+\\.tsx?$': [
+      'ts-jest',
+      {
+        tsconfig: {
+          module: 'commonjs',
+          moduleResolution: 'node10',
+          customConditions: null,
+          ignoreDeprecations: '6.0',
+          noEmit: false,
+        },
+      },
+    ],
+  },
   testEnvironment: 'node',
   testMatch: ['**/tests/**/*.test.ts', '**/src/**/__tests__/**/*.test.ts'],
   collectCoverageFrom: ['src/**/*.ts'],

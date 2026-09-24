@@ -13,6 +13,13 @@ export interface ResetOptions {
   blocklist?: boolean;
   /** Budget periods, including the current one. */
   periods?: boolean;
+  /**
+   * Everything else that is about the person: balances they typed in, what
+   * the categoriser learned from their merchants, contact aliases, outing
+   * reserves, holdings, net-worth history and milestones. "Erase everything"
+   * sets this, so it means everything (DPDP: erasure on request).
+   */
+  personal?: boolean;
 }
 
 /**
@@ -29,6 +36,17 @@ export interface ResetOptions {
 export async function resetData(options: ResetOptions): Promise<void> {
   const db = getAdapter();
   const statements: string[] = [];
+
+  if (options.personal) {
+    statements.push(
+      `DELETE FROM OutingReserves;`,
+      `DELETE FROM ContactAliases;`,
+      `DELETE FROM BalanceSnapshots;`,
+      `DELETE FROM CategoryTokenWeights;`,
+      `DELETE FROM NetWorthSnapshots;`,
+      `DELETE FROM Milestones;`
+    );
+  }
 
   if (options.ledger) {
     statements.push(
@@ -51,9 +69,14 @@ export async function resetData(options: ResetOptions): Promise<void> {
   }
 
   if (options.outings) statements.push(`DELETE FROM Outings;`);
-  if (options.contacts) statements.push(`DELETE FROM Settlements;`, `DELETE FROM IOUs;`, `DELETE FROM Contacts;`);
+  if (options.contacts)
+    statements.push(`DELETE FROM Settlements;`, `DELETE FROM IOUs;`, `DELETE FROM Contacts;`);
   if (options.blocklist) statements.push(`DELETE FROM CaptureBlocklist;`);
   if (options.periods) statements.push(`DELETE FROM BudgetPeriods;`);
+  if (options.personal) {
+    // Transactions may still point at a holding when the ledger is kept.
+    statements.push(`UPDATE Transactions SET holding_id = NULL;`, `DELETE FROM Holdings;`);
+  }
 
   for (const statement of statements) {
     await db.execAsync(statement);
