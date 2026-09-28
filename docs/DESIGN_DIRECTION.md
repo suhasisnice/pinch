@@ -5,6 +5,19 @@ on 2026-09-24, after saying the 0.9.12/0.9.13 UI looked "AI-generated" and
 "not my style". Where it conflicts with `SPOTIFY_FINANCE_UI_PROMPT.md`, this
 document wins. See the conflicts section below.
 
+## 0.9.25: touchable charts, one icon set, a little depth
+
+The full notes are in `docs/POLISH_PASS.md`. This section **supersedes "one subtle glow, on the Today
+ring only"** further down. The user asked (2026-09-29) for depth across the whole app, "while not
+overdoing it", so:
+
+- Each hero now has a faint `Glow` in its tab's hue.
+- The Wealth chart's fill fades toward the floor.
+- Outlined buttons and sheets have a lit top edge.
+- Charts light only the piece under your finger; the rest stays ink.
+- Icons come from one outline set (Lucide).
+- A section title is a plain label, and the wit lives in the sentence under it.
+
 ## 0.9.18 — colour that speaks, and a feel layer
 
 The user, after using 0.9.17 on the phone: "it works but UI needs to be

@@ -64,9 +64,9 @@ const pinchTheme: Theme = {
   },
 };
 
-// Drawn from Feather / Material Community Icons rather than emoji: emoji are
-// rendered by the system font, so the same character is a different picture
-// on every Android skin and none of them are designed to sit in a tab bar.
+// One outline set (Lucide, see Icon.tsx) rather than emoji: emoji are drawn
+// by the system font, so the same character is a different picture on every
+// Android skin. Today is the open ring of its own hero.
 const TAB_ICONS: Record<keyof TabParamList, IconName> = {
   Today: 'today',
   Plans: 'goals',
