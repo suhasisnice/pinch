@@ -1,5 +1,5 @@
 import { getAdapter } from '../connection';
-import { ContactBalance, ContactRow, IOUDetail, IOUDirection, IOURow, SettlementRow } from '../types';
+import { ContactBalance, ContactRow, IOUDetail, IOUDirection } from '../types';
 
 // The open balance of an IOU is *always* computed, never stored:
 //   open = amount - SUM(settlements against it)
@@ -110,11 +110,6 @@ export async function getIOUsForOuting(outingId: number): Promise<IOUDetail[]> {
   );
 }
 
-export async function deleteIOU(id: number): Promise<void> {
-  const db = getAdapter();
-  await db.runAsync(`DELETE FROM IOUs WHERE id = ?;`, [id]);
-}
-
 /**
  * Records a repayment against a specific IOU, by id.
  *
@@ -184,14 +179,6 @@ export async function settleContactBalance(
   }
 
   return { applied, iouIds };
-}
-
-export async function getSettlementsForIOU(iouId: number): Promise<SettlementRow[]> {
-  const db = getAdapter();
-  return db.getAllAsync<SettlementRow>(
-    `SELECT * FROM Settlements WHERE iou_id = ? ORDER BY settled_at ASC;`,
-    [iouId]
-  );
 }
 
 /**

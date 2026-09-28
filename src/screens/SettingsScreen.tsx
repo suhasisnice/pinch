@@ -735,10 +735,12 @@ function Toggle({
           haptic.toggle(next);
           onChange(next);
         }}
-        // On is white, like every other "yes" in the app; coral stays rare.
-        trackColor={{ false: palette.surfaceElevated, true: palette.textPrimary }}
-        thumbColor={value ? palette.background : palette.textSecondary}
-        {...({ activeThumbColor: palette.background } as object)}
+        // On is green, a state (0.9.18, colour speaks). The thumb stays light
+        // both ways: a background-coloured thumb on a white track read as a
+        // hole punched in the switch, and looked clipped.
+        trackColor={{ false: palette.surfaceElevated, true: palette.good }}
+        thumbColor={value ? palette.textPrimary : palette.textSecondary}
+        {...({ activeThumbColor: palette.textPrimary } as object)}
       />
     </View>
   );

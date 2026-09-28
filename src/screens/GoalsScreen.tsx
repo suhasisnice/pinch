@@ -25,7 +25,7 @@ import {
 } from '../components/ui';
 import Icon, { GOAL_ICONS } from '../components/Icon';
 import { AnimatedMoney } from '../components/motion';
-import { JarsHero } from '../components/Heroes';
+import { PlansHero } from '../components/Heroes';
 import { celebrate } from '../components/Moment';
 import { GoalLevel, goalsJustReached } from '../math/moments';
 
@@ -117,14 +117,9 @@ export default function GoalsScreen({ top }: { top?: React.ReactNode } = {}) {
         </View>
       ) : (
         <>
-          <JarsHero
+          <PlansHero
             amount={totalSaved}
             label="saved so far"
-            goals={goals.map((g) => ({
-              name: g.name,
-              saved: g.savedAmount,
-              target: g.targetAmount,
-            }))}
             line={savingLine(goals)}
             meta={`${formatMoney(totalReserved)} set aside this month${
               totalInvested > 0.009 ? ` · ${formatMoney(totalInvested)} invested` : ''

@@ -15,9 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  coverTone,
   elevation,
-  hueFor,
   layer,
   onColor,
   palette,
@@ -745,67 +743,6 @@ export function Group({
 }
 
 /**
- * A person, as their initials on a round tile. People get a face, things get
- * an icon: the shape alone tells a contact row from a merchant row.
- */
-export function Avatar({ name, size = 38 }: { name: string; size?: number }) {
-  const initials =
-    name
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((word) => word[0]?.toUpperCase() ?? '')
-      .join('') || '?';
-  // Each person keeps one colour everywhere, like a contact photo would.
-  const hue = hueFor(name);
-  return (
-    <View
-      style={[
-        styles.avatar,
-        { width: size, height: size, borderRadius: size / 2, backgroundColor: coverTone(hue) },
-      ]}
-      accessibilityElementsHidden
-      importantForAccessibility="no"
-    >
-      <Text style={[styles.avatarText, { fontSize: Math.round(size * 0.36), color: hue }]}>
-        {initials}
-      </Text>
-    </View>
-  );
-}
-
-/**
- * Two figures side by side on one surface, split by a hairline — for a pair
- * that is read together ("owed to you" / "you owe"), which as two separate
- * cards looked like two unrelated things.
- */
-export function StatPair({
-  items,
-}: {
-  items: Array<{ label: string; value: string; color?: string }>;
-}) {
-  return (
-    <View style={styles.statPair}>
-      {items.map((item, index) => (
-        <React.Fragment key={item.label}>
-          {index > 0 ? <View style={styles.statDivider} /> : null}
-          <View style={styles.statCell}>
-            <Text style={styles.statLabel}>{item.label}</Text>
-            <Text
-              style={[styles.statValue, item.color ? { color: item.color } : null]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-            >
-              {item.value}
-            </Text>
-          </View>
-        </React.Fragment>
-      ))}
-    </View>
-  );
-}
-
-/**
  * A titled stretch of the page with no rules or dividers — for prose and a
  * chart, where hairlines between them would chop one thought in two.
  */
@@ -969,11 +906,6 @@ export function Hero({
       {meta ? <Text style={styles.heroMeta}>{meta}</Text> : null}
     </View>
   );
-}
-
-/** A hairline between rows of one list. */
-export function Divider() {
-  return <View style={styles.divider} />;
 }
 
 export function Dot({ color, size = 10 }: { color: string; size?: number }) {

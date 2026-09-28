@@ -114,17 +114,6 @@ export async function rejectCapture(id: number): Promise<void> {
   await setCaptureStatus(id, 'REJECTED');
 }
 
-/** Trims accepted/rejected captures older than `days` to bound the raw-text table. */
-export async function pruneCaptures(days = 45): Promise<number> {
-  const db = getAdapter();
-  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-  const result = await db.runAsync(
-    `DELETE FROM CaptureInbox WHERE status != 'PENDING' AND received_at < ?;`,
-    [cutoff]
-  );
-  return result.changes;
-}
-
 // ---------------------------------------------------------------------------
 // Learned categorisation
 // ---------------------------------------------------------------------------

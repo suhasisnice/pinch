@@ -309,7 +309,19 @@ export const NAME_WORDS: ReadonlySet<string> = new Set(
     'ashish satish girish jagadish harish umesh yogesh rupesh ritesh hitesh nilesh mahendra surendra ' +
     'narendra jitendra rajendra devendra ramu shankar sundar anand aravind arvind vinay vinayak madhav ' +
     'madhu manju manjunath nagaraj nagesh prashant prashanth rohan rajat raghav raghu sanjana shweta ' +
-    'swetha pallavi poonam rashmi ramya roopa sowmya soumya vidya vani veena harini hema'
+    'swetha pallavi poonam rashmi ramya roopa sowmya soumya vidya vani veena harini hema ' +
+    // 0.9.22: North-East, Bengali, Odia, Tamil, Malayali and Parsi names the
+    // first list left out. isAmbiguousName covers the ones still missing.
+    'tenzin dorjee dorji wangmo lhamo sherpa bhutia lepcha tamang gurung lama rai limbu thapa ' +
+    'singha sangma marak momin lyngdoh kharkongor syiem nongrum lalremruata zothanpuii hmar ' +
+    'boro borah bora baruah barua gogoi saikia kalita hazarika phukan deka bhuyan tamuli ' +
+    'mohanty mahapatra panda sahoo swain behera nayak rout jena pradhan samal dash das ' +
+    'bhattacharya bhattacharjee ganguly majumdar mondal mandal sarkar biswas halder haldar naskar ' +
+    'murugan selvam senthil kannan rajan pandian velu anbu arul vel saravanan palani ' +
+    'nambiar kutty unni namboodiri panicker warrier kurup ' +
+    'irani mistry wadia daruwala ' +
+    'arjit ankita ankur apurva arpita debashish debjani sourav souvik subhajit sayan sayantan ' +
+    'riddhi siddhi tanmay tanya ishaan ishan vihaan aarav advait atharv reyansh kabir'
   ).split(' ')
 );
 

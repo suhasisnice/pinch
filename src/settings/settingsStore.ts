@@ -49,6 +49,25 @@ export async function setOnboarded(value: boolean): Promise<void> {
   await AsyncStorage.setItem(ONBOARDED_KEY, String(value));
 }
 
+const AGE_KEY = 'pinch.ageConfirmed';
+
+/**
+ * Whether the person using the app said they are 18 or over (0.9.22).
+ *
+ * DPDP asks for a parent's verifiable consent before a minor's data is
+ * handled, and Pinch cannot verify anything. So it asks once, before any
+ * permission prompt or import, and an under-18 answer is never stored:
+ * the question simply comes back next launch. "Erase everything" leaves it
+ * alone, the same as the onboarding flag. The phone's owner has not changed.
+ */
+export async function hasConfirmedAge(): Promise<boolean> {
+  return (await AsyncStorage.getItem(AGE_KEY)) === 'true';
+}
+
+export async function setAgeConfirmed(): Promise<void> {
+  await AsyncStorage.setItem(AGE_KEY, 'true');
+}
+
 const DISMISSED_GAP_KEY = 'pinch.dismissedDiscrepancy';
 
 /**

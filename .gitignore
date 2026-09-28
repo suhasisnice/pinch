@@ -27,3 +27,6 @@ Screenshot*.jpeg
 # Web design preview (npm run preview) — copied from node_modules at start.
 public/sql-wasm.wasm
 .shots/
+
+# graphify knowledge graph (generated, local)
+graphify-out/

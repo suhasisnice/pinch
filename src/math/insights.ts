@@ -458,32 +458,6 @@ export interface SpendingPersonality {
   blurb: string;
 }
 
-/** A shareable one-liner for the month. Descriptive, never scolding. */
-export function spendingPersonality(slices: CategorySlice[]): SpendingPersonality | null {
-  const top = slices[0];
-  if (!top || top.fraction < 0.25) return null;
-
-  const percent = Math.round(top.fraction * 100);
-  const byCategory: Record<string, SpendingPersonality> = {
-    Food: { label: 'The Feeder', blurb: `${percent}% of your money is food. respect` },
-    Outing: { label: 'The Social', blurb: `${percent}% went to going out. worth it probably` },
-    Transport: { label: 'The Commuter', blurb: `${percent}% on getting places` },
-    Shopping: { label: 'The Cart Filler', blurb: `${percent}% on stuff` },
-    Subscriptions: { label: 'The Subscriber', blurb: `${percent}% on things that auto-renew` },
-    Academics: { label: 'The Scholar', blurb: `${percent}% on actual college things` },
-    Health: { label: 'The Careful One', blurb: `${percent}% on health` },
-    Bills: { label: 'The Grown-Up', blurb: `${percent}% on keeping the lights on` },
-    Rent: { label: 'The Tenant', blurb: `${percent}% went to a roof over your head` },
-  };
-
-  return (
-    byCategory[top.category] ?? {
-      label: 'The Mixed Bag',
-      blurb: `${percent}% went to ${top.category.toLowerCase()}`,
-    }
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Who you actually split with.
 // ---------------------------------------------------------------------------

@@ -72,36 +72,6 @@ export async function deleteOuting(id: number): Promise<void> {
   await db.runAsync(`DELETE FROM Outings WHERE id = ?;`, [id]);
 }
 
-export async function updateOuting(
-  id: number,
-  fields: { name?: string; emoji?: string; budgetAmount?: number | null; endsAt?: string | null }
-): Promise<void> {
-  const db = getAdapter();
-  const sets: string[] = [];
-  const params: unknown[] = [];
-
-  if (fields.name !== undefined) {
-    sets.push('name = ?');
-    params.push(fields.name.trim());
-  }
-  if (fields.emoji !== undefined) {
-    sets.push('emoji = ?');
-    params.push(fields.emoji);
-  }
-  if (fields.budgetAmount !== undefined) {
-    sets.push('budget_amount = ?');
-    params.push(fields.budgetAmount);
-  }
-  if (fields.endsAt !== undefined) {
-    sets.push('ends_at = ?');
-    params.push(fields.endsAt);
-  }
-  if (sets.length === 0) return;
-
-  params.push(id);
-  await db.runAsync(`UPDATE Outings SET ${sets.join(', ')} WHERE id = ?;`, params);
-}
-
 /**
  * Outings with spend rolled up.
  *

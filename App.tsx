@@ -2,10 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
-  getTransactionById,
   initDatabase,
   rejectCapture,
-  setTransactionCategory,
   setTransactionExcluded,
 } from './src/db/dbService';
 import RootNavigator from './src/navigation/RootNavigator';
@@ -18,7 +16,7 @@ import {
   CATEGORY_ACTION_PREFIX,
 } from './src/notifications/notificationService';
 import { acceptCapture, ingestBatch, ingestPending } from './src/services/captureService';
-import { learnFromCategoryCorrection } from './src/services/classificationService';
+import { categoriseFromNotification } from './src/services/classificationService';
 import { runFirstRunSetup } from './src/services/onboardingService';
 import { revalidateIfRulesChanged } from './src/services/revalidationService';
 import {
@@ -34,8 +32,14 @@ import Icon from './src/components/Icon';
 import { LockGate } from './src/security/AppLock';
 import { MoneyRevealProvider } from './src/security/MoneyReveal';
 import { MomentHost } from './src/components/Moment';
+import AgeGate from './src/components/AgeGate';
+import { hasConfirmedAge, setAgeConfirmed } from './src/settings/settingsStore';
 
-type Status = { phase: 'LOADING' } | { phase: 'READY' } | { phase: 'ERROR'; message: string };
+type Status =
+  | { phase: 'LOADING' }
+  | { phase: 'AGE' }
+  | { phase: 'READY' }
+  | { phase: 'ERROR'; message: string };
 
 export default function App() {
   const [status, setStatus] = useState<Status>({ phase: 'LOADING' });
@@ -50,6 +54,13 @@ export default function App() {
       try {
         await initDatabase();
         await configureNotifications();
+        // Before any permission prompt, import or sweep (see AgeGate).
+        // Confirming bumps `attempt`, which runs this again; the open above
+        // is a no-op the second time.
+        if (!(await hasConfirmedAge())) {
+          if (!cancelled) setStatus({ phase: 'AGE' });
+          return;
+        }
         if (!cancelled) setStatus({ phase: 'READY' });
 
         // Re-read imported history under the current parser rules before
@@ -214,10 +225,7 @@ export default function App() {
         const category = actionIdentifier.slice(CATEGORY_ACTION_PREFIX.length);
         // Learned as well as applied, so the next payment to the same place
         // does not have to be asked about again.
-        setTransactionCategory(transactionId, category)
-          .then(() => getTransactionById(transactionId))
-          .then((row) => (row ? learnFromCategoryCorrection(row.merchant, category) : undefined))
-          .catch(() => undefined);
+        categoriseFromNotification(transactionId, category).catch(() => undefined);
       }
     });
     return () => subscription.remove();
@@ -248,6 +256,18 @@ export default function App() {
           <Button label="Try again" onPress={() => setAttempt((n) => n + 1)} />
         </View>
       </View>
+    );
+  }
+
+  if (status.phase === 'AGE') {
+    return (
+      <AgeGate
+        onConfirmed={() => {
+          setAgeConfirmed()
+            .catch(() => undefined)
+            .finally(() => setAttempt((n) => n + 1));
+        }}
+      />
     );
   }
 

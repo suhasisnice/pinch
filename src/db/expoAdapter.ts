@@ -21,7 +21,31 @@ const LEGACY_NAME = 'pinch.db';
 const SECURE_NAME = 'pinch-secure.db';
 const KEY_ITEM = 'pinch.databaseKey';
 
-export async function createExpoAdapter(databaseName: string): Promise<DbAdapter> {
+/**
+ * One open database per JS runtime (0.9.22).
+ *
+ * expo-sqlite hands back the handle it already has when the same file is
+ * opened twice, and the two JS objects then share one native connection:
+ * whichever is closed or garbage-collected first frees it under the other,
+ * and every later call fails with a bare NullPointerException. Android can
+ * keep the process (and this runtime) alive after the app is swiped away,
+ * so reopening it, or tapping Retry, ran initDatabase a second time and hit
+ * exactly that. So the open is done once and every later call gets it.
+ */
+const opened = new Map<string, Promise<DbAdapter>>();
+
+export function createExpoAdapter(databaseName: string): Promise<DbAdapter> {
+  let adapter = opened.get(databaseName);
+  if (!adapter) {
+    adapter = openExpoAdapter(databaseName);
+    // A failed open must not be remembered, or Retry could never succeed.
+    adapter.catch(() => opened.delete(databaseName));
+    opened.set(databaseName, adapter);
+  }
+  return adapter;
+}
+
+async function openExpoAdapter(databaseName: string): Promise<DbAdapter> {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const SQLite = require('expo-sqlite');
   const name = databaseName === LEGACY_NAME ? SECURE_NAME : databaseName;
@@ -89,13 +113,15 @@ async function moveLegacyIntoSecure(
   secureName: string,
   key: string
 ): Promise<void> {
-  const secure = await SQLite.openDatabaseAsync(secureName);
+  // Its own connection, never the shared cached one: closing this probe must
+  // not close a handle the rest of the app is using (see createExpoAdapter).
+  const secure = await SQLite.openDatabaseAsync(secureName, { useNewConnection: true });
   await secure.execAsync(keyPragma(key));
   const secureTables = await tableCount(secure);
   await secure.closeAsync();
   if (secureTables > 0) return;
 
-  const legacy = await SQLite.openDatabaseAsync(LEGACY_NAME);
+  const legacy = await SQLite.openDatabaseAsync(LEGACY_NAME, { useNewConnection: true });
   let legacyTables = 0;
   try {
     legacyTables = await tableCount(legacy);

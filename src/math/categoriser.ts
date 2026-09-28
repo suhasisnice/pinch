@@ -177,6 +177,9 @@ export function findVpa(merchant: string, rawText: string | null | undefined): s
 const MERCHANT_HANDLE =
   /^(?:paytmqr|paytm-|q\d{5,}|bharatpe|gpay-\d|bqr|mab\.|yespay|ezetap|pinelabs|razorpay|rzp|rzpy|cf\.|cashfree|payu|billdesk|merchant|ipay|pos\.|mswipe|getepay|instantpay|jiopay)/i;
 
+/** Google Pay's consumer handles (@okaxis, @okhdfcbank, @oksbi, @okicici). */
+const PERSONAL_PSP = /^ok(?:axis|hdfcbank|sbi|icici)$/i;
+
 /**
  * Words that appear in a shop's name but in nobody's, beyond the dictionary
  * words: enough to tell "Sai Enterprises" from "Sai Kumar".
@@ -187,6 +190,12 @@ const BUSINESS_WORDS = new Set([
   'pvt', 'ltd', 'limited', 'llp', 'co', 'company', 'india', 'services', 'solutions',
   'retail', 'industries', 'associates', 'brothers', 'bros', 'sons', 'group', 'international',
   'online', 'technologies', 'systems', 'ventures', 'studio', 'studios', 'labs', 'official',
+  // 0.9.22: a name with none of these, and no name word, is ambiguous, and
+  // taught words stop reaching it (isAmbiguousName). So the common endings of
+  // a shop's name are worth having here.
+  'junction', 'plaza', 'palace', 'express', 'bazaar', 'bazar', 'emporium', 'depot', 'outlet',
+  'factory', 'stall', 'counter', 'collection', 'collections', 'fashion', 'fashions',
+  'mall', 'complex', 'market', 'godown', 'works', 'sales', 'distributors', 'suppliers',
 ]);
 
 /**
@@ -198,6 +207,28 @@ function looksLikePersonName(text: Text): boolean {
   if (text.tokens.length < 1 || text.tokens.length > 4) return false;
   if (!text.tokens.every((t) => /^[a-z]{1,14}$/.test(t) && !BUSINESS_WORDS.has(t))) return false;
   return text.tokens.some((t) => NAME_WORDS.has(t));
+}
+
+/**
+ * A payee that could be a person or a shop: no shop signal and no person
+ * signal, a name of only plain words (0.9.22).
+ *
+ * NAME_WORDS is a hand list, so an uncommon name ("Tenzin Dorjee") lands
+ * here beside a shop with an unusual name ("Bhukkad Adda"). A correction for
+ * one is remembered for that exact payee, the way a person's is. Its words
+ * are still learned, since that is how "Bhukkad Adda" helps "Bhukkad
+ * Corner", but words taught by a correction only ever count toward a payee
+ * that shows a shop signal, never toward another ambiguous name. So
+ * correcting Tenzin Dorjee can no longer file Pema Dorjee as Food.
+ */
+export function isAmbiguousName(payee: Payee, merchant: string): boolean {
+  if (payee.kind !== 'UNKNOWN') return false;
+  const text = readText(merchant);
+  return (
+    text.tokens.length >= 1 &&
+    text.tokens.length <= 4 &&
+    text.tokens.every((t) => /^[a-z]{2,14}$/.test(t) && !BUSINESS_WORDS.has(t))
+  );
 }
 
 function isKnownPerson(merchant: string, people: readonly string[] | undefined): boolean {
@@ -362,6 +393,17 @@ export function readPayee(input: CategoriseInput, knowledge: Pick<CategoriserKno
 
   if (keywordHit(text)) return { kind: 'MERCHANT', vpa, keys };
   if (text.tokens.some((t) => BUSINESS_WORDS.has(t))) return { kind: 'MERCHANT', vpa, keys };
+  // Google Pay's consumer handles. A shop on Google Pay for Business gets an
+  // @okbiz… handle instead, so a plain-words name paid on one of these is a
+  // person even when their name is not on NAME_WORDS.
+  if (
+    vpa &&
+    PERSONAL_PSP.test(vpa.split('@')[1] ?? '') &&
+    text.tokens.length > 0 &&
+    text.tokens.every((t) => /^[a-z]{2,14}$/.test(t))
+  ) {
+    return { kind: 'PERSON', vpa, keys };
+  }
   if (looksLikePersonName(text) && !classifyTokens(tokenize(merchant), knowledge.weights)) {
     return { kind: 'PERSON', vpa, keys };
   }
@@ -409,7 +451,10 @@ export function categorise(input: CategoriseInput, knowledge: CategoriserKnowled
     return keyword ? decide({ ...keyword, source: 'GUESS' }, 'keyword') : null;
   }
 
-  const words = wordsHit([...tokenize(merchant), ...(handle ? tokenize(handle.tokens.join(' ')) : [])], knowledge.weights);
+  let words = wordsHit([...tokenize(merchant), ...(handle ? tokenize(handle.tokens.join(' ')) : [])], knowledge.weights);
+  // Words a correction taught never reach a payee that might be a person
+  // (see isAmbiguousName).
+  if (words?.taught && isAmbiguousName(payee, merchant)) words = null;
 
   // What this user taught beats a generic dictionary word.
   if (words && words.taught && words.source === 'SURE') return decide(words, 'words');
