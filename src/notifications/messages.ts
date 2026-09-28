@@ -165,12 +165,6 @@ const SETTLE_REMINDER: Template[] = [
     `gentle reminder that ${c.contactName} owes you ${money(c.amount)}. it's been ${c.days} days`,
 ];
 
-const DAY_RESET: Template[] = [
-  (c) => `new day, ${money(c.dailyLimit)} to work with`,
-  (c) => `today's number: ${money(c.dailyLimit)}. ${c.days} days left in the period`,
-  (c) => `${money(c.dailyLimit)} for today. make it count`,
-];
-
 // ---------------------------------------------------------------------------
 // Picker
 // ---------------------------------------------------------------------------
@@ -246,14 +240,6 @@ export function settleReminderMessage(
   random?: () => number
 ): string {
   return pickMessage(SETTLE_REMINDER, ctx, recentBodies, random);
-}
-
-export function dayResetMessage(
-  ctx: MessageContext,
-  recentBodies: string[] = [],
-  random?: () => number
-): string {
-  return pickMessage(DAY_RESET, ctx, recentBodies, random);
 }
 
 /** Short titles. The body carries the personality; the title carries the fact. */

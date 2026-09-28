@@ -64,19 +64,6 @@ function clampDay(day: number): number {
   return Math.min(28, Math.max(1, Math.round(day)));
 }
 
-export async function updateHolding(
-  id: number,
-  fields: { name?: string; kind?: string }
-): Promise<void> {
-  const db = getAdapter();
-  if (fields.name !== undefined) {
-    await db.runAsync(`UPDATE Holdings SET name = ? WHERE id = ?;`, [fields.name.trim(), id]);
-  }
-  if (fields.kind !== undefined) {
-    await db.runAsync(`UPDATE Holdings SET kind = ? WHERE id = ?;`, [fields.kind, id]);
-  }
-}
-
 /** Sets (or, with a zero/empty amount, stops) the monthly plan. */
 export async function setHoldingPlan(
   id: number,

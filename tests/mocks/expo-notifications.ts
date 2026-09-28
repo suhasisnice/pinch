@@ -61,6 +61,22 @@ export function __simulateNotificationResponse(data: unknown, actionIdentifier: 
   registeredHandler?.({ notification: { request: { content: { data } } }, actionIdentifier });
 }
 
+type Response = Parameters<ResponseHandler>[0];
+let lastResponse: Response | null = null;
+
+export function getLastNotificationResponse(): Response | null {
+  return lastResponse;
+}
+
+export function clearLastNotificationResponse(): void {
+  lastResponse = null;
+}
+
+/** Test-only: the app was launched by pressing a button, before any listener existed. */
+export function __simulateLaunchResponse(data: unknown, actionIdentifier: string): void {
+  lastResponse = { notification: { request: { content: { data } } }, actionIdentifier };
+}
+
 export const SchedulableTriggerInputTypes = { DATE: 'date' };
 
 /** Test-only record of what is scheduled for later, by identifier. */

@@ -159,9 +159,3 @@ export const GOAL_ICONS: IconName[] = [
 export function isIconName(value: string | null | undefined): value is IconName {
   return value != null && value in GLYPHS;
 }
-
-/** The icon for a spend category, falling back to the generic one. */
-export function categoryIcon(category: string | null | undefined): IconName {
-  if (!category) return 'Uncategorised';
-  return (category in GLYPHS ? category : 'Other') as IconName;
-}

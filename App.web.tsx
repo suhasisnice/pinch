@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { initDatabase } from './src/db/dbService';
 import RootNavigator from './src/navigation/RootNavigator';
 import { DialogHost } from './src/components/Dialog';
+import AgeGate from './src/components/AgeGate';
 import { seedDemoData } from './src/dev/demoData';
 import { palette } from './src/theme/theme';
 
@@ -56,7 +57,12 @@ export default function App() {
         }}
       >
         <SafeAreaProvider>
-          <RootNavigator />
+          {/* `?gate` shows the first-launch age question instead. */}
+          {globalThis.location?.search?.includes('gate') ? (
+            <AgeGate onConfirmed={() => undefined} />
+          ) : (
+            <RootNavigator />
+          )}
           <DialogHost />
         </SafeAreaProvider>
       </View>

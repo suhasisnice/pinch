@@ -62,15 +62,22 @@ Each tab has its own hero shape (`src/components/Heroes.tsx`). Today stays centr
 4. **Financial features declaration.** Budgeting and personal finance management only: no loans, no payments, no investing done by the app.
 5. **Closed test with 12 testers for 14 days**, if the Play account is a personal one created after Nov 2023.
 6. **Prominent disclosure** before the SMS and contacts permission prompts. The onboarding copy should be checked against Play's wording.
-7. **Age.** DPDP requires verifiable parental consent for users under 18. Some first-years are 17; an age question at onboarding is the simplest guard. Not built.
+7. **Age.** DPDP requires verifiable parental consent for users under 18. Some first-years are 17. **Built in 0.9.22:**
+   - `components/AgeGate.tsx` asks once, before any permission prompt, import or sweep.
+   - The screen is neutral: both answers look identical.
+   - Under 18 is a polite stop, with a way back for a mis-tap.
+   - Only a yes is stored (`hasConfirmedAge`).
+   - Preview it with `?gate` on any web preview URL.
 
 ## Known limits
 
 - **Not yet verified on a device:** SQLCipher, the plaintext-to-encrypted move, the lock and share/pick flows. The native build compiles, but there's no phone here.
 - **Backup timing:** PBKDF2 at 310k rounds in pure JS may take a few seconds on older phones. The sheet shows "Working…" meanwhile.
 - **MerchantRules** survive "Erase everything". It's the shipped rule list, but it also holds any rule the user edited.
-- **Signing key.** Release APKs are signed with Expo's template `debug.keystore`, a public key shared by every Expo project. 0.9.17 keeps it so it installs over 0.9.16 without an uninstall.
-  - Before Play: create a private upload keystore, and let Play App Signing hold the app key.
-  - A Play install is a fresh install anyway.
-  - For sideloaded phones: make a backup, install the newly signed build, then restore.
+- **Signing key (0.9.22).** There is now a private upload key: `~/.pinch-keys/pinch-upload.jks`, with its passwords in `~/.pinch-keys/signing.properties`.
+  - Both live outside the repo. Back up that folder somewhere private; it is on this PC only.
+  - The upload certificate's SHA-256 is `5E:96:A6:01:01:44:C2:DC:F8:C5:D7:3E:66:5A:A9:17:17:03:FD:C5:61:E2:14:C1:BB:B9:1C:07:AF:67:B6:DA`.
+  - `npm run aab` builds the Play bundle signed with it (`plugins/withReleaseSigning.js`, `-PpinchUpload`). Let Play App Signing hold the app key.
+  - `npm run apk` stays on the public template `debug.keystore` on purpose. An APK with a different key cannot install over the one on the phone, and uninstalling erases the encrypted database.
+  - A Play install is a fresh install anyway. To move a sideloaded phone to it: make a backup, uninstall, install from Play, restore.
 - **INTERNET** is still declared. Nothing in the app uses it today; it's kept for the planned download-only features (fund NAVs, parser rules). Blocking it would make "offline" a guarantee instead of a promise.

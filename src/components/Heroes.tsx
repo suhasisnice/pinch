@@ -11,19 +11,20 @@ import { MASK } from '../security/MoneyReveal';
  * (0.9.17 — the user's answer to "it all feels like one soup"):
  *
  *   Today   a ring        how much of today is left        (Ring.tsx)
- *   Plans   jars          goals filling from the bottom    JarsHero
+ *   Plans   the figure    (jars until 0.9.23; each goal row  PlansHero
+ *                          has its own bar, so no second shape)
  *   Wealth  a chart       net worth over the months        ChartHero
  *   People  faces         who owes whom                    FacesHero
  *
  * Today stays centred; the other three are left-aligned, so even the layout
  * of the number is part of where you are.
  *
- * Since 0.9.18 each shape also wears its tab's hue (`place`): jars violet,
+ * Since 0.9.18 each shape also wears its tab's hue (`place`): Plans violet,
  * the chart teal. People's faces take the money colours instead — green for
  * owed to you, amber for what you owe — because there the colour is the news.
  * The numeral stays ink everywhere: the number is the hero, colour frames it.
  *
- * Each shape arrives the way it means: jars fill from the bottom, the chart
+ * Each shape arrives the way it means: the chart
  * draws left to right, faces step in one by one. Once, on first show, and
  * not at all with reduce-motion on.
  */
@@ -104,83 +105,32 @@ function Words({ line, meta }: { line?: string; meta?: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Plans — jars
+// Plans — the figure alone
 // ---------------------------------------------------------------------------
 
-const JAR_HEIGHT = 112;
-const MAX_JARS = 5;
-
-export function JarsHero({
+/**
+ * Plans' hero is the total and its sentence, nothing drawn (0.9.23). Until
+ * then it also drew a jar per goal, and each goal row below drew its own bar
+ * as well, so every goal appeared twice. The user kept the row bars, since
+ * they carry the pace marker.
+ */
+export function PlansHero({
   amount,
   label,
-  goals,
   line,
   meta,
 }: {
   amount: number;
   label: string;
-  goals: { name: string; saved: number; target: number }[];
   line?: string;
   meta?: string;
 }) {
-  const shown = goals.slice(0, MAX_JARS);
   return (
     <View style={styles.hero}>
       <Figure amount={amount} label={label} hue={place.plans} />
-      {shown.length > 0 ? (
-        <View
-          style={styles.jars}
-          accessibilityLabel={shown
-            .map((g) => `${g.name} ${Math.round(fraction(g.saved, g.target) * 100)}%`)
-            .join(', ')}
-        >
-          {shown.map((goal, i) => (
-            <Jar key={goal.name} goal={goal} index={i} />
-          ))}
-        </View>
-      ) : null}
       <Words line={line} meta={meta} />
     </View>
   );
-}
-
-function Jar({
-  goal,
-  index,
-}: {
-  goal: { name: string; saved: number; target: number };
-  index: number;
-}) {
-  const f = fraction(goal.saved, goal.target);
-  const fill = useArrival(80 + index * 70);
-  const full = f >= 1;
-  return (
-    <View style={styles.jarColumn}>
-      <Text style={[styles.jarPct, full && styles.jarDone]}>
-        {full ? 'Done' : `${Math.round(f * 100)}%`}
-      </Text>
-      <View style={[styles.jar, full && styles.jarFull]}>
-        <Animated.View
-          style={[
-            styles.jarFill,
-            {
-              height: fill.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, Math.max(2, f * JAR_HEIGHT)],
-              }),
-            },
-          ]}
-        />
-      </View>
-      <Text style={styles.jarName} numberOfLines={2}>
-        {goal.name}
-      </Text>
-    </View>
-  );
-}
-
-function fraction(saved: number, target: number): number {
-  return target > 0 ? Math.max(0, Math.min(1, saved / target)) : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -393,29 +343,6 @@ const styles = StyleSheet.create({
   words: { gap: spacing.xs },
   line: { ...typography.quip, color: palette.textPrimary },
   meta: { ...typography.caption, color: palette.textMuted },
-
-  // Jars
-  jars: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  jarColumn: { flex: 1, maxWidth: 72, alignItems: 'center', gap: spacing.xs },
-  jarPct: { ...typography.caption, color: palette.textSecondary },
-  jarDone: { color: place.plans, fontWeight: '600' },
-  jar: {
-    width: '100%',
-    height: JAR_HEIGHT,
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: 10,
-    justifyContent: 'flex-end',
-    overflow: 'hidden',
-  },
-  jarFull: { borderColor: place.plans },
-  jarFill: { width: '100%', backgroundColor: place.plans },
-  jarName: {
-    ...typography.caption,
-    color: palette.textMuted,
-    maxWidth: '100%',
-    textAlign: 'center',
-  },
 
   // Chart
   chart: { gap: spacing.xs },

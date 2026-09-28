@@ -116,9 +116,21 @@ people, guesses, the LEGACY sweep, migration v20).
 
 **Not done / known limits**
 
-- The notification quick-category actions (`SET_CATEGORY:*`) have no handler anywhere. This is
-  pre-existing, and I left it alone.
+- ~~The notification quick-category actions have no handler.~~ Wrong: `App.tsx` did handle them. Fixed in
+  0.9.22 were two problems in that handler:
+  - It learned from the merchant name alone, so a person paid by UPI taught their name words as a shop's.
+  - It ignored the other payments to the same payee.
+
+  It now calls `categoriseFromNotification`, which works the same way as the detail sheet. A button pressed
+  while the app was closed is also no longer lost (`getLastNotificationResponse`).
 - A shopkeeper's personal UPI ID with no shop words in it stays blank until the user sets it once.
   After that, the per-payee rule remembers it.
-- `NAME_WORDS` is a hand list. An uncommon name that looks like two plain words is treated as a
-  shop, which means its words can be learned.
+- `NAME_WORDS` is a hand list. It was widened in 0.9.22 with North-East, Bengali, Odia, Tamil,
+  Malayali and Parsi names. What is still missing is covered by `isAmbiguousName` (0.9.22).
+  - A name of only plain words, with no shop or person signal, is remembered for that exact payee.
+  - Words that a correction taught never reach another ambiguous name, so correcting Tenzin Dorjee
+    cannot file Pema Dorjee.
+  - A name on a Google Pay consumer handle (`@okaxis` / `@okhdfcbank` / `@oksbi` / `@okicici`) is a
+    person.
+  - Common shop endings (junction, plaza, bazaar, …) were added to the shop words, so "Bhukkad Junction"
+    still learns from "Bhukkad Dhaba".

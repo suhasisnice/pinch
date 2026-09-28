@@ -28,14 +28,6 @@ export async function logNotification(input: NewNotificationLog): Promise<number
   return result.lastInsertRowId;
 }
 
-export async function getRecentNotifications(limit = 50): Promise<NotificationLogRow[]> {
-  const db = getAdapter();
-  return db.getAllAsync<NotificationLogRow>(
-    `SELECT * FROM NotificationLog ORDER BY created_at DESC LIMIT ?;`,
-    [limit]
-  );
-}
-
 /** How many of a given type were sent since `sinceIso`. Drives rate limiting. */
 export async function countSince(type: string, sinceIso: string): Promise<number> {
   const db = getAdapter();
@@ -75,24 +67,4 @@ export async function getRecentBodies(type: string, limit = 5): Promise<string[]
     [type, limit]
   );
   return rows.map((r) => r.body);
-}
-
-export async function markNotificationRead(id: number): Promise<void> {
-  const db = getAdapter();
-  await db.runAsync(`UPDATE NotificationLog SET read_at = ? WHERE id = ?;`, [
-    new Date().toISOString(),
-    id,
-  ]);
-}
-
-export async function recordNotificationAction(id: number, action: string): Promise<void> {
-  const db = getAdapter();
-  await db.runAsync(`UPDATE NotificationLog SET action = ? WHERE id = ?;`, [action, id]);
-}
-
-export async function pruneNotifications(days = 30): Promise<number> {
-  const db = getAdapter();
-  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-  const result = await db.runAsync(`DELETE FROM NotificationLog WHERE created_at < ?;`, [cutoff]);
-  return result.changes;
 }

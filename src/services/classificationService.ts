@@ -6,7 +6,7 @@ import {
   removesFromSpending,
 } from '../math/classification';
 import { sameMerchant } from '../math/merchantClassifier';
-import { categorise, CategoryDecision, readPayee } from '../math/categoriser';
+import { categorise, CategoryDecision, isAmbiguousName, readPayee } from '../math/categoriser';
 
 export interface ClassificationResult {
   applied: Array<{ id: number; merchant: string; amount: number; reason: NonSpendReason }>;
@@ -149,6 +149,15 @@ export async function learnFromCategoryCorrection(
     await db.learnPayeeRule(payee.keys, category, subcategory);
     return;
   }
+  if (isAmbiguousName(payee, merchant)) {
+    // Maybe a person: remembered exactly, and its words only ever help a
+    // payee that is clearly a shop (see isAmbiguousName).
+    await Promise.all([
+      db.learnPayeeRule(payee.keys, category, subcategory),
+      db.bumpTokenWeights(merchant, category),
+    ]);
+    return;
+  }
   await Promise.all([
     db.learnMerchantRule(merchant, category, subcategory),
     db.bumpTokenWeights(merchant, category),
@@ -167,6 +176,30 @@ export async function confirmCategoryGuess(transactionId: number): Promise<void>
     subcategory: row.subcategory,
     rawText: row.raw_text,
   });
+}
+
+/**
+ * A category picked from a notification's quick buttons (Food / Transport /
+ * Shopping), without opening the transaction.
+ *
+ * The same three steps as setting it in the detail sheet: set it as the
+ * user's own, learn it, and reach the other payments to the same payee. It
+ * learns from the original message too, so a person paid by UPI is
+ * remembered as that person and not through the words in their name. The
+ * notification handler once skipped that, and taught "kumar" = Food.
+ */
+export async function categoriseFromNotification(
+  transactionId: number,
+  category: string
+): Promise<void> {
+  const row = await db.getTransactionById(transactionId);
+  // Something the user already set by hand in the app since the
+  // notification went out wins over an old notification's button.
+  if (!row || row.category_source === 'USER') return;
+  await db.setTransactionCategory(transactionId, category, { subcategory: null, source: 'USER' });
+  const context = { subcategory: null, rawText: row.raw_text };
+  await learnFromCategoryCorrection(row.merchant, category, context);
+  await propagateCategoryCorrection(row.merchant, category, transactionId, context);
 }
 
 export interface CategoryPropagationResult {
@@ -204,6 +237,7 @@ export async function propagateCategoryCorrection(
   const subcategory = context.subcategory ?? null;
   const knowledge = await db.loadCategoriserKnowledge();
   const payee = readPayee({ merchant, rawText: context.rawText }, knowledge);
+  const asPerson = payee.kind === 'PERSON' || isAmbiguousName(payee, merchant);
   const all = await db.getAllTransactions();
   let updated = 0;
 
@@ -215,7 +249,7 @@ export async function propagateCategoryCorrection(
     if (row.category === category && row.subcategory === subcategory) continue;
 
     const same =
-      payee.kind === 'PERSON'
+      asPerson
         ? readPayee({ merchant: row.merchant, rawText: row.raw_text }, knowledge).keys.some((key) =>
             payee.keys.includes(key)
           )

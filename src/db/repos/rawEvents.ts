@@ -222,16 +222,6 @@ export async function getParsedEventsForRawEvent(rawEventId: number): Promise<Pa
   return rows.map(toParsedEventRow);
 }
 
-/** The most recent attempt on file for one message, or null if it has never been processed at all. */
-export async function getLatestParsedEvent(rawEventId: number): Promise<ParsedEventRow | null> {
-  const db = getAdapter();
-  const row = await db.getFirstAsync<Parameters<typeof toParsedEventRow>[0]>(
-    `SELECT * FROM ParsedEvents WHERE raw_event_id = ? ORDER BY created_at DESC LIMIT 1;`,
-    [rawEventId]
-  );
-  return row ? toParsedEventRow(row) : null;
-}
-
 export interface RejectionGroup {
   /** The stored explanation, e.g. "hard reject: \\botp\\b" or "no amount found". */
   reason: string;

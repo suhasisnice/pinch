@@ -78,10 +78,3 @@ export function classifyNonSpend(tx: ClassifiableTransaction): NonSpendReason | 
 export function removesFromSpending(reason: NonSpendReason | null): boolean {
   return reason === 'WALLET_TOPUP' || reason === 'CARD_BILL' || reason === 'INVESTMENT';
 }
-
-export const NON_SPEND_LABELS: Record<NonSpendReason, string> = {
-  WALLET_TOPUP: 'Moved to a wallet',
-  CARD_BILL: 'Credit card bill',
-  CASH_WITHDRAWAL: 'Cash withdrawn',
-  INVESTMENT: 'Investment',
-};

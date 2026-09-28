@@ -32,16 +32,6 @@ export async function getReimbursementLinks(): Promise<ReimbursementLink[]> {
   );
 }
 
-/** How much of an incoming payment currently settles something. */
-export async function getAppliedFromPayment(creditId: number): Promise<number> {
-  const db = getAdapter();
-  const row = await db.getFirstAsync<{ total: number | null }>(
-    `SELECT COALESCE(SUM(amount), 0) AS total FROM Settlements WHERE transaction_id = ?;`,
-    [creditId]
-  );
-  return row?.total ?? 0;
-}
-
 /** Only a real incoming payment, still counted and not part of a transfer, can pay something back. */
 export function canBeReimbursement(tx: TransactionRow): boolean {
   return (

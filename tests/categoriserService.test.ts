@@ -8,6 +8,7 @@ import {
   learnFromCategoryCorrection,
   propagateCategoryCorrection,
 } from '../src/services/classificationService';
+import { readPayee } from '../src/math/categoriser';
 import { createSqlJsAdapter } from './utils/sqljsAdapter';
 import { disableConfirmGate } from './utils/settings';
 
@@ -103,6 +104,45 @@ describe('learning about people', () => {
     await learnFromCategoryCorrection('Bhukkad Adda', 'Food');
     const weights = await db.getCategoryTokenWeights();
     expect(weights.Food?.bhukkad).toBeGreaterThan(0);
+  });
+});
+
+describe('a name that is not on the name list (0.9.22)', () => {
+  it('is remembered for that exact payee, and never spreads to a similar name', async () => {
+    await learnFromCategoryCorrection('Tenzin Dorjee', 'Food');
+
+    const again = await postTransaction({ amount: 30, direction: 'DEBIT', merchant: 'TENZIN DORJEE', source: 'SMS', silent: true });
+    const other = await postTransaction({ amount: 30, direction: 'DEBIT', merchant: 'Pema Dorjee', source: 'SMS', silent: true });
+    expect(await row(again!)).toMatchObject({ category: 'Food', category_source: 'USER' });
+    expect((await row(other!)).category).toBeNull();
+  });
+
+  it('does not reach an earlier payment to a similar name', async () => {
+    const pema = await spend('Pema Dorjee');
+    const tenzin = await spend('Tenzin Dorjee');
+    await learnFromCategoryCorrection('Tenzin Dorjee', 'Food');
+    await propagateCategoryCorrection('Tenzin Dorjee', 'Food', tenzin);
+    expect((await row(pema)).category).toBeNull();
+  });
+
+  it('is a person when paid on a Google Pay consumer handle', async () => {
+    const id = await postTransaction({
+      amount: 150,
+      direction: 'DEBIT',
+      merchant: 'Lalremruata',
+      rawText: 'Rs.150 debited from A/c XX1234 to VPA lalremruata@oksbi UPI Ref 77',
+      source: 'SMS',
+      silent: true,
+    });
+    const knowledge = await db.loadCategoriserKnowledge();
+    expect(readPayee({ merchant: 'Lalremruata', rawText: 'to VPA lalremruata@oksbi' }, knowledge).kind).toBe('PERSON');
+    expect((await row(id!)).category).toBeNull();
+  });
+
+  it('still learns the words of something that is clearly a shop', async () => {
+    await learnFromCategoryCorrection('Dorjee Momo Stores', 'Food');
+    const weights = await db.getCategoryTokenWeights();
+    expect(weights.Food?.momo).toBeGreaterThan(0);
   });
 });
 

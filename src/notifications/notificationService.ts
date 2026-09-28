@@ -99,10 +99,6 @@ export async function requestNotificationPermission(): Promise<boolean> {
   return requested.granted;
 }
 
-export async function hasNotificationPermission(): Promise<boolean> {
-  return (await Notifications.getPermissionsAsync()).granted;
-}
-
 /**
  * Reconstructs today's delivery state from the notification log, so rate
  * limits survive the app being killed and restarted. Holding this in memory
@@ -252,8 +248,19 @@ export async function deliverAll(
 export function addNotificationResponseListener(
   handler: (payload: Record<string, unknown>, actionIdentifier: string) => void
 ) {
-  return Notifications.addNotificationResponseReceivedListener((response) => {
+  const answer = (response: Notifications.NotificationResponse) => {
     const data = response.notification.request.content.data as Record<string, unknown>;
+    // Cleared once handled, so a later listener (Try again, a remount)
+    // never replays the same answer a second time.
+    Notifications.clearLastNotificationResponse();
     handler(data ?? {}, response.actionIdentifier);
-  });
+  };
+
+  // A button pressed while the app was closed launches it, and that answer
+  // arrives before the database is open and this listener exists. expo keeps
+  // it as the last response, so it is picked up here instead of being lost.
+  const launch = Notifications.getLastNotificationResponse();
+  if (launch) answer(launch);
+
+  return Notifications.addNotificationResponseReceivedListener(answer);
 }

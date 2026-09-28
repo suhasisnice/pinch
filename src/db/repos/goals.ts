@@ -1,5 +1,5 @@
 import { getAdapter } from '../connection';
-import { GoalContributionRow, GoalRow } from '../types';
+import { GoalRow } from '../types';
 
 export interface GoalProgress {
   id: number;
@@ -160,24 +160,4 @@ export async function getGoalContributionsBetween(
     [startIso, endIso]
   );
   return new Map(rows.map((r) => [r.goal_id, r.total]));
-}
-
-export async function getContributions(goalId: number): Promise<GoalContributionRow[]> {
-  const db = getAdapter();
-  return db.getAllAsync<GoalContributionRow>(
-    `SELECT * FROM GoalContributions WHERE goal_id = ? ORDER BY created_at DESC;`,
-    [goalId]
-  );
-}
-
-/** Total saved across every active goal — money reserved, not yet spent. */
-export async function getTotalReserved(): Promise<number> {
-  const db = getAdapter();
-  const row = await db.getFirstAsync<{ total: number | null }>(
-    `SELECT COALESCE(SUM(gc.amount), 0) AS total
-     FROM GoalContributions gc
-     JOIN Goals ON Goals.id = gc.goal_id
-     WHERE Goals.archived_at IS NULL;`
-  );
-  return row?.total ?? 0;
 }

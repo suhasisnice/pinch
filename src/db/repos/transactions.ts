@@ -421,35 +421,6 @@ export async function getIncomeBetween(startIso: string, endIso: string): Promis
   return row?.total ?? 0;
 }
 
-/**
- * Still-unrecovered money you fronted on bills paid within the window.
- *
- * Backed out of gross spending to get what you actually spent on yourself. It
- * uses each IOU's *open* balance (amount minus everything settled against it),
- * so a partial repayment moves this number by exactly what came back.
- */
-export async function getOpenReceivablesOnSpendBetween(
-  startIso: string,
-  endIso: string
-): Promise<number> {
-  const db = getAdapter();
-  const row = await db.getFirstAsync<{ total: number | null }>(
-    `SELECT COALESCE(SUM(open_amount), 0) AS total FROM (
-       SELECT IOUs.amount - COALESCE(
-         (SELECT SUM(s.amount) FROM Settlements s WHERE s.iou_id = IOUs.id), 0
-       ) AS open_amount
-       FROM IOUs
-       JOIN Transactions ON Transactions.id = IOUs.transaction_id
-       WHERE IOUs.direction = 'THEY_OWE_ME'
-         AND Transactions.kind = 'SPEND'
-         AND Transactions.excluded_at IS NULL
-         AND Transactions.occurred_at >= ? AND Transactions.occurred_at < ?
-     ) WHERE open_amount > 0;`,
-    [startIso, endIso]
-  );
-  return row?.total ?? 0;
-}
-
 /** Spending grouped by category for a window, largest first. */
 export async function getSpendByCategory(
   startIso: string,
@@ -830,25 +801,4 @@ export async function hasCardTransactions(): Promise<boolean> {
             OR lower(raw_text) LIKE '%card ending%' OR lower(raw_text) LIKE '%card no%');`
   );
   return (row?.n ?? 0) > 0;
-}
-
-/**
- * Top-N distinct merchants by how often they appear, for quick-add suggestions.
- *
- * Grouped case-insensitively so "Swiggy" and "swiggy" are one chip, and the
- * excluded/transfer rows are left out — a merchant you only ever saw in a
- * self-transfer is not somewhere you spend.
- */
-export async function getRecentMerchants(limit = 5): Promise<string[]> {
-  const db = getAdapter();
-  const rows = await db.getAllAsync<{ merchant: string }>(
-    `SELECT merchant FROM Transactions
-     WHERE merchant IS NOT NULL AND merchant != '' AND merchant != 'Unknown'
-       AND excluded_at IS NULL AND transfer_pair_id IS NULL
-     GROUP BY lower(merchant)
-     ORDER BY COUNT(*) DESC
-     LIMIT ?;`,
-    [limit]
-  );
-  return rows.map((r) => r.merchant);
 }
