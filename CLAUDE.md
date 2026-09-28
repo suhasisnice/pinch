@@ -21,27 +21,36 @@ Protected (Claude only): `src/math`, `src/db` (incl. migrations), capture/parser
 services, money services, `smsPrivacy`, `src/security`, `modules/pinch-capture`, backup/erase.
 Helpers never commit or push. Copilot is parked until Copilot Student activates.
 
-The two labour workers:
-- **Antigravity** (`agy`, Gemini 3.1 Pro on the student plan): the stronger one. Headless it reads
-  and edits files but can run NO shell command (every command is auto-denied), so tell it
-  "use only your file tools". The user may also iterate with `agy` directly; then I review the diff.
-- **Free worker** (`scripts/free.js`: Claude Code on the first free Gemini that answers): weaker and
-  sometimes out of quota, but runs git and the test scripts; protected paths are denied by rule.
+The labour workers, in the order I reach for them:
+- **Free worker** (`scripts/free.js`: headless Claude Code on the first free Gemini that answers): the
+  default for labour. Runs git and the test scripts; protected paths are denied by rule. It waits out
+  a short cooldown, retries once on another model if a run fails without touching files, and exits 1
+  when nothing finished, so a silent pass means it worked.
+- **Antigravity** (`agy`, Gemini 3.1 Pro): stronger, but the student plan (Gemini Plus) gives it about
+  the free-tier quota with a **weekly** cap. Only for large jobs: multi-file edits, reading a lot of
+  code. Headless it reads and edits files but can run NO shell command, so tell it "use only your
+  file tools". The user may also iterate with `agy` directly; then I review the diff.
+- **Local model** (`npm run llm`): anything sensitive (real SMS, phone logs, user data) stays here.
+
+Free quota is per minute and per day, so **one well-scoped prompt per job**: name the files, say what
+done looks like, and batch related edits into the same task instead of a call per edit. Pass a
+multi-line task on stdin (`npm run free:edit -- - < task.md`); newlines in argv arrive empty on Windows.
+Small edits (a string, a line) are cheaper done inline than routed.
 
 | Job | Call | If it fails |
 |---|---|---|
 | Real SMS, phone logs, user data | `npm run llm -- log -` (local) | do it myself; never send it out |
-| Edit screens, components, copy, tests, docs outside protected code | `npm run gem:edit -- "<task>"` | `npm run free:edit -- "<task>"` |
+| Edit screens, components, copy, tests, docs outside protected code | `npm run free:edit -- "<task>"` | `npm run gem:edit -- "<task>"` if the job is large, else myself |
 | Labour that needs git or tests (check a change, find a failing test, trace history) | `npm run free -- "<task>"` | `npm run gem -- "<task>"` with files I name |
 | Review a diff before commit | `npm run review` (free worker runs git itself) | `npm run review:quick` (diff to Gemini, no tools), else `/code-review` |
-| Read or explain a lot of code, second opinion | `npm run gem -- "<task>"` (read-only) | `npm run free -- "<task>"` |
+| Read or explain a lot of code, second opinion | `npm run free -- "<task>"` | `npm run gem -- "<task>"` (read-only) |
 | Quick, low-stakes answer only (summary, commit explainer, brief) | `npm run llm -- <job> --cloud` | same job without `--cloud` |
 
-Free models (quota resets daily; spikes pass in minutes) and helpers are slow (20s-3min), so run
-them in the background and keep thinking. One editor at a time: before a helper edits, note
-`git status`; after, read `git diff --name-only`. A change inside protected code is reverted and
-redone by me. Then `test:q` + `typecheck`, then `review`; I decide what is committed.
-Helper output is a draft, never trusted blind.
+Helpers are slow (20s-3min), so run them in the background and keep thinking. One editor at a
+time: before a helper edits, note `git status`; after, read `git diff --name-only`. A change inside
+protected code is reverted and redone by me. Then `test:q` + `typecheck`, then `review`; I decide
+what is committed. Helper output is a draft, never trusted blind. Log every chain failure in
+`docs/HELPER_LOG.md` with a fix idea.
 
 ## Specification hierarchy
 

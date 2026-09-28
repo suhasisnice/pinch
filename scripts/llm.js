@@ -22,6 +22,7 @@
  */
 const fs = require('fs');
 const { execSync } = require('child_process');
+const { OMNIROUTE, omniKey } = require('./omniroute');
 
 const HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
 /**
@@ -41,10 +42,11 @@ const THINK = process.env.PINCH_LLM_THINK || 'low';
 /** Keep the model loaded between jobs: loading it takes about a minute. */
 const KEEP_ALIVE = '30m';
 const CLOUD = process.argv.includes('--cloud');
-const OMNIROUTE = 'http://localhost:20128';
-/** Tried in order: a free-tier model is sometimes busy (503), out of quota (429) or,
- * on Groq's free tier (8k tokens a minute), sent too much (413). */
-const CLOUD_MODELS = ['gemini/gemini-3.6-flash', 'gemini/gemini-3.1-flash-lite', 'groq/openai/gpt-oss-120b'];
+/** Tried in order: a free-tier model is sometimes busy (503) or out of quota (429).
+ * Groq's free tier takes about 8k tokens a minute, so it only gets small inputs (413 otherwise). */
+const CLOUD_MODELS = ['gemini/gemini-3.8-flash', 'gemini/gemini-3.7-flash', 'gemini/gemini-3.6-flash',
+  'gemini/gemini-3.1-flash-lite', 'groq/openai/gpt-oss-120b'];
+const GROQ_MAX_CHARS = 20_000;
 /** Input budget in characters: what an 8 GB GPU handles well, or far more for Gemini. */
 const MAX_INPUT = CLOUD ? 400_000 : 24_000;
 
@@ -185,18 +187,22 @@ async function main() {
 
 /** Not streamed: Gemini answers in seconds, and one JSON reply is less code than SSE. */
 async function cloud(system, user) {
-  if (!process.env.OMNIROUTE_KEY) {
-    console.error('OMNIROUTE_KEY is not set. setx it, then open a new terminal.');
+  const key = omniKey();
+  if (!key) {
+    console.error('No OmniRoute key: set OMNIROUTE_KEY (setx OMNIROUTE_KEY <key>).');
     process.exitCode = 1;
     return;
   }
-  const models = process.env.PINCH_LLM_MODEL ? [process.env.PINCH_LLM_MODEL] : CLOUD_MODELS;
+  const small = system.length + user.length <= GROQ_MAX_CHARS;
+  const models = process.env.PINCH_LLM_MODEL
+    ? [process.env.PINCH_LLM_MODEL]
+    : CLOUD_MODELS.filter((m) => small || !m.startsWith('groq/'));
   for (const model of models) {
     let res;
     try {
       res = await fetch(`${OMNIROUTE}/v1/chat/completions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OMNIROUTE_KEY}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
         body: JSON.stringify({
           model,
           temperature: 0.2,
@@ -225,6 +231,7 @@ async function cloud(system, user) {
       return;
     }
   }
+  console.error('No cloud model answered. Try again later, or drop --cloud to run it locally.');
   process.exitCode = 1;
 }
 
