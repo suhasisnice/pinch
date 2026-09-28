@@ -13,6 +13,7 @@ Drafted by the local model (gpt-oss:20b) from each file's header and exports on 
 ## plugins
 
 - `plugins/withAbiFilter.js` — config plugin adding abiFilters to Gradle for single-arch APKs.
+- `plugins/withReleaseSigning.js` — signs the Play bundle (`npm run aab`, -PpinchUpload) with the private upload key in ~/.pinch-keys; `npm run apk` stays on the debug key.
 - `plugins/withGradleTuning.js` — config plugin setting Gradle properties for faster builds and smaller APKs.
 - `plugins/withPackageQueries.js` — config plugin adding <queries> for WhatsApp package visibility.
 - `plugins/withSqlCipherOpenssl.js` — exports a config plugin that copies libcrypto.so into jniLibs for SQLCipher.
@@ -30,6 +31,7 @@ Drafted by the local model (gpt-oss:20b) from each file's header and exports on 
 ## src/components
 
 - `src/components/AddExpenseSheet.tsx` — default AddExpenseSheet component, TxnType type, and related transaction posting helpers.
+- `src/components/AgeGate.tsx` — first-launch neutral age question (18+ / under 18), shown before permissions and import (0.9.22).
 - `src/components/AffordSheet.tsx` — default AffordSheet component, Fact helper, verdictColor, verdictHeadline.
 - `src/components/BackupSheet.tsx` — default BackupSheet component, BackupError, MIN_PASSPHRASE constants.
 - `src/components/BalanceCard.tsx` — default BalanceCard component, UpdateBalanceSheet helper.
@@ -39,7 +41,7 @@ Drafted by the local model (gpt-oss:20b) from each file's header and exports on 
 - `src/components/Dialog.tsx` — showDialog, showConfirm, showMessage functions, DialogHost component.
 - `src/components/FilterSheet.tsx` — default FilterSheet component, uses transaction filtering logic
 - `src/components/FreshStartSheet.tsx` — default FreshStartSheet component, shows spending summary
-- `src/components/Heroes.tsx` — JarsHero, ChartHero, FacesHero components for tab heroes
+- `src/components/Heroes.tsx` — PlansHero (figure only since 0.9.23), ChartHero, FacesHero components for tab heroes
 - `src/components/Icon.tsx` — default Icon component, IconName type, helper functions for icon lookup
 - `src/components/LabelIcon.tsx` — default LabelIcon component, LabelIconBadge helper
 - `src/components/LinkedGroupRow.tsx` — default LinkedGroupRow component for grouped ledger rows
