@@ -29,9 +29,16 @@ The user's rule (2026-09-24): hand every job that can go to the local model to i
 | `brief "<idea>"` | Turns a rough idea into a short brief to hand to Claude. |
 | `explain [rev]` | Explains a commit in plain words, plus risks to check. |
 | `handoff <notes>` | Five-line "where we are" note for starting a fresh Claude session. |
+| `review -` | Reviews a diff on stdin for bugs and broken financial rules. `npm run review` sends `git diff HEAD` with `--cloud`. |
 | `ask "<question>"` | General questions. |
 
 Example: `npm run apk 2>&1 | npm run llm -- log -`
+
+Add `--cloud` to send a job to free Gemini through the local OmniRoute gateway instead
+(`omniroute` running, `OMNIROUTE_KEY` set): faster and smarter than the laptop, and fine with
+whole files. It falls back Gemini 3.6 Flash → 3.1 Flash-Lite → Groq when one is busy.
+`log` refuses `--cloud`: phone logs can hold real SMS and money data, which stay on the laptop.
+Example: `npm run llm -- explain --cloud HEAD`
 
 ## What stays with Claude
 

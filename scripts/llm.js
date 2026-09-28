@@ -7,9 +7,14 @@
  *   node scripts/llm.js brief "<idea>"    turn a rough idea into a short spec for Claude
  *   node scripts/llm.js explain [rev]     explain a commit (default HEAD) in plain words
  *   node scripts/llm.js handoff <file>    five-line "where we are / what's next" from notes
+ *   node scripts/llm.js review -          review a diff on stdin (git diff | … review - --cloud)
  *   node scripts/llm.js ask "<question>"  anything else
  *
  * Anything can also come in on stdin:  some-command 2>&1 | node scripts/llm.js log -
+ *
+ * --cloud sends the job to Gemini through the local OmniRoute gateway instead (needs `omniroute`
+ * running and OMNIROUTE_KEY set). Only code and docs go there: `log` refuses --cloud, because
+ * phone logs can hold real SMS and money data, which never leave the laptop.
  *
  * PINCH_LLM_MODEL overrides the model (default: per job, see JOB_MODEL); OLLAMA_HOST the server;
  * PINCH_LLM_THINK the gpt-oss reasoning effort (low | medium | high, default low).
@@ -26,7 +31,7 @@ const HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
  */
 const FAST = 'qwen2.5-coder:7b';
 const SMART = 'gpt-oss:20b';
-const JOB_MODEL = { log: FAST, explain: FAST, brief: SMART, handoff: SMART, ask: SMART };
+const JOB_MODEL = { log: FAST, explain: FAST, brief: SMART, handoff: SMART, ask: SMART, review: SMART };
 /**
  * gpt-oss reasons before it answers; most of a helper job's time went there.
  * These jobs are extraction and summary, so low effort is enough. Other
@@ -35,10 +40,15 @@ const JOB_MODEL = { log: FAST, explain: FAST, brief: SMART, handoff: SMART, ask:
 const THINK = process.env.PINCH_LLM_THINK || 'low';
 /** Keep the model loaded between jobs: loading it takes about a minute. */
 const KEEP_ALIVE = '30m';
-/** Input budget in characters. Keeps the context inside what an 8 GB GPU handles well. */
-const MAX_INPUT = 24_000;
+const CLOUD = process.argv.includes('--cloud');
+const OMNIROUTE = 'http://localhost:20128';
+/** Tried in order: a free-tier model is sometimes busy (503), out of quota (429) or,
+ * on Groq's free tier (8k tokens a minute), sent too much (413). */
+const CLOUD_MODELS = ['gemini/gemini-3.6-flash', 'gemini/gemini-3.1-flash-lite', 'groq/openai/gpt-oss-120b'];
+/** Input budget in characters: what an 8 GB GPU handles well, or far more for Gemini. */
+const MAX_INPUT = CLOUD ? 400_000 : 24_000;
 
-const [job, arg] = process.argv.slice(2);
+const [job, arg] = process.argv.slice(2).filter((a) => a !== '--cloud');
 const MODEL = process.env.PINCH_LLM_MODEL || JOB_MODEL[job] || SMART;
 
 function readInput(source) {
@@ -104,6 +114,16 @@ const JOBS = {
       'Things to remember. Keep names, versions, file paths and numbers exact.',
     user: clip(readInput(arg)),
   }),
+  review: () => ({
+    system:
+      `${PROJECT} You review a git diff. Protected code (src/math, src/db, capture/parser/classification ` +
+      'services, src/security, modules/pinch-capture, backup/erase) must keep these rules: direction (DEBIT/CREDIT) is ' +
+      'not meaning (kind); one canonical transaction per payment; allocations never move cash or write a transaction; ' +
+      'settlements are not income or expense; low confidence goes to the review inbox; only financial SMS are stored and ' +
+      'OTPs are masked. Report correctness bugs and rule breaks, most severe first, each as file:line and a one-line ' +
+      'failure scenario. Only report what the diff shows; say "No findings." if there are none.',
+    user: clip(readInput(arg)),
+  }),
   ask: () => ({
     system: `${PROJECT} Answer briefly and concretely. Say so when you are not sure.`,
     user: clip(arg || readInput('-')),
@@ -112,10 +132,15 @@ const JOBS = {
 
 async function main() {
   if (!JOBS[job]) {
-    console.error('usage: node scripts/llm.js <log|brief|explain|handoff|ask> [file|text|-]');
+    console.error('usage: node scripts/llm.js <log|brief|explain|handoff|review|ask> [file|text|-]');
+    process.exit(2);
+  }
+  if (CLOUD && job === 'log') {
+    console.error('log stays local: phone logs can hold real SMS and money data. Drop --cloud.');
     process.exit(2);
   }
   const { system, user } = JOBS[job]();
+  if (CLOUD) return cloud(system, user);
   let res;
   try {
     res = await fetch(`${HOST}/api/chat`, {
@@ -156,6 +181,51 @@ async function main() {
     }
   }
   process.stdout.write('\n');
+}
+
+/** Not streamed: Gemini answers in seconds, and one JSON reply is less code than SSE. */
+async function cloud(system, user) {
+  if (!process.env.OMNIROUTE_KEY) {
+    console.error('OMNIROUTE_KEY is not set. setx it, then open a new terminal.');
+    process.exitCode = 1;
+    return;
+  }
+  const models = process.env.PINCH_LLM_MODEL ? [process.env.PINCH_LLM_MODEL] : CLOUD_MODELS;
+  for (const model of models) {
+    let res;
+    try {
+      res = await fetch(`${OMNIROUTE}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OMNIROUTE_KEY}` },
+        body: JSON.stringify({
+          model,
+          temperature: 0.2,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+        }),
+      });
+    } catch {
+      console.error(`Could not reach OmniRoute at ${OMNIROUTE}. Run \`omniroute\` in another window.`);
+      process.exitCode = 1;
+      return;
+    }
+    if (res.ok) {
+      const data = await res.json();
+      process.stdout.write(`${data.choices?.[0]?.message?.content ?? ''}
+`);
+      return;
+    }
+    const retry = res.status === 413 || res.status === 429 || res.status >= 500;
+    console.error(`${model}: ${res.status}${retry ? ', trying the next model' : ''}`);
+    if (!retry) {
+      console.error(await res.text());
+      process.exitCode = 1;
+      return;
+    }
+  }
+  process.exitCode = 1;
 }
 
 main();
