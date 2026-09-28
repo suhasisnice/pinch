@@ -97,7 +97,7 @@ export default function OutingsScreen({ top }: { top?: React.ReactNode } = {}) {
     >
       <TopBar
         left={top ?? 'Going out'}
-        action={{ label: 'Start one', onPress: () => setCreateVisible(true) }}
+        action={{ label: 'New outing', onPress: () => setCreateVisible(true) }}
       />
 
       {outings.length === 0 ? (
@@ -115,7 +115,7 @@ export default function OutingsScreen({ top }: { top?: React.ReactNode } = {}) {
       ))}
 
       {past.length > 0 ? (
-        <Group title="Been there">
+        <Group title="Past">
           {past.map((outing) => (
             <Row
               key={outing.id}
@@ -301,7 +301,7 @@ function CreateOutingSheet({
   }
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="Start an outing">
+    <Sheet visible={visible} onClose={onClose} title="New outing">
       <View style={styles.iconRow}>
         {OUTING_ICONS.map((choice) => (
           <Pressable

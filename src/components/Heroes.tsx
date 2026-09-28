@@ -1,10 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Line, Polygon, Polyline } from 'react-native-svg';
+import Svg, {
+  Circle,
+  Defs,
+  Line,
+  LinearGradient,
+  Polygon,
+  Polyline,
+  Stop,
+} from 'react-native-svg';
 import { AnimatedMoney, FadeSlideIn, useReducedMotion } from './motion';
 import { formatMoney, formatMoneyCompact } from '../utils/format';
 import { layer, palette, place, spacing, typography } from '../theme/theme';
 import { MASK } from '../security/MoneyReveal';
+import { Glow } from './ui';
 
 /**
  * One hero shape per tab, so each tab is recognisable before you read a word
@@ -23,6 +32,9 @@ import { MASK } from '../security/MoneyReveal';
  * the chart teal. People's faces take the money colours instead — green for
  * owed to you, amber for what you owe — because there the colour is the news.
  * The numeral stays ink everywhere: the number is the hero, colour frames it.
+ *
+ * Since 0.9.25 each hero stands in a faint glow of that same hue (`Glow`),
+ * the one piece of depth on an otherwise flat page.
  *
  * Each shape arrives the way it means: the chart
  * draws left to right, faces step in one by one. Once, on first show, and
@@ -127,6 +139,7 @@ export function PlansHero({
 }) {
   return (
     <View style={styles.hero}>
+      <Glow color={place.plans} />
       <Figure amount={amount} label={label} hue={place.plans} />
       <Words line={line} meta={meta} />
     </View>
@@ -202,9 +215,17 @@ export function ChartHero({
         }}
       >
         <Svg width={width} height={CHART_HEIGHT}>
+          {/* The area under the line fades to the floor, so the chart has
+              weight near the line and none at the axis. */}
+          <Defs>
+            <LinearGradient id="wealthFill" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={place.wealth} stopOpacity={0.24} />
+              <Stop offset="1" stopColor={place.wealth} stopOpacity={0} />
+            </LinearGradient>
+          </Defs>
           <Polygon
             points={`${points[0].x},${floor} ${path} ${last.x},${floor}`}
-            fill={layer(place.wealth, 0.1)}
+            fill="url(#wealthFill)"
           />
           <Line x1={0} y1={floor} x2={width} y2={floor} stroke={palette.border} strokeWidth={1} />
           <Polyline
@@ -223,6 +244,7 @@ export function ChartHero({
 
   return (
     <View style={styles.hero}>
+      <Glow color={place.wealth} />
       <Figure amount={amount} label={label} hue={place.wealth} masked={masked} onReveal={onReveal} />
       {enough ? (
         <View
@@ -282,6 +304,7 @@ export function FacesHero({
 
   return (
     <View style={styles.hero}>
+      <Glow color={place.people} />
       <Figure amount={amount} label={label} hue={place.people} />
       {open.length > 0 ? (
         <View style={styles.faces}>
@@ -354,10 +377,16 @@ const styles = StyleSheet.create({
   faces: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md, flexWrap: 'wrap' },
   faceColumn: { alignItems: 'center', gap: spacing.xs },
   face: { alignItems: 'center', justifyContent: 'center' },
-  // Owed to you: a filled green face. You owe: an amber ring, the thing to act on.
-  faceOwesYou: { backgroundColor: palette.good },
+  // Owed to you: a green ring over a green wash. You owe: an amber ring
+  // alone, the thing to act on. Both are rings since 0.9.25; a solid green
+  // disc was the loudest thing on the tab.
+  faceOwesYou: {
+    borderWidth: 1.5,
+    borderColor: palette.good,
+    backgroundColor: layer(palette.good, 0.14),
+  },
   faceYouOwe: { borderWidth: 1.5, borderColor: palette.warning },
-  initials: { ...typography.bodyBold, color: palette.background },
+  initials: { ...typography.bodyBold, color: palette.good },
   initialsYouOwe: { color: palette.warning },
   faceAmount: { ...typography.caption },
   good: { color: palette.good },

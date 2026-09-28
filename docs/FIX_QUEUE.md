@@ -12,6 +12,15 @@ rather than ship one at a time. Tick them off as they land and note the version.
       reserves, plan/SIP reserve, cushion). It may be a real double count, or it may only need a
       clearer label. First flagged in the 0.9.14 pass.
 
+- [ ] **Months verdict can contradict itself.** Found 2026-09-29 in the 0.9.25 polish pass.
+      `compareMonths` (`src/math/insights.ts`) divides by *active* days, meaning days that had any
+      spending. It then projects the month as pace × 30. A month with quiet days therefore reads
+      "slower than usual" and "heading for" a total above every past month, both at once. Seed data
+      shows it: Sep ₹10,190 so far, "59% slower than usual, heading for ₹17,982". Proposed fix: pace
+      per *elapsed calendar day* (days in the month so far; a past month counts all its days), and
+      project on that. Real UPI users with near-daily spending see this much less. Needs the test
+      "compares per active day" in `tests/insightsHistory.test.ts` rewritten, so ask first.
+
 ## Redesigns (need the user's input first)
 
 Before building either one, ask the user what they want (MCQ with mock-ups). Don't design them blind.

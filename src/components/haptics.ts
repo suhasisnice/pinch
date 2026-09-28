@@ -20,6 +20,8 @@ function perform(type: Haptics.AndroidHaptics) {
 export const haptic = {
   /** A choice changed: a chip, a tab, a segment. */
   tick: () => perform(Haptics.AndroidHaptics.Segment_Tick),
+  /** A finger sliding along a chart crossed into the next bar. The lightest tick there is. */
+  scrub: () => perform(Haptics.AndroidHaptics.Segment_Frequent_Tick),
   /** A switch flipped. */
   toggle: (on: boolean) =>
     perform(on ? Haptics.AndroidHaptics.Toggle_On : Haptics.AndroidHaptics.Toggle_Off),

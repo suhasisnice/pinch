@@ -14,6 +14,7 @@ import {
   type RefreshControlProps,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import {
   elevation,
   layer,
@@ -886,15 +887,19 @@ export function Hero({
   line,
   meta,
   color = palette.textPrimary,
+  glow,
 }: {
   amount: number;
   label?: string;
   line?: string;
   meta?: string;
   color?: string;
+  /** A faint light behind the figure, in the tab's or the verdict's hue. */
+  glow?: string;
 }) {
   return (
     <View style={styles.hero}>
+      {glow ? <Glow color={glow} /> : null}
       <AnimatedMoney
         amount={amount}
         style={[styles.heroNumeral, { color }]}
@@ -904,6 +909,29 @@ export function Hero({
       {label ? <Text style={styles.heroLabel}>{label}</Text> : null}
       {line ? <Text style={styles.heroLine}>{line}</Text> : null}
       {meta ? <Text style={styles.heroMeta}>{meta}</Text> : null}
+    </View>
+  );
+}
+
+/**
+ * Light falling on the page behind a hero (0.9.25): a wide, soft ellipse that
+ * fades to nothing, so the figure sits in a little depth instead of on flat
+ * black. Kept faint on purpose; if you can see where it ends it is too much.
+ */
+export function Glow({ color, strength = 0.12 }: { color: string; strength?: number }) {
+  const id = `glow${React.useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  return (
+    <View pointerEvents="none" style={styles.glow}>
+      <Svg width="100%" height="100%">
+        <Defs>
+          <RadialGradient id={id} cx="50%" cy="50%" r="50%">
+            <Stop offset="0" stopColor={color} stopOpacity={strength} />
+            <Stop offset="0.55" stopColor={color} stopOpacity={strength * 0.35} />
+            <Stop offset="1" stopColor={color} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Rect width="100%" height="100%" fill={`url(#${id})`} />
+      </Svg>
     </View>
   );
 }
@@ -972,10 +1000,13 @@ const styles = StyleSheet.create({
   buttonFilled: { backgroundColor: palette.textPrimary },
   // Spec: "Secondary: Dark pill" — not a green tint (see labelColor above).
   buttonTonal: { backgroundColor: palette.surfaceElevated },
+  // Lit from above, like a key on a Raycast keyboard: the top edge a shade
+  // brighter than the sides, and the faintest wash of ink inside.
   buttonOutlined: {
-    backgroundColor: 'transparent',
+    backgroundColor: layer(palette.textPrimary, 0.03),
     borderWidth: 1,
     borderColor: palette.border,
+    borderTopColor: layer(palette.textPrimary, 0.16),
   },
   buttonText: { backgroundColor: 'transparent', paddingHorizontal: spacing.md },
   buttonDanger: { backgroundColor: palette.dangerMuted },
@@ -1077,6 +1108,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderBottomWidth: 0,
     borderColor: palette.border,
+    // The top edge catches a little light, so the sheet reads as lifted
+    // above the page rather than pasted onto it.
+    borderTopColor: layer(palette.textPrimary, 0.12),
     maxHeight: '88%',
     paddingBottom: spacing.lg,
   },
@@ -1117,6 +1151,14 @@ const styles = StyleSheet.create({
   topBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 36 },
   topBarText: { ...typography.overline, color: palette.textMuted },
   hero: { alignItems: 'center', paddingVertical: spacing.xl, gap: 2 },
+  // Wider than the hero and bled past its edges, so the light has no border.
+  glow: {
+    position: 'absolute',
+    top: -spacing.lg,
+    bottom: -spacing.lg,
+    left: -spacing.gutter,
+    right: -spacing.gutter,
+  },
   heroNumeral: {
     ...typography.numeral,
     fontSize: 64,

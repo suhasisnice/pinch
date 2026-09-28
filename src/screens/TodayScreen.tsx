@@ -427,7 +427,7 @@ export default function TodayScreen() {
         </Group>
       ) : null}
 
-      <Group title="The month">
+      <Group title="This month">
         <SentenceRow
           onPress={() => setBreakdownVisible(true)}
           text={`${formatMoney(periodLeft)} left for ${snapshot.daysRemaining} days`}

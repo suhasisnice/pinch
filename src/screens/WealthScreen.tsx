@@ -157,6 +157,7 @@ export default function WealthScreen() {
         left="Wealth"
         action={{
           label: snap.plan.enabled ? 'Your split' : 'Pay yourself first',
+          icon: snap.plan.enabled ? 'edit' : 'savings',
           onPress: () => setPlanOpen(true),
         }}
       />
@@ -215,7 +216,7 @@ export default function WealthScreen() {
         )}
       </Section>
 
-      <Section title="The habit">
+      <Section title="Saving rate">
         <Text style={styles.habitLine}>{habitLine(snap.habit)}</Text>
         <HabitBars habit={snap.habit} />
         {kept > 0.009 ? (
@@ -227,7 +228,7 @@ export default function WealthScreen() {
       </Section>
 
       {snap.insight ? (
-        <Section title="Small change, big number">
+        <Section title="In ten years">
           <Text style={styles.insight}>
             {snap.insight.category} spending runs about{' '}
             {formatMoney(Math.round(snap.insight.monthly / 10) * 10)} a month. Keep a quarter of it,{' '}
@@ -237,7 +238,7 @@ export default function WealthScreen() {
         </Section>
       ) : null}
 
-      <Group title="The ladder">
+      <Group title="Ladder">
         <Rung
           n={1}
           title="A cushion"
@@ -570,7 +571,7 @@ function Projection({
   const putInTen = worth + monthly * 120;
 
   return (
-    <Section title="If you leave it alone">
+    <Section title="Projection">
       <Text style={styles.projectionLine}>
         {monthly > 0
           ? `Keep ${formatMoney(monthly)} a month going and in ten years it could be around ${formatMoneyCompact(ten)} — ${formatMoneyCompact(putInTen)} put in by you, the rest patience.`
@@ -884,7 +885,7 @@ function CushionSheet({
   }
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="The cushion">
+    <Sheet visible={visible} onClose={onClose} title="Cushion">
       <Text style={styles.sheetLead}>
         {formatMoney(cushion.savedAmount)} of {formatMoney(cushion.targetAmount)}. It stays in your
         account, just spoken for — so a bad week never means selling investments.
