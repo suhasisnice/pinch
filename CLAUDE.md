@@ -14,27 +14,34 @@ To find a file, read `docs/CODEMAP.md` (can be stale; the code wins) or run
 
 ## Team: hand work down, first match wins
 
-Claude (Pro) is the brain: anything needing thought, the protected code, and the final say on
-what gets committed. Antigravity does the mundane, back-and-forth work (UI polish, tests, docs;
-the user may iterate with `agy` directly, then I review the diff). Every diff, mine too, gets a
-second-opinion review. Copilot is parked until the user's Copilot Student plan activates
-(`audit`, `copilot:write` scripts stay ready). Protected (Claude only):
-`src/math`, `src/db` (incl. migrations), capture/parser/classification services, `src/security`,
-`modules/pinch-capture`, backup/erase. Helpers never commit or push.
+Labour goes to helpers, smart work stays with Claude (Pro): design, money logic, protected code,
+hard bugs, and the final say on what gets committed. Hand labour down first; do it myself only
+after a helper failed twice (second try with a narrower prompt), and say so.
+Protected (Claude only): `src/math`, `src/db` (incl. migrations), capture/parser/classification
+services, money services, `smsPrivacy`, `src/security`, `modules/pinch-capture`, backup/erase.
+Helpers never commit or push. Copilot is parked until Copilot Student activates.
+
+The two labour workers:
+- **Antigravity** (`agy`, Gemini 3.1 Pro on the student plan): the stronger one. Headless it reads
+  and edits files but can run NO shell command (every command is auto-denied), so tell it
+  "use only your file tools". The user may also iterate with `agy` directly; then I review the diff.
+- **Free worker** (`scripts/free.js`: Claude Code on the first free Gemini that answers): weaker and
+  sometimes out of quota, but runs git and the test scripts; protected paths are denied by rule.
 
 | Job | Call | If it fails |
 |---|---|---|
 | Real SMS, phone logs, user data | `npm run llm -- log -` (local) | do it myself; never send it out |
-| Edit screens, components, copy, tests, docs, refactors outside protected code | `npm run gem:edit -- "<task>"` (Antigravity, Gemini 3.1 Pro) | do it myself |
-| Review a diff before commit | `npm run review` (diff to Gemini, no tools) | `/code-review` |
-| Read or explain a lot of code, second opinion | `npm run gem -- "<task>"` (read-only) | `npm run llm -- ask --cloud` |
+| Edit screens, components, copy, tests, docs outside protected code | `npm run gem:edit -- "<task>"` | `npm run free:edit -- "<task>"` |
+| Labour that needs git or tests (check a change, find a failing test, trace history) | `npm run free -- "<task>"` | `npm run gem -- "<task>"` with files I name |
+| Review a diff before commit | `npm run review` (free worker runs git itself) | `npm run review:quick` (diff to Gemini, no tools), else `/code-review` |
+| Read or explain a lot of code, second opinion | `npm run gem -- "<task>"` (read-only) | `npm run free -- "<task>"` |
 | Quick, low-stakes answer only (summary, commit explainer, brief) | `npm run llm -- <job> --cloud` | same job without `--cloud` |
 
-Headless `agy` cannot ask for command permissions, so it gives up when it wants a shell command
-outside the allow list in `~/.gemini/antigravity-cli/settings.json`: then do it myself.
-One editor at a time. Before a helper edits, note `git status`; after, read `git diff --name-only`.
-A change inside protected code is reverted and redone by me. Then `test:q` + `typecheck`, then
-`review`; I decide what is committed. Helper output is a draft, never trusted blind.
+Free models (quota resets daily; spikes pass in minutes) and helpers are slow (20s-3min), so run
+them in the background and keep thinking. One editor at a time: before a helper edits, note
+`git status`; after, read `git diff --name-only`. A change inside protected code is reverted and
+redone by me. Then `test:q` + `typecheck`, then `review`; I decide what is committed.
+Helper output is a draft, never trusted blind.
 
 ## Specification hierarchy
 
