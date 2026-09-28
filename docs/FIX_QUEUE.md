@@ -21,6 +21,41 @@ rather than ship one at a time. Tick them off as they land and note the version.
       project on that. Real UPI users with near-daily spending see this much less. Needs the test
       "compares per active day" in `tests/insightsHistory.test.ts` rewritten, so ask first.
 
+## Built but never shown (scan of 2026-09-29, to discuss)
+
+These are backend features that no screen reaches. The scan script is `orphans.js` in the session
+scratchpad: an export counts as "shown" if a screen, component or navigator uses it, directly or
+through live backend code. 88 exports came up. Most are tuning constants or helpers only tests use,
+and those are fine. These are the ones that matter:
+
+- [ ] **Settle-up reminders never fire.** Settings has a working toggle (`settleRemindersEnabled`), and
+      `planSettleReminder` in `notifications/engine.ts` is built and tested, but nothing ever calls it.
+      The switch does nothing.
+- [ ] **A wrong self-transfer can't be undone.** Transfers are paired automatically, and the detail
+      sheet shows "Transfer". `unmarkTransfer` exists but only tests use it. A mis-paired UPI payment
+      disappears from spending, and the user can't bring it back.
+- [ ] **Learned payee aliases are invisible.** Capture learns aliases (`addContactAlias`, in
+      `captureService.ts:943`), but there is no screen to see or remove them (`getContactAliases`),
+      so a bad alias keeps mis-attributing payments.
+- [ ] **No "try again" for a rejected message.** `reprocessRawEvent` re-runs the parser on stored
+      evidence, but no screen offers it. Settings' "revalidate history" covers some of this.
+- [ ] **Bank balance history is kept but never drawn.** `getBalanceHistory` and
+      `getLatestBalanceSnapshot` are unused; Today and Wealth read `getBalanceState` only.
+- [ ] **Outing reserve history** (`getReserveHistory`): stored, never shown.
+- [ ] **Split "exact amounts" suggestion** (`suggestExactAmounts`): built and tested, and SplitModal
+      doesn't use it.
+- [ ] **Budget preview during onboarding** (`budgetPreview`): built and tested, never shown.
+- [ ] **Date presets for the transaction filter** (`resolveDateRange`): built and tested, and
+      Transactions has no date filter.
+- [ ] **Probably dead code (remove after a check):**
+  - the pre-0.9.21 categoriser (`categoriseMerchant`, `smartCategoriseMerchant`,
+    `getCategoryTokenWeights`)
+  - `findTransfers` (not even tested)
+  - `findStaleCaptures`
+  - `updateBudgetPeriod`
+  - `setTransactionStatus`
+  - `getIOUById`, `getContactById`, `getOutingById`
+
 ## Redesigns (need the user's input first)
 
 Before building either one, ask the user what they want (MCQ with mock-ups). Don't design them blind.
