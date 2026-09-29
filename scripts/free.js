@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Free labour: Claude Code run headless on a free Gemini model through the
+ * Free labour: Claude Code run headless on a free model (Codestral, then Gemini Flash-Lite) through the
  * local OmniRoute gateway (`omniroute` running; key from OMNIROUTE_KEY or the
  * Windows user environment). See CLAUDE.md "Team".
  *
@@ -14,7 +14,7 @@
  * kept out of reach by deny rules, not by asking nicely. It never commits.
  * Output is a draft from a small model: check it.
  *
- * Free Gemini limits are per minute and per day, so every request counts: the
+ * Free limits are per minute and per day, so every request counts: the
  * worker is told to batch its tool calls, background chatter is switched off,
  * and a short cooldown is waited out instead of burning the next model.
  */
@@ -23,12 +23,21 @@ const { spawn, execFileSync } = require('child_process');
 const { OMNIROUTE, omniKey } = require('./omniroute');
 
 /**
- * Smartest first. Only Gemini is here: on 2026-09-29 Groq's free tier rejected
- * Claude Code's prompt as too large, and the other catalogue providers have no
- * account behind them. `gemini/…` ids print a harmless `unrecognized_model` line.
+ * Codestral first: it answers in seconds and its free Mistral quota is the
+ * largest we have. Flash-Lite is the fallback. Gemini 3.6-3.8 Flash are gone:
+ * about 1 call in 15 got through (2026-09-28/29), and a probe that passed was
+ * followed by a quota 429 that Claude Code retried for ten minutes. Groq's free
+ * tier rejects Claude Code's prompt as too large; the other Mistral chat models
+ * are rate-limited on this key; every Ollama Cloud model tried is paid, and one
+ * paid call locks the whole connection. See docs/HELPER_LOG.md.
  */
-const MODELS = ['gemini/gemini-3.8-flash', 'gemini/gemini-3.7-flash', 'gemini/gemini-3.6-flash', 'gemini/gemini-3.1-flash-lite'];
+const MODELS = ['mistral/codestral-latest', 'gemini/gemini-3.1-flash-lite'];
 const CHEAP = 'gemini/gemini-3.1-flash-lite';
+/**
+ * Compact at 128k whatever the model's window: every turn resends the whole
+ * context against a per-minute token quota, and Mistral's window is 128k anyway.
+ */
+const COMPACT_WINDOW = '128000';
 /** A cooldown this short is cheaper to wait out than to fall to a weaker model. */
 const MAX_WAIT_S = 90;
 /** Model runs per job. A second run only happens when the first changed nothing. */
@@ -61,14 +70,18 @@ const KEY = omniKey();
 const sleep = (s) => new Promise((r) => setTimeout(r, s * 1000));
 const treeState = () => execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' });
 
-/** One tiny request on the same endpoint Claude Code uses. Returns 'ok', a cooldown in seconds, or null. */
+/**
+ * One tiny request on the same endpoint Claude Code uses. Returns 'ok', a cooldown
+ * in seconds, or null. 15s is enough: the gateway spends ~30s retrying a model
+ * that is rate-limited, and that model is not worth the wait.
+ */
 async function probe(model) {
   try {
     const res = await fetch(`${OMNIROUTE}/v1/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': KEY, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({ model, max_tokens: 5, messages: [{ role: 'user', content: 'hi' }] }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(15_000),
     });
     if (res.ok) return 'ok';
     const body = await res.json().catch(() => ({}));
@@ -77,7 +90,7 @@ async function probe(model) {
     return res.status === 429 && wait ? wait : null;
   } catch (e) {
     if (e.name !== 'TimeoutError') throw e;
-    console.error(`${model}: no answer in 30s`);
+    console.error(`${model}: no answer in 15s`);
     return null;
   }
 }
@@ -102,9 +115,13 @@ async function liveModel(models) {
 function run(model, task) {
   const tools = job === 'edit' ? [...READ_TOOLS, 'Edit', 'Write'] : READ_TOOLS;
   // A model that gets busy mid-run hands over to Flash-Lite instead of failing the job.
-  const fallback = model === CHEAP ? [] : ['--fallback-model', 'haiku'];
-  const child = spawn('claude', ['-p', '--model', 'sonnet', ...fallback, '--max-turns', '40',
-    '--output-format', 'json', '--append-system-prompt', FRUGAL,
+  const fallback = model === CHEAP ? [] : ['--fallback-model', CHEAP];
+  // Claude Code asks every model for adaptive thinking at high effort. Mistral
+  // rejects that with a 400 (once hidden by the fallback), so only Gemini gets it.
+  const quiet = model.startsWith('gemini/') ? {} : { CLAUDE_CODE_DISABLE_THINKING: '1', CLAUDE_CODE_EFFORT_LEVEL: 'auto' };
+  // No user settings: user plugins and hooks would add tokens to every turn.
+  const child = spawn('claude', ['-p', '--model', model, ...fallback, '--max-turns', '40',
+    '--setting-sources', 'project,local', '--output-format', 'json', '--append-system-prompt', FRUGAL,
     '--tools', tools.map((t) => t.replace(/\(.*$/, '')).filter((t, i, a) => a.indexOf(t) === i).join(','),
     '--allowedTools', tools.join(','), '--disallowedTools', DENY.join(',')], {
     stdio: ['pipe', 'pipe', 'inherit'],
@@ -118,6 +135,10 @@ function run(model, task) {
       ANTHROPIC_DEFAULT_HAIKU_MODEL: CHEAP,
       // No title generation, update checks or telemetry: they would spend the same quota.
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+      CLAUDE_CODE_AUTO_COMPACT_WINDOW: COMPACT_WINDOW,
+      // A quota 429 is retried about once a minute; give up soon and try the next model.
+      CLAUDE_CODE_MAX_RETRIES: '2',
+      ...quiet,
     },
   });
   let out = '';
@@ -127,6 +148,8 @@ function run(model, task) {
     let r = {};
     try { r = JSON.parse(out); } catch { /* a crash prints no JSON */ }
     const text = typeof r.result === 'string' ? r.result.trim() : '';
+    // A silent fallback once passed Flash-Lite's work off as Codestral's.
+    if (r.modelUsage) console.error(`free: answered by ${Object.keys(r.modelUsage).join(', ')}`);
     if (!r.is_error && text) return resolve(text);
     console.error(`${model}: run failed (${r.subtype ?? 'no result'}, ${r.num_turns ?? 0} turns)${text ? `: ${text.slice(0, 300)}` : ''}`);
     resolve(null);
@@ -147,7 +170,9 @@ async function main() {
     console.error('The task is empty.');
     return 2;
   }
-  let models = process.env.PINCH_FREE_MODEL ? [process.env.PINCH_FREE_MODEL] : MODELS;
+  // Codestral answered the review prompt with a one-line greeting and no tool calls; Flash-Lite reviews.
+  let models = process.env.PINCH_FREE_MODEL ? [process.env.PINCH_FREE_MODEL]
+    : job === 'review' ? [CHEAP, ...MODELS.filter((m) => m !== CHEAP)] : MODELS;
   const before = treeState();
   for (let runs = 0; runs < MAX_RUNS; runs++) {
     let model;

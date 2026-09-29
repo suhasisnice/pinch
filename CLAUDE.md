@@ -22,7 +22,7 @@ services, money services, `smsPrivacy`, `src/security`, `modules/pinch-capture`,
 Helpers never commit or push. Copilot is parked until Copilot Student activates.
 
 The labour workers, in the order I reach for them:
-- **Free worker** (`scripts/free.js`: headless Claude Code on the first free Gemini that answers): the
+- **Free worker** (`scripts/free.js`: headless Claude Code on free Codestral, then Gemini Flash-Lite): the
   default for labour. Runs git and the test scripts; protected paths are denied by rule. It waits out
   a short cooldown, retries once on another model if a run fails without touching files, and exits 1
   when nothing finished, so a silent pass means it worked.
