@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Free labour: Claude Code run headless on a free model (Codestral, then Gemini Flash-Lite) through the
+ * Free labour: Claude Code run headless on a free model (see MODELS) through the
  * local OmniRoute gateway (`omniroute` running; key from OMNIROUTE_KEY or the
  * Windows user environment). See CLAUDE.md "Team".
  *
@@ -24,15 +24,20 @@ const { OMNIROUTE, omniKey } = require('./omniroute');
 
 /**
  * Codestral first: it answers in seconds and its free Mistral quota is the
- * largest we have. Flash-Lite is the fallback. Gemini 3.6-3.8 Flash are gone:
+ * largest we have. Nemotron 3 Ultra (Ollama Cloud) is more careful but slower
+ * and its free credits are monthly; Flash-Lite is the last resort. Gemini 3.6-3.8 Flash are gone:
  * about 1 call in 15 got through (2026-09-28/29), and a probe that passed was
  * followed by a quota 429 that Claude Code retried for ten minutes. Groq's free
  * tier rejects Claude Code's prompt as too large; the other Mistral chat models
- * are rate-limited on this key; every Ollama Cloud model tried is paid, and one
- * paid call locks the whole connection. See docs/HELPER_LOG.md.
+ * are rate-limited on this key. Only Ollama's free models may go here (gemma4,
+ * gpt-oss, nemotron-3): one call to a paid one locks the whole connection.
+ * See docs/HELPER_LOG.md.
  */
-const MODELS = ['mistral/codestral-latest', 'gemini/gemini-3.1-flash-lite'];
+const NEMOTRON = 'ollama-cloud/nemotron-3-ultra';
+const MODELS = ['mistral/codestral-latest', NEMOTRON, 'gemini/gemini-3.1-flash-lite'];
 const CHEAP = 'gemini/gemini-3.1-flash-lite';
+/** Codestral answered the review prompt with a one-line greeting and no tool calls. */
+const REVIEWERS = [CHEAP, NEMOTRON];
 /**
  * Compact at 128k whatever the model's window: every turn resends the whole
  * context against a per-minute token quota, and Mistral's window is 128k anyway.
@@ -170,9 +175,7 @@ async function main() {
     console.error('The task is empty.');
     return 2;
   }
-  // Codestral answered the review prompt with a one-line greeting and no tool calls; Flash-Lite reviews.
-  let models = process.env.PINCH_FREE_MODEL ? [process.env.PINCH_FREE_MODEL]
-    : job === 'review' ? [CHEAP, ...MODELS.filter((m) => m !== CHEAP)] : MODELS;
+  let models = process.env.PINCH_FREE_MODEL ? [process.env.PINCH_FREE_MODEL] : job === 'review' ? REVIEWERS : MODELS;
   const before = treeState();
   for (let runs = 0; runs < MAX_RUNS; runs++) {
     let model;
