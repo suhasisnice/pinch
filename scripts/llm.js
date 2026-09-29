@@ -43,9 +43,9 @@ const THINK = process.env.PINCH_LLM_THINK || 'low';
 const KEEP_ALIVE = '30m';
 const CLOUD = process.argv.includes('--cloud');
 /** Tried in order: a free-tier model is sometimes busy (503) or out of quota (429).
+ * Same chain as free.js (see there for why Gemini Flash is gone).
  * Groq's free tier takes about 8k tokens a minute, so it only gets small inputs (413 otherwise). */
-const CLOUD_MODELS = ['gemini/gemini-3.8-flash', 'gemini/gemini-3.7-flash', 'gemini/gemini-3.6-flash',
-  'gemini/gemini-3.1-flash-lite', 'groq/openai/gpt-oss-120b'];
+const CLOUD_MODELS = ['mistral/codestral-latest', 'gemini/gemini-3.1-flash-lite', 'groq/openai/gpt-oss-120b'];
 const GROQ_MAX_CHARS = 20_000;
 /** Input budget in characters: what an 8 GB GPU handles well, or far more for Gemini. */
 const MAX_INPUT = CLOUD ? 400_000 : 24_000;
