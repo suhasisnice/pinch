@@ -152,11 +152,25 @@ export default function ReimburseLinkSheet({
         </Text>
       </View>
 
+      <Button
+        label={
+          saving
+            ? 'Linking…'
+            : selected.length - idle.length > 1
+              ? `Link ${selected.length - idle.length} payments`
+              : 'Link'
+        }
+        onPress={save}
+        disabled={!complete || saving || selected.length === idle.length}
+      />
+      {wasLinked ? (
+        <Button label="Not a repayment — unlink" variant="ghost" onPress={unlink} />
+      ) : null}
       {candidates === null ? (
         <Loading />
       ) : candidates.length === 0 ? (
         <Text style={styles.empty}>
-          No spending in the 60 days before this arrived to link it to.
+          No spending within 60 days of this to link it to.
         </Text>
       ) : (
         <>
@@ -172,7 +186,7 @@ export default function ReimburseLinkSheet({
           ))}
           {rest.length > 0 ? (
             <Text style={styles.groupLabel}>
-              {suggested.length > 0 ? 'Everything else' : 'Before it arrived'}
+              {suggested.length > 0 ? 'Everything else' : 'Your spending'}
             </Text>
           ) : null}
           {rest.map((candidate) => (
@@ -187,25 +201,11 @@ export default function ReimburseLinkSheet({
         </>
       )}
 
-      <Button
-        label={
-          saving
-            ? 'Linking…'
-            : selected.length - idle.length > 1
-              ? `Link ${selected.length - idle.length} payments`
-              : 'Link'
-        }
-        onPress={save}
-        disabled={!complete || saving || selected.length === idle.length}
-      />
-      {wasLinked ? (
-        <Button label="Not a repayment — unlink" variant="ghost" onPress={unlink} />
-      ) : null}
     </Sheet>
   );
 }
 
-function Figure({
+export function Figure({
   label,
   amount,
   tone,
@@ -229,16 +229,21 @@ function Figure({
   );
 }
 
-function CandidateRow({
+export function CandidateRow({
   candidate,
   selected,
   covers,
   onPress,
+  incoming = false,
 }: {
-  candidate: ReimbursementCandidate;
+  candidate: Pick<ReimbursementCandidate, 'merchant' | 'amount' | 'occurredAt'> & {
+    category?: string | null;
+  };
   selected: boolean;
   covers: number;
   onPress: () => void;
+  /** The row is money in (NetOutSheet): a plus sign, no category, never struck out. */
+  incoming?: boolean;
 }) {
   const partial = selected && covers > 0.009 && covers < candidate.amount - 0.009;
   const idle = selected && covers <= 0.009;
@@ -267,9 +272,11 @@ function CandidateRow({
             ? 'Nothing left over for this one'
             : partial
               ? `${formatMoney(covers)} of it paid back`
-              : [shortDate(candidate.occurredAt), candidate.category ?? 'Uncategorised'].join(
-                  ' · '
-                )}
+              : incoming
+                ? shortDate(candidate.occurredAt)
+                : [shortDate(candidate.occurredAt), candidate.category ?? 'Uncategorised'].join(
+                    ' · '
+                  )}
         </Text>
       </View>
       {/* Struck through only when fully paid back — the visual "gone" the
@@ -277,10 +284,12 @@ function CandidateRow({
       <Text
         style={[
           styles.candidateAmount,
-          selected && !idle && !partial && styles.candidateAmountStruck,
+          incoming && { color: palette.good },
+          selected && !idle && !partial && !incoming && styles.candidateAmountStruck,
         ]}
       >
-        −{formatMoney(candidate.amount)}
+        {incoming ? '+' : '−'}
+        {formatMoney(candidate.amount)}
       </Text>
     </Pressable>
   );
@@ -292,7 +301,7 @@ function shortDate(iso: string): string {
   return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
-const styles = StyleSheet.create({
+export const styles = StyleSheet.create({
   hero: { alignItems: 'center', gap: 2 },
   from: { ...typography.body, color: palette.textSecondary },
   incoming: { ...typography.display, color: palette.textPrimary },

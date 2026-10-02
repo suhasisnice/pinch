@@ -27,6 +27,8 @@
     "test:watch": "jest --watch",
     "test:q": "jest --silent --reporters=summary",
     "apk:debug": "npm run android:sdk && node scripts/android-sync.js && node scripts/gradle.js assembleDebug",
+    "corpus:label": "node scripts/label-corpus.js",
+    "corpus:score": "jest tests/corpus.test.ts",
     "phone": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/copy-to-phone.ps1",
     "apk": "npm run android:sdk && node scripts/android-sync.js && node scripts/gradle.js assembleRelease",
     "apk:clean": "npm run native:prebuild && node scripts/gradle.js assembleRelease",

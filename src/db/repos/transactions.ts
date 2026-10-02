@@ -587,6 +587,44 @@ export async function findUnconfirmedDuplicate(
   );
 }
 
+export interface LookalikePair {
+  firstId: number;
+  secondId: number;
+  amount: number;
+  firstMerchant: string;
+  secondMerchant: string;
+  firstAt: string;
+  secondAt: string;
+}
+
+/**
+ * Pairs already on the books that look like one payment reported twice: the
+ * same amount and direction, on different channels, up to two hours apart.
+ * That is too far apart for `findUnconfirmedDuplicate` to hold either back,
+ * so both are logged and this only raises a flag for the user to answer.
+ * Nothing is merged or removed here.
+ */
+export async function getLookalikePairs(sinceIso: string): Promise<LookalikePair[]> {
+  return getAdapter().getAllAsync<LookalikePair>(
+    `SELECT a.id AS firstId, b.id AS secondId, b.amount AS amount,
+            a.merchant AS firstMerchant, b.merchant AS secondMerchant,
+            a.occurred_at AS firstAt, b.occurred_at AS secondAt
+     FROM Transactions a
+     JOIN Transactions b
+       ON b.direction = a.direction AND abs(b.amount - a.amount) < 0.01
+      AND b.source <> a.source
+      AND (b.occurred_at > a.occurred_at OR (b.occurred_at = a.occurred_at AND b.id > a.id))
+      AND b.occurred_at <= strftime('%Y-%m-%dT%H:%M:%fZ', a.occurred_at, '+2 hours')
+     WHERE a.occurred_at >= ?
+       AND a.source IN ('SMS', 'NOTIFICATION') AND b.source IN ('SMS', 'NOTIFICATION')
+       AND a.excluded_at IS NULL AND b.excluded_at IS NULL
+       AND a.transfer_pair_id IS NULL AND b.transfer_pair_id IS NULL
+     ORDER BY b.occurred_at DESC
+     LIMIT 5;`,
+    [sinceIso]
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Self-transfers: money that moved between the user's own accounts.
 // ---------------------------------------------------------------------------

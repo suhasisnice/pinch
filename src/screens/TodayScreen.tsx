@@ -15,7 +15,9 @@ import { ingestPending } from '../services/captureService';
 import {
   getCushionGoalId,
   getDismissedDiscrepancy,
+  getKeptLookalikes,
   getMonthlyAllowance,
+  keepLookalike,
   getNotificationSettings,
   setDismissedDiscrepancy,
 } from '../settings/settingsStore';
@@ -42,6 +44,8 @@ import {
   typography,
 } from '../theme/theme';
 import { setTodayTone } from '../theme/todayTone';
+import LinkedGroupRow from '../components/LinkedGroupRow';
+import { ReimbursementLink, groupLinkedTransactions } from '../math/reimbursement';
 import {
   Button,
   Group,
@@ -56,11 +60,14 @@ import AddExpenseSheet from '../components/AddExpenseSheet';
 import SplitModal from '../components/SplitModal';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
 import MarkAsLoanSheet from '../components/MarkAsLoanSheet';
+import NetOutSheet from '../components/NetOutSheet';
 import FreshStartSheet from '../components/FreshStartSheet';
 import BudgetBreakdownSheet from '../components/BudgetBreakdownSheet';
 import ReconcileSheet from '../components/ReconcileSheet';
 import QuickReimburseSheet from '../components/QuickReimburseSheet';
-import BalanceCard from '../components/BalanceCard';
+import BalanceCard, { MoneyLine } from '../components/BalanceCard';
+import { showDialog } from '../components/Dialog';
+import type { LookalikePair } from '../db/repos/transactions';
 import AffordSheet from '../components/AffordSheet';
 import WeekStrip, { WeekDay } from '../components/WeekStrip';
 import Ring from '../components/Ring';
@@ -70,11 +77,15 @@ import Icon from '../components/Icon';
 /** Below this, "for someone?" is noise — a solo coffee is never a split. */
 const REIMBURSE_PROMPT_MIN = 200;
 
+const minutesApart = (pair: LookalikePair) =>
+  Math.round((Date.parse(pair.secondAt) - Date.parse(pair.firstAt)) / 60_000);
+
 export default function TodayScreen() {
   const navigation = useNavigation<any>();
   const { height: windowHeight } = useWindowDimensions();
   const [snapshot, setSnapshot] = useState<BudgetSnapshot | null>(null);
   const [today, setToday] = useState<TransactionRow[]>([]);
+  const [links, setLinks] = useState<ReimbursementLink[]>([]);
   const [balance, setBalance] = useState<Awaited<ReturnType<typeof db.getBalanceState>> | null>(
     null
   );
@@ -85,6 +96,7 @@ export default function TodayScreen() {
   const [splitFor, setSplitFor] = useState<TransactionRow | null>(null);
   const [detailFor, setDetailFor] = useState<TransactionRow | null>(null);
   const [loanFor, setLoanFor] = useState<TransactionRow | null>(null);
+  const [linkFor, setLinkFor] = useState<TransactionRow | null>(null);
   const [freshVisible, setFreshVisible] = useState(false);
   const [breakdownVisible, setBreakdownVisible] = useState(false);
   const [affordVisible, setAffordVisible] = useState(false);
@@ -93,6 +105,7 @@ export default function TodayScreen() {
   const [week, setWeek] = useState<WeekDay[]>([]);
   const [reconcileVisible, setReconcileVisible] = useState(false);
   const [showDiscrepancy, setShowDiscrepancy] = useState(false);
+  const [lookalikes, setLookalikes] = useState<LookalikePair[]>([]);
   const [recovery, setRecovery] = useState<RecoveryView | null>(null);
   const [patterns, setPatterns] = useState<WeekPatterns>({ callouts: [], caps: [] });
   const [voice, setVoice] = useState<Tone>('SAVAGE');
@@ -147,9 +160,18 @@ export default function TodayScreen() {
       cushionGoal ? { saved: cushionGoal.savedAmount, target: cushionGoal.targetAmount } : null
     );
     setToday(await db.getTransactionsBetween(start.toISOString(), end.toISOString()));
+    setLinks(await db.getReimbursementLinks());
     // One lookup for the whole day rather than one per row.
     setOwedByTx(await db.getOpenReceivableByTransaction());
     setWeek(await loadWeek(start));
+
+    const kept = await getKeptLookalikes();
+    const twoWeeksAgo = new Date(Date.now() - 14 * 86_400_000).toISOString();
+    setLookalikes(
+      (await db.getLookalikePairs(twoWeeksAgo)).filter(
+        (pair) => !kept.includes(`${pair.firstId}:${pair.secondId}`)
+      )
+    );
 
     // Dismissing one gap should not silence a different, larger one later.
     const dismissed = await getDismissedDiscrepancy();
@@ -205,6 +227,23 @@ export default function TodayScreen() {
     (worst, d) => (!d.isFuture && d.total > (worst?.total ?? 0) ? d : worst),
     null
   );
+
+  // Both rows are already logged; this only asks, and removes nothing unasked.
+  async function askLookalike(pair: LookalikePair) {
+    const answer = await showDialog({
+      title: 'Same payment twice?',
+      message: `${formatMoney(pair.amount)} is logged for ${pair.firstMerchant} and again for ${pair.secondMerchant}, ${minutesApart(pair)} min apart.`,
+      actions: [
+        { label: 'Keep both', value: 'keep', variant: 'secondary' },
+        { label: 'Remove the copy', value: 'remove', variant: 'danger' },
+      ],
+      dismissValue: null,
+    });
+    if (answer === 'remove') await db.setTransactionExcluded(pair.secondId, true);
+    else if (answer === 'keep') await keepLookalike(`${pair.firstId}:${pair.secondId}`);
+    else return;
+    load();
+  }
 
   return (
     <Screen
@@ -294,6 +333,7 @@ export default function TodayScreen() {
         </FadeSlideIn>
 
         <View style={styles.firstFooter}>
+          <TextLink label="All transactions" onPress={() => navigation.navigate('Transactions')} />
           {snapshot.pendingCaptures > 0 ? (
             <TextLink
               label={
@@ -329,7 +369,12 @@ export default function TodayScreen() {
         {today.length === 0 ? (
           <Text style={styles.empty}>Nothing yet. Frugal, or forgetful?</Text>
         ) : (
-          today.map((tx) => {
+          // A spend and what paid it back show as one line at the net, as in Transactions.
+          groupLinkedTransactions(today, links).map((item) => {
+            if (item.type === 'group') {
+              return <LinkedGroupRow key={`g${item.key}`} group={item} onOpen={setDetailFor} />;
+            }
+            const tx = item.transaction;
             const owed = owedByTx.get(tx.id);
             // Only spending can be owed back, and only once. Kept for amounts
             // big enough to plausibly have been for more than one person.
@@ -428,9 +473,19 @@ export default function TodayScreen() {
       ) : null}
 
       <Group title="This month">
-        <SentenceRow
+        {lookalikes.map((pair) => (
+          <SentenceRow
+            key={`${pair.firstId}:${pair.secondId}`}
+            tone={palette.warning}
+            onPress={() => askLookalike(pair)}
+            text={`${formatMoney(pair.amount)} shows up twice, ${minutesApart(pair)} min apart. Same payment?`}
+          />
+        ))}
+        <MoneyLine
+          title="Left in budget"
+          meta={`For the next ${snapshot.daysRemaining} days`}
+          value={periodLeft}
           onPress={() => setBreakdownVisible(true)}
-          text={`${formatMoney(periodLeft)} left for ${snapshot.daysRemaining} days`}
         />
         {snapshot.protectedMoney > 0.009 ? (
           <SentenceRow
@@ -553,6 +608,19 @@ export default function TodayScreen() {
         onMarkLoan={(tx) => {
           setDetailFor(null);
           setLoanFor(tx);
+        }}
+        onLinkReimbursement={(tx) => {
+          setDetailFor(null);
+          setLinkFor(tx);
+        }}
+      />
+
+      <NetOutSheet
+        transaction={linkFor}
+        onClose={() => setLinkFor(null)}
+        onSaved={() => {
+          setLinkFor(null);
+          load();
         }}
       />
 

@@ -37,12 +37,14 @@ import Icon from '../components/Icon';
 import FreshStartSheet from '../components/FreshStartSheet';
 import BackupSheet from '../components/BackupSheet';
 import { canUseAppLock, confirmIdentity } from '../security/AppLock';
+import ParserTester from '../components/ParserTester';
 import appConfig from '../../app.json';
 
 export default function SettingsScreen() {
   const navigation = useNavigation<any>();
   const [allowance, setAllowance] = useState('');
   const [periodDays, setPeriodDays] = useState('30');
+  const [devTools, setDevTools] = useState(false);
   const [notifications, setNotifications] = useState<NotificationSettings | null>(null);
   const [smsGranted, setSmsGranted] = useState(false);
   const [contactsGranted, setContactsGranted] = useState(false);
@@ -669,6 +671,12 @@ export default function SettingsScreen() {
         }}
       />
 
+      {devTools ? <ParserTester /> : null}
+      <Button
+        label={devTools ? 'Hide developer tools' : 'Developer tools'}
+        variant="ghost"
+        onPress={() => setDevTools((on) => !on)}
+      />
       {isCaptureAvailable ? (
         <Button label="Open app settings" variant="ghost" onPress={openAppSettings} />
       ) : null}

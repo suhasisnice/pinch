@@ -158,6 +158,10 @@ export default function LinkedGroupRow({
               </Text>
             </Pressable>
           ))}
+          <Text style={styles.summary}>
+            {`You paid ${formatMoney(group.moneyOut)}, got back ${formatMoney(group.moneyIn)}. `}
+            {even ? 'All square.' : `${moneyIn ? 'You are up' : 'Yours'}: ${formatMoney(Math.abs(group.net))}.`}
+          </Text>
         </Animated.View>
       ) : null}
     </View>
@@ -202,4 +206,5 @@ const styles = StyleSheet.create({
   },
   memberTitle: { ...typography.caption, color: palette.textSecondary, flex: 1 },
   memberAmount: { ...typography.caption, color: palette.textSecondary },
+  summary: { ...typography.caption, color: palette.textMuted, paddingVertical: spacing.xs },
 });

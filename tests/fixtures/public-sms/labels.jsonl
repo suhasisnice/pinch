@@ -1,0 +1,145 @@
+{"id": 1, "isTransaction": true, "amount": 1500.0, "direction": "CREDIT", "name": "RAHUL SHARMA"}
+{"id": 2, "isTransaction": true, "amount": 726.0, "direction": "DEBIT", "name": "RAHUL SHARMA"}
+{"id": 3, "isTransaction": true, "amount": 15000.0, "direction": "CREDIT", "name": null}
+{"id": 4, "isTransaction": true, "amount": 2499.0, "direction": "CREDIT", "name": "SAMPLESHOP IN"}
+{"id": 5, "isTransaction": true, "amount": 123.45, "direction": "DEBIT", "name": "SampleMerchant Store"}
+{"id": 6, "isTransaction": true, "amount": 15179.0, "direction": "CREDIT", "name": null}
+{"id": 7, "isTransaction": true, "amount": 50000.0, "direction": "CREDIT", "name": null}
+{"id": 8, "isTransaction": true, "amount": 230.0, "direction": "DEBIT", "name": "example@okbank"}
+{"id": 9, "isTransaction": true, "amount": 1000.0, "direction": "DEBIT", "name": "Samplestore"}
+{"id": 10, "isTransaction": false, "amount": 637.7, "direction": "DECLINED", "name": "ACME STORE"}
+{"id": 11, "isTransaction": true, "amount": 1250.0, "direction": "CREDIT", "name": "Mr RAHUL SHARMA"}
+{"id": 12, "isTransaction": true, "amount": 7.0, "direction": "DEBIT", "name": "RAHUL SHARMA"}
+{"id": 13, "isTransaction": true, "amount": 12345.0, "direction": "CREDIT", "name": "Payment received"}
+{"id": 14, "isTransaction": false, "amount": 12345.0, "direction": "CREDIT", "name": "Payment received"}
+{"id": 15, "isTransaction": true, "amount": 30.0, "direction": "DEBIT", "name": "CITY REALTY AND DEVELO"}
+{"id": 16, "isTransaction": true, "amount": 100.0, "direction": "CREDIT", "name": "CUSTOMER NAME-XXXXXXXXXX0000 - REMITTER NAME"}
+{"id": 17, "isTransaction": true, "amount": 12345.0, "direction": "CREDIT", "name": "Customer"}
+{"id": 18, "isTransaction": true, "amount": 100000.0, "direction": "DEBIT", "name": "Acct xxxxxxxxxx0000"}
+{"id": 19, "isTransaction": true, "amount": 123456.0, "direction": "DEBIT", "name": "Acct xxxxxxxxxx0000"}
+{"id": 20, "isTransaction": true, "amount": 123456.78, "direction": "DEBIT", "name": "Acct xxxxxxxxxx0000"}
+{"id": 21, "isTransaction": true, "amount": 100.0, "direction": "CREDIT", "name": "Sample Remitter Inc"}
+{"id": 22, "isTransaction": true, "amount": 100.0, "direction": "CREDIT", "name": "State-Bank Remitter"}
+{"id": 23, "isTransaction": true, "amount": 12345.67, "direction": "DEBIT", "name": null}
+{"id": 24, "isTransaction": true, "amount": 99999.99, "direction": "DEBIT", "name": null}
+{"id": 25, "isTransaction": true, "amount": 12345.67, "direction": "DEBIT", "name": null}
+{"id": 26, "isTransaction": true, "amount": 123456.0, "direction": "DEBIT", "name": null}
+{"id": 27, "isTransaction": true, "amount": 123456.78, "direction": "DEBIT", "name": null}
+{"id": 28, "isTransaction": false, "amount": 200000.0, "direction": "DEBIT", "name": "SAMPLE NAME"}
+{"id": 29, "isTransaction": true, "amount": 100000.0, "direction": "DEBIT", "name": "PPF/SSY A/c XX0000"}
+{"id": 30, "isTransaction": true, "amount": 1.0, "direction": "CREDIT", "name": "customer@bank"}
+{"id": 31, "isTransaction": true, "amount": 100.0, "direction": "DEBIT", "name": "CUSTOMER NAME"}
+{"id": 32, "isTransaction": true, "amount": 1.0, "direction": "DEBIT", "name": "a/c **5678"}
+{"id": 33, "isTransaction": true, "amount": 262.56, "direction": "CREDIT", "name": "SampleMerchant Payments BANGALORE IND"}
+{"id": 34, "isTransaction": true, "amount": 1000.0, "direction": "CREDIT", "name": null}
+{"id": 35, "isTransaction": false, "amount": 100.0, "direction": "CREDIT", "name": null}
+{"id": 36, "isTransaction": true, "amount": 1000.0, "direction": "CREDIT", "name": null}
+{"id": 37, "isTransaction": false, "amount": 100.0, "direction": "CREDIT", "name": null}
+{"id": 38, "isTransaction": true, "amount": 254.0, "direction": "CREDIT", "name": null}
+{"id": 39, "isTransaction": true, "amount": 2.0, "direction": "CREDIT", "name": "PAYZAPP0000000"}
+{"id": 40, "isTransaction": true, "amount": 100.0, "direction": "DEBIT", "name": "SpayBBPS 00000"}
+{"id": 41, "isTransaction": true, "amount": 10290.0, "direction": "DEBIT", "name": "EAZYDINE0000000"}
+{"id": 42, "isTransaction": true, "amount": 569.0, "direction": "DEBIT", "name": "RAZ*SampleFood"}
+{"id": 43, "isTransaction": true, "amount": 100.0, "direction": "DEBIT", "name": "URBAN BISTRO"}
+{"id": 44, "isTransaction": true, "amount": 100.0, "direction": "DEBIT", "name": "sample.vpa@hdfcbank"}
+{"id": 45, "isTransaction": true, "amount": 2.0, "direction": "CREDIT", "name": "PAYZAPP0000000"}
+{"id": 46, "isTransaction": true, "amount": 3000.0, "direction": "DEBIT", "name": "PZCREDIT0000000"}
+{"id": 47, "isTransaction": true, "amount": 15000.0, "direction": "CREDIT", "name": "Payment received"}
+{"id": 48, "isTransaction": true, "amount": 100.0, "direction": "DEBIT", "name": "SampleMerchant Store"}
+{"id": 49, "isTransaction": true, "amount": 100.0, "direction": "DEBIT", "name": "SampleMerchant Store"}
+{"id": 50, "isTransaction": true, "amount": 100.0, "direction": "DEBIT", "name": "SampleMerchant Store"}
+{"id": 51, "isTransaction": true, "amount": 7000.0, "direction": "CREDIT", "name": "RAHUL SHARMA"}
+{"id": 52, "isTransaction": true, "amount": 54321.0, "direction": "CREDIT", "name": "BIL*INFT*FFF0000000*"}
+{"id": 53, "isTransaction": true, "amount": 12345.67, "direction": "CREDIT", "name": "CUSTOMER NAME"}
+{"id": 54, "isTransaction": true, "amount": 23456.0, "direction": "CREDIT", "name": "RTGS-HDFCR00000000000000000-"}
+{"id": 55, "isTransaction": true, "amount": 2000.0, "direction": "DEBIT", "name": "BIL*NEFT*IN00"}
+{"id": 56, "isTransaction": true, "amount": 12345.0, "direction": "DEBIT", "name": "RTGS*ICICR000"}
+{"id": 57, "isTransaction": true, "amount": 23456.0, "direction": "DEBIT", "name": "ICICI FD"}
+{"id": 58, "isTransaction": true, "amount": 15000.0, "direction": "CREDIT", "name": "Mobile XXXXX00000"}
+{"id": 59, "isTransaction": true, "amount": 10000.0, "direction": "DEBIT", "name": "Acct XX001"}
+{"id": 60, "isTransaction": true, "amount": 1234.56, "direction": "DEBIT", "name": "SAMPLE FUND MANAGER"}
+{"id": 61, "isTransaction": false, "amount": 2500.0, "direction": "DEBIT", "name": null}
+{"id": 62, "isTransaction": true, "amount": 1000.0, "direction": "CREDIT", "name": "SAMPLE CUSTOMER"}
+{"id": 63, "isTransaction": true, "amount": 14.0, "direction": "DEBIT", "name": "Pune Metro"}
+{"id": 64, "isTransaction": true, "amount": 250.0, "direction": "DEBIT", "name": "A.B. Traders"}
+{"id": 65, "isTransaction": true, "amount": 12345.0, "direction": "CREDIT", "name": null}
+{"id": 66, "isTransaction": true, "amount": 1234.0, "direction": "CREDIT", "name": null}
+{"id": 67, "isTransaction": true, "amount": 2.0, "direction": "CREDIT", "name": "SAMPLE MERCHANT AI"}
+{"id": 68, "isTransaction": true, "amount": 1604.0, "direction": "DEBIT", "name": "ONYX BAR"}
+{"id": 69, "isTransaction": true, "amount": 100.0, "direction": "DEBIT", "name": "SAMPLE MERCHANT"}
+{"id": 70, "isTransaction": true, "amount": 50000.0, "direction": "CREDIT", "name": null}
+{"id": 71, "isTransaction": true, "amount": 20000.0, "direction": "CREDIT", "name": null}
+{"id": 72, "isTransaction": true, "amount": 50000.0, "direction": "DEBIT", "name": null}
+{"id": 73, "isTransaction": true, "amount": 1234.0, "direction": "CREDIT", "name": null}
+{"id": 74, "isTransaction": true, "amount": 1234.0, "direction": "DEBIT", "name": null}
+{"id": 75, "isTransaction": true, "amount": 50000.0, "direction": "CREDIT", "name": "Mobile XXXXXXXXX000"}
+{"id": 76, "isTransaction": true, "amount": 100000.0, "direction": "CREDIT", "name": "Mobile XXXXXXXXX000"}
+{"id": 77, "isTransaction": true, "amount": 123456.0, "direction": "CREDIT", "name": "Mobile XXXXXXXXX000"}
+{"id": 78, "isTransaction": true, "amount": 15000.0, "direction": "DEBIT", "name": "Acct XXXXXXXXX000"}
+{"id": 79, "isTransaction": true, "amount": 1000.0, "direction": "CREDIT", "name": null}
+{"id": 80, "isTransaction": true, "amount": 12345.0, "direction": "DEBIT", "name": "SamplePay Private Limited"}
+{"id": 81, "isTransaction": true, "amount": 12345.0, "direction": "DEBIT", "name": "BENEFICIARY NAME"}
+{"id": 82, "isTransaction": true, "amount": 2500.0, "direction": "CREDIT", "name": "SAMPLE NAME"}
+{"id": 83, "isTransaction": true, "amount": 12345.0, "direction": "DEBIT", "name": "BENEFICIARY NAME"}
+{"id": 84, "isTransaction": true, "amount": 200000.0, "direction": "CREDIT", "name": "SAMPLE NAME"}
+{"id": 85, "isTransaction": true, "amount": 200000.0, "direction": "DEBIT", "name": "SAMPLE NAME"}
+{"id": 86, "isTransaction": true, "amount": 2448.0, "direction": "DEBIT", "name": "INSTAMART"}
+{"id": 87, "isTransaction": true, "amount": 20000.0, "direction": "DEBIT", "name": "CUSTOMER NAME"}
+{"id": 88, "isTransaction": true, "amount": 750.0, "direction": "DEBIT", "name": "M/S A.B. MART"}
+{"id": 89, "isTransaction": true, "amount": 3000.0, "direction": "CREDIT", "name": null}
+{"id": 90, "isTransaction": true, "amount": 370.8, "direction": "DEBIT", "name": "SAMPLE MERCHANT LTD"}
+{"id": 91, "isTransaction": true, "amount": 100.0, "direction": "DEBIT", "name": "SAMPLE MERCHANT"}
+{"id": 92, "isTransaction": true, "amount": 2000.0, "direction": "CREDIT", "name": "RAHUL SHARMA"}
+{"id": 93, "isTransaction": true, "amount": 1000.0, "direction": "DEBIT", "name": "RAHUL SHARMA"}
+{"id": 94, "isTransaction": true, "amount": 200.0, "direction": "CREDIT", "name": "Mobile 9XXXXXX00000"}
+{"id": 95, "isTransaction": true, "amount": 109.0, "direction": "CREDIT", "name": "example@okbank"}
+{"id": 96, "isTransaction": true, "amount": 1234.56, "direction": "CREDIT", "name": "Refund Frm SampleSource Payments"}
+{"id": 97, "isTransaction": true, "amount": 2345.0, "direction": "DEBIT", "name": null}
+{"id": 98, "isTransaction": true, "amount": 1000.0, "direction": "DEBIT", "name": null}
+{"id": 99, "isTransaction": true, "amount": 12345.0, "direction": "DEBIT", "name": "Acct XXXXXXX0001/Customer"}
+{"id": 100, "isTransaction": true, "amount": 12345.0, "direction": "CREDIT", "name": "9999999999@bank"}
+{"id": 101, "isTransaction": true, "amount": 46500.0, "direction": "DEBIT", "name": "9999999999@bank"}
+{"id": 102, "isTransaction": true, "amount": 1234.56, "direction": "CREDIT", "name": "Payment received"}
+{"id": 103, "isTransaction": true, "amount": 1234.0, "direction": "CREDIT", "name": "SampleMerchant BENGALURU IND"}
+{"id": 104, "isTransaction": true, "amount": 1234.0, "direction": "DEBIT", "name": "PYU*SWIGGY FOOD"}
+{"id": 105, "isTransaction": true, "amount": 123.45, "direction": "CREDIT", "name": "Payment received"}
+{"id": 106, "isTransaction": true, "amount": 678.9, "direction": "CREDIT", "name": "Payment received"}
+{"id": 107, "isTransaction": true, "amount": 100.0, "direction": "DEBIT", "name": "SampleMerchant Bengaluru kaIN"}
+{"id": 108, "isTransaction": true, "amount": 3001.0, "direction": "CREDIT", "name": "Mobile x000"}
+{"id": 109, "isTransaction": false, "amount": null, "direction": null, "name": null}
+{"id": 110, "isTransaction": true, "amount": 50.0, "direction": "CREDIT", "name": "RAHUL SHARMA"}
+{"id": 111, "isTransaction": true, "amount": 100.0, "direction": "CREDIT", "name": "RAHUL SHARMA"}
+{"id": 112, "isTransaction": true, "amount": 500.0, "direction": "DEBIT", "name": "SampleCo Services Ind"}
+{"id": 113, "isTransaction": true, "amount": 9.0, "direction": "DEBIT", "name": "SampleRide"}
+{"id": 114, "isTransaction": true, "amount": 100.0, "direction": "DEBIT", "name": "RAHUL SHARMA"}
+{"id": 115, "isTransaction": true, "amount": 1234.56, "direction": "DEBIT", "name": "SAMPLE MERCHANT"}
+{"id": 116, "isTransaction": true, "amount": 2500.0, "direction": "DEBIT", "name": "TESTCO"}
+{"id": 117, "isTransaction": true, "amount": 49.0, "direction": "DEBIT", "name": "SampleSubs Monthly"}
+{"id": 118, "isTransaction": true, "amount": 42.5, "direction": "DEBIT", "name": "OffshoreVendor Pte. Ltd."}
+{"id": 119, "isTransaction": true, "amount": 42.5, "direction": "DEBIT", "name": "SampleCloud"}
+{"id": 120, "isTransaction": true, "amount": 1234.0, "direction": "DEBIT", "name": "QuickGroceries Marketplace"}
+{"id": 121, "isTransaction": true, "amount": 10000.0, "direction": "CREDIT", "name": null}
+{"id": 122, "isTransaction": true, "amount": 1050.0, "direction": "CREDIT", "name": null}
+{"id": 123, "isTransaction": true, "amount": 1799.94, "direction": "CREDIT", "name": null}
+{"id": 124, "isTransaction": true, "amount": 2500.0, "direction": "DEBIT", "name": null}
+{"id": 125, "isTransaction": true, "amount": 1234.5, "direction": "CREDIT", "name": "Sample Payer"}
+{"id": 126, "isTransaction": true, "amount": 12345.0, "direction": "CREDIT", "name": "Sample Name"}
+{"id": 127, "isTransaction": true, "amount": 100.0, "direction": "CREDIT", "name": "Mr Sample Name"}
+{"id": 128, "isTransaction": true, "amount": 12345.0, "direction": "CREDIT", "name": "Payment received"}
+{"id": 129, "isTransaction": true, "amount": 123.45, "direction": "DEBIT", "name": "SAMPLE MART"}
+{"id": 130, "isTransaction": true, "amount": 678.9, "direction": "DEBIT", "name": "SAMPLE STORE"}
+{"id": 131, "isTransaction": true, "amount": 100.0, "direction": "DEBIT", "name": "SAMPLE MART"}
+{"id": 132, "isTransaction": true, "amount": 45000.0, "direction": "CREDIT", "name": "SENDER NAME"}
+{"id": 133, "isTransaction": true, "amount": 40000.0, "direction": "DEBIT", "name": "JANE DOE"}
+{"id": 134, "isTransaction": true, "amount": 12345.0, "direction": "CREDIT", "name": "CUSTOMER NAME"}
+{"id": 135, "isTransaction": true, "amount": 12000.0, "direction": "CREDIT", "name": "JOHN SMITH"}
+{"id": 136, "isTransaction": true, "amount": 7500.0, "direction": "DEBIT", "name": "JANE DOE"}
+{"id": 137, "isTransaction": true, "amount": 2500.0, "direction": "CREDIT", "name": "Bill autopay"}
+{"id": 138, "isTransaction": true, "amount": 500.0, "direction": "CREDIT", "name": "SampleMerchant"}
+{"id": 139, "isTransaction": true, "amount": 3750.0, "direction": "CREDIT", "name": "Bill repayment"}
+{"id": 140, "isTransaction": true, "amount": 100.0, "direction": "DEBIT", "name": "SampleMerchant"}
+{"id": 141, "isTransaction": true, "amount": 1000.0, "direction": "DEBIT", "name": "SAMPLEVENDOR, INC NEW YORK US"}
+{"id": 142, "isTransaction": true, "amount": 1500.0, "direction": "CREDIT", "name": null}
+{"id": 143, "isTransaction": true, "amount": 1500.0, "direction": "CREDIT", "name": null}
+{"id": 144, "isTransaction": true, "amount": 60.0, "direction": "CREDIT", "name": null}
+{"id": 145, "isTransaction": true, "amount": 151.0, "direction": "DEBIT", "name": "RAHUL SHARMA"}

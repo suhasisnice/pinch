@@ -170,6 +170,35 @@ function UpdateBalanceSheet({
   );
 }
 
+/** A titled figure in the same shape as the bank row, for a number that sits beside it. */
+export function MoneyLine({
+  title,
+  meta,
+  value,
+  onPress,
+}: {
+  title: string;
+  meta: string;
+  value: number;
+  onPress: () => void;
+}) {
+  return (
+    <View style={styles.row}>
+      <Pressable
+        style={({ pressed }) => [styles.main, pressed && styles.pressed]}
+        onPress={onPress}
+        accessibilityRole="button"
+      >
+        <View style={styles.text}>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.meta}>{meta}</Text>
+        </View>
+        <Text style={styles.value}>{formatMoney(value)}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   main: {

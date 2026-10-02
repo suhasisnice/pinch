@@ -30,3 +30,6 @@ public/sql-wasm.wasm
 
 # graphify knowledge graph (generated, local)
 graphify-out/
+
+# Real messages for measuring the parser (npm run corpus:*). Never committed, never sent out.
+private/

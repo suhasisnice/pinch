@@ -17,9 +17,27 @@ To find a file, read `docs/CODEMAP.md` (can be stale; the code wins) or run
 Labour goes to helpers, smart work stays with Claude (Pro): design, money logic, protected code,
 hard bugs, and the final say on what gets committed. Hand labour down first; do it myself only
 after a helper failed twice (second try with a narrower prompt), and say so.
-Protected (Claude only): `src/math`, `src/db` (incl. migrations), capture/parser/classification
-services, money services, `smsPrivacy`, `src/security`, `modules/pinch-capture`, backup/erase.
 Helpers never commit or push. Copilot is parked until Copilot Student activates.
+
+**Before any task:** the gateway and Ollama must be up. Check (`curl -s -o /dev/null -w %{http_code}
+localhost:20128/v1/models` gives 401; `localhost:11434/api/tags` gives 200) and start whichever is
+down (`omniroute serve`, `ollama serve`, as background tasks). A helper being down is never a reason
+to skip the workflow.
+
+**Protected (Claude only)** is code where a mistake is silent or cannot be undone, and nothing else.
+The list is enforced by deny rules in `scripts/free.js` (`PROTECTED`); keep the two in step.
+- Ledger truth: `src/math/{budget,reimbursement,splitEngine,transfers,classification}.ts`,
+  `src/db/repos/{transactions,ious,reimbursements,balance,budget}.ts`,
+  `src/services/{capture,parser,budget,settlement,transfer,revalidation}Service.ts`.
+- Cannot be undone: `src/db/migrations.ts`, `src/db/schema.ts`, `src/db/repos/maintenance.ts` (erase),
+  `backupService.ts`, `backupFiles.ts`.
+- Encryption, lock, privacy, native: `src/db/expoAdapter.ts`, `src/security`, `smsPrivacy.ts`,
+  `modules/pinch-capture`.
+
+Everything else goes to helpers first, including the rest of `src/math` (insights, patterns,
+categoriser, wealth, payday), the other repos, `classificationService`, screens, components, tests.
+Protection is about code. Data is a separate rule: real SMS, phone logs and user data never leave
+this machine, whatever file they sit in; they go to the local model only.
 
 The labour workers, in the order I reach for them:
 - **Free worker** (`scripts/free.js`: headless Claude Code on free Codestral, then Nemotron 3 Ultra, then Gemini Flash-Lite): the

@@ -592,7 +592,7 @@ export function Sheet({
               accessibilityLabel="Close"
               style={styles.sheetCloseHit}
             >
-              <Text style={styles.sheetClose}>Done</Text>
+              <Text style={styles.sheetClose}>✕</Text>
             </Pressable>
           </View>
           <ScrollView
@@ -1130,7 +1130,7 @@ const styles = StyleSheet.create({
   },
   sheetTitle: { ...typography.display, fontSize: 24, lineHeight: 32, color: palette.textPrimary },
   sheetCloseHit: { paddingVertical: 6, paddingHorizontal: spacing.sm, borderRadius: radii.pill },
-  sheetClose: { ...typography.bodyBold, color: palette.textPrimary },
+  sheetClose: { ...typography.bodyBold, color: palette.textMuted },
   sheetScroll: { flexGrow: 0 },
   sheetContent: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, gap: spacing.md },
 

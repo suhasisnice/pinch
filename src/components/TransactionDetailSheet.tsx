@@ -72,7 +72,7 @@ export default function TransactionDetailSheet({
   onSplit: (transaction: TransactionRow) => void;
   /** Hands off to recording this payment as a debt. */
   onMarkLoan: (transaction: TransactionRow) => void;
-  /** Hands off to linking an incoming payment to the spends it paid back. */
+  /** Hands off to netting a spend against the money that paid it back, from either side. */
   onLinkReimbursement?: (transaction: TransactionRow) => void;
 }) {
   const [amount, setAmount] = useState('');
@@ -309,6 +309,18 @@ export default function TransactionDetailSheet({
             </View>
           ) : null}
 
+          {onLinkReimbursement &&
+          (db.canBeReimbursement(transaction) || db.canBeNettedOut(transaction)) ? (
+            <>
+              <Button label="Net out" onPress={() => onLinkReimbursement(transaction)} />
+              <Text style={styles.loanHint}>
+                {transaction.direction === 'CREDIT'
+                  ? 'Pick what it covered to see your real share.'
+                  : 'Got money back for this? Pick it to see your real share.'}
+              </Text>
+            </>
+          ) : null}
+
           {transaction.raw_text ? (
             <View style={styles.rawBox}>
               <Text style={styles.rawLabel}>Original message</Text>
@@ -332,20 +344,6 @@ export default function TransactionDetailSheet({
               />
             ) : null}
           </View>
-
-          {onLinkReimbursement && db.canBeReimbursement(transaction) ? (
-            <>
-              <Button
-                label={
-                  transaction.kind === 'SETTLE_IN'
-                    ? 'What this paid back'
-                    : 'This paid me back for…'
-                }
-                onPress={() => onLinkReimbursement(transaction)}
-              />
-              <Text style={styles.loanHint}>Pick what it covered to see your real share.</Text>
-            </>
-          ) : null}
 
           {/* Lending or borrowing your own transfer between accounts is not a
               real debt — hidden for a transfer leg rather than reachable and

@@ -1,0 +1,491 @@
+{
+  "at": "2026-09-29T13:49:28.531Z",
+  "max": 40,
+  "results": [
+    {
+      "model": "gemini/gemini-2.5-flash",
+      "succeeded": 0,
+      "firstFailAt": 1,
+      "hitMax": false,
+      "seconds": 0.7,
+      "avgLatencyMs": null,
+      "callsPerMinute": 0,
+      "failure": {
+        "status": 404,
+        "err": "[gemini/gemini-2.5-flash] [404]: This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.8-flash for the latest features and improvements. We recommend you to use the Interactions API (https://ai.google.dev/gemini-api/docs/get-started). ",
+        "ms": 682
+      },
+      "headers": {
+        "retry-after": "120"
+      }
+    },
+    {
+      "model": "gemini/gemini-2.5-pro",
+      "succeeded": 0,
+      "firstFailAt": 1,
+      "hitMax": false,
+      "seconds": 0.7,
+      "avgLatencyMs": null,
+      "callsPerMinute": 0,
+      "failure": {
+        "status": 404,
+        "err": "[gemini/gemini-2.5-pro] [404]: This model models/gemini-2.5-pro is no longer available to new users. Please update your code to use models/gemini-3.1-pro-preview for the latest features and improvements. We recommend you to use the Interactions API (https://ai.google.dev/gemini-api/docs/get-started)",
+        "ms": 658
+      },
+      "headers": {
+        "retry-after": "120"
+      }
+    },
+    {
+      "model": "gemini/gemini-2.5-flash-lite",
+      "succeeded": 0,
+      "firstFailAt": 1,
+      "hitMax": false,
+      "seconds": 0.5,
+      "avgLatencyMs": null,
+      "callsPerMinute": 0,
+      "failure": {
+        "status": 404,
+        "err": "[gemini/gemini-2.5-flash-lite] [404]: This model models/gemini-2.5-flash-lite is no longer available to new users. Please update your code to use models/gemini-3.5-flash-lite for the latest features and improvements. We recommend you to use the Interactions API (https://ai.google.dev/gemini-api/docs",
+        "ms": 457
+      },
+      "headers": {
+        "retry-after": "120"
+      }
+    },
+    {
+      "model": "mistral/codestral-latest",
+      "succeeded": 40,
+      "firstFailAt": null,
+      "hitMax": true,
+      "seconds": 29.4,
+      "avgLatencyMs": 736,
+      "callsPerMinute": 82,
+      "failure": null,
+      "headers": {}
+    },
+    {
+      "model": "groq/openai/gpt-oss-120b",
+      "succeeded": 40,
+      "firstFailAt": null,
+      "hitMax": true,
+      "seconds": 46.7,
+      "avgLatencyMs": 1169,
+      "callsPerMinute": 51,
+      "failure": null,
+      "headers": {}
+    },
+    {
+      "model": "mistral/mistral-small-latest",
+      "succeeded": 0,
+      "firstFailAt": 1,
+      "hitMax": false,
+      "seconds": 30.9,
+      "avgLatencyMs": null,
+      "callsPerMinute": 0,
+      "failure": {
+        "status": 429,
+        "err": "[mistral/mistral-small-latest] [429]: Rate limit exceeded (reset after 3s)",
+        "ms": 30914
+      },
+      "headers": {
+        "retry-after": "3"
+      }
+    },
+    {
+      "model": "gemini/gemini-flash-latest",
+      "succeeded": 4,
+      "firstFailAt": 5,
+      "hitMax": false,
+      "seconds": 51.9,
+      "avgLatencyMs": 10356,
+      "callsPerMinute": 5,
+      "failure": {
+        "status": 429,
+        "err": "All credentials for model gemini-flash-latest are cooling down",
+        "resetSeconds": 43,
+        "ms": 10517
+      },
+      "headers": {}
+    },
+    {
+      "model": "groq/openai/gpt-oss-20b",
+      "succeeded": 40,
+      "firstFailAt": null,
+      "hitMax": true,
+      "seconds": 43.8,
+      "avgLatencyMs": 1096,
+      "callsPerMinute": 55,
+      "failure": null,
+      "headers": {}
+    },
+    {
+      "model": "mistral/mistral-medium-latest",
+      "succeeded": 0,
+      "firstFailAt": 1,
+      "hitMax": false,
+      "seconds": 30.6,
+      "avgLatencyMs": null,
+      "callsPerMinute": 0,
+      "failure": {
+        "status": 429,
+        "err": "[mistral/mistral-medium-latest] [429]: Rate limit exceeded (reset after 3s)",
+        "ms": 30619
+      },
+      "headers": {
+        "retry-after": "3"
+      }
+    },
+    {
+      "model": "ollama-cloud/nemotron-3-ultra",
+      "succeeded": 40,
+      "firstFailAt": null,
+      "hitMax": true,
+      "seconds": 105.4,
+      "avgLatencyMs": 2634,
+      "callsPerMinute": 23,
+      "failure": null,
+      "headers": {}
+    },
+    {
+      "model": "groq/qwen/qwen3.8-27b",
+      "succeeded": 40,
+      "firstFailAt": null,
+      "hitMax": true,
+      "seconds": 35,
+      "avgLatencyMs": 875,
+      "callsPerMinute": 69,
+      "failure": null,
+      "headers": {}
+    },
+    {
+      "model": "mistral/mistral-medium-3-5",
+      "succeeded": 0,
+      "firstFailAt": 1,
+      "hitMax": false,
+      "seconds": 30,
+      "avgLatencyMs": null,
+      "callsPerMinute": 0,
+      "failure": {
+        "status": 429,
+        "err": "[mistral/mistral-medium-3-5] [429]: Rate limit exceeded (reset after 3s)",
+        "ms": 29953
+      },
+      "headers": {
+        "retry-after": "3"
+      }
+    },
+    {
+      "model": "mistral/magistral-small-latest",
+      "succeeded": 0,
+      "firstFailAt": 1,
+      "hitMax": false,
+      "seconds": 29.9,
+      "avgLatencyMs": null,
+      "callsPerMinute": 0,
+      "failure": {
+        "status": 429,
+        "err": "[mistral/magistral-small-latest] [429]: Rate limit exceeded (reset after 3s)",
+        "ms": 29939
+      },
+      "headers": {
+        "retry-after": "3"
+      }
+    },
+    {
+      "model": "groq/allam-2-7b",
+      "succeeded": 40,
+      "firstFailAt": null,
+      "hitMax": true,
+      "seconds": 35,
+      "avgLatencyMs": 875,
+      "callsPerMinute": 69,
+      "failure": null,
+      "headers": {}
+    },
+    {
+      "model": "ollama-cloud/nemotron-3-super",
+      "succeeded": 40,
+      "firstFailAt": null,
+      "hitMax": true,
+      "seconds": 80.7,
+      "avgLatencyMs": 2017,
+      "callsPerMinute": 30,
+      "failure": null,
+      "headers": {}
+    },
+    {
+      "model": "gemini/gemini-flash-lite-latest",
+      "succeeded": 17,
+      "firstFailAt": 18,
+      "hitMax": false,
+      "seconds": 129.1,
+      "avgLatencyMs": 5655,
+      "callsPerMinute": 8,
+      "failure": {
+        "status": 504,
+        "err": "[504]: Request exceeded OmniRoute's local rate-limit execution expiration (legacy resilienceSettings.requestQueue.maxWaitMs=15000ms) for gemini/gemini-flash-lite-latest. Bottleneck applies this deadline only after dispatch; it does not bound queue wait and is not an upstream-generated timeout.",
+        "ms": 32960
+      },
+      "headers": {}
+    },
+    {
+      "model": "mistral/magistral-medium-latest",
+      "succeeded": 0,
+      "firstFailAt": 1,
+      "hitMax": false,
+      "seconds": 30,
+      "avgLatencyMs": null,
+      "callsPerMinute": 0,
+      "failure": {
+        "status": 429,
+        "err": "[mistral/magistral-medium-latest] [429]: Rate limit exceeded (reset after 3s)",
+        "ms": 30036
+      },
+      "headers": {
+        "retry-after": "3"
+      }
+    },
+    {
+      "model": "gemini/gemini-pro-latest",
+      "succeeded": 0,
+      "firstFailAt": 1,
+      "hitMax": false,
+      "seconds": 29.1,
+      "avgLatencyMs": null,
+      "callsPerMinute": 0,
+      "failure": {
+        "status": 429,
+        "err": "All credentials for model gemini-pro-latest are cooling down",
+        "resetSeconds": 55,
+        "ms": 29064
+      },
+      "headers": {
+        "retry-after": "55"
+      }
+    },
+    {
+      "model": "mistral/ministral-3b-latest",
+      "succeeded": 40,
+      "firstFailAt": null,
+      "hitMax": true,
+      "seconds": 27.1,
+      "avgLatencyMs": 679,
+      "callsPerMinute": 88,
+      "failure": null,
+      "headers": {}
+    },
+    {
+      "model": "gemini/gemini-3-flash-preview",
+      "succeeded": 0,
+      "firstFailAt": 1,
+      "hitMax": false,
+      "seconds": 5.4,
+      "avgLatencyMs": null,
+      "callsPerMinute": 0,
+      "failure": {
+        "status": 502,
+        "err": "[gemini/gemini-3-flash-preview] upstream returned an empty response without usable output",
+        "ms": 5402
+      },
+      "headers": {}
+    },
+    {
+      "model": "gemini/gemini-3.1-pro-preview",
+      "succeeded": 0,
+      "firstFailAt": 1,
+      "hitMax": false,
+      "seconds": 5.5,
+      "avgLatencyMs": null,
+      "callsPerMinute": 0,
+      "failure": {
+        "status": 429,
+        "err": "All credentials for model gemini-3.1-pro-preview are cooling down",
+        "resetSeconds": 34,
+        "ms": 5452
+      },
+      "headers": {
+        "retry-after": "34"
+      }
+    },
+    {
+      "model": "ollama-cloud/nemotron-3-nano:30b",
+      "succeeded": 40,
+      "firstFailAt": null,
+      "hitMax": true,
+      "seconds": 65.7,
+      "avgLatencyMs": 1641,
+      "callsPerMinute": 37,
+      "failure": null,
+      "headers": {}
+    },
+    {
+      "model": "mistral/ministral-8b-latest",
+      "succeeded": 40,
+      "firstFailAt": null,
+      "hitMax": true,
+      "seconds": 41.8,
+      "avgLatencyMs": 1044,
+      "callsPerMinute": 57,
+      "failure": null,
+      "headers": {}
+    },
+    {
+      "model": "gemini/gemini-3.1-flash-lite",
+      "succeeded": 5,
+      "firstFailAt": 6,
+      "hitMax": false,
+      "seconds": 51.6,
+      "avgLatencyMs": 6439,
+      "callsPerMinute": 6,
+      "failure": {
+        "status": 504,
+        "err": "[504]: Request exceeded OmniRoute's local rate-limit execution expiration (legacy resilienceSettings.requestQueue.maxWaitMs=15000ms) for gemini/gemini-3.1-flash-lite. Bottleneck applies this deadline only after dispatch; it does not bound queue wait and is not an upstream-generated timeout.",
+        "ms": 19379
+      },
+      "headers": {}
+    },
+    {
+      "model": "ollama-cloud/gemma4:31b",
+      "succeeded": 40,
+      "firstFailAt": null,
+      "hitMax": true,
+      "seconds": 48.4,
+      "avgLatencyMs": 1211,
+      "callsPerMinute": 50,
+      "failure": null,
+      "headers": {}
+    },
+    {
+      "model": "ollama-cloud/gpt-oss:20b",
+      "succeeded": 40,
+      "firstFailAt": null,
+      "hitMax": true,
+      "seconds": 55.4,
+      "avgLatencyMs": 1386,
+      "callsPerMinute": 43,
+      "failure": null,
+      "headers": {}
+    },
+    {
+      "model": "gemini/gemini-3.5-flash-lite",
+      "succeeded": 10,
+      "firstFailAt": 11,
+      "hitMax": false,
+      "seconds": 124.3,
+      "avgLatencyMs": 9188,
+      "callsPerMinute": 5,
+      "failure": {
+        "status": 504,
+        "err": "[504]: Request exceeded OmniRoute's local rate-limit execution expiration (legacy resilienceSettings.requestQueue.maxWaitMs=15000ms) for gemini/gemini-3.5-flash-lite. Bottleneck applies this deadline only after dispatch; it does not bound queue wait and is not an upstream-generated timeout.",
+        "ms": 32376
+      },
+      "headers": {}
+    },
+    {
+      "model": "gemini/gemini-3.6-flash",
+      "succeeded": 0,
+      "firstFailAt": 1,
+      "hitMax": false,
+      "seconds": 29.3,
+      "avgLatencyMs": null,
+      "callsPerMinute": 0,
+      "failure": {
+        "status": 503,
+        "err": "[gemini/gemini-3.6-flash] [503]: This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later. (reset after 24s)",
+        "ms": 29260
+      },
+      "headers": {
+        "retry-after": "24"
+      }
+    },
+    {
+      "model": "gemini/gemini-3.7-flash",
+      "succeeded": 1,
+      "firstFailAt": 2,
+      "hitMax": false,
+      "seconds": 75.1,
+      "avgLatencyMs": 42500,
+      "callsPerMinute": 1,
+      "failure": {
+        "status": 504,
+        "err": "[504]: Request exceeded OmniRoute's local rate-limit execution expiration (legacy resilienceSettings.requestQueue.maxWaitMs=15000ms) for gemini/gemini-3.7-flash. Bottleneck applies this deadline only after dispatch; it does not bound queue wait and is not an upstream-generated timeout.",
+        "ms": 32629
+      },
+      "headers": {}
+    },
+    {
+      "model": "mistral/ministral-14b-latest",
+      "succeeded": 40,
+      "firstFailAt": null,
+      "hitMax": true,
+      "seconds": 287.2,
+      "avgLatencyMs": 7181,
+      "callsPerMinute": 8,
+      "failure": null,
+      "headers": {}
+    },
+    {
+      "model": "gemini/gemini-3.8-flash",
+      "succeeded": 0,
+      "firstFailAt": 1,
+      "hitMax": false,
+      "seconds": 20.1,
+      "avgLatencyMs": null,
+      "callsPerMinute": 0,
+      "failure": {
+        "status": 504,
+        "err": "[504]: Request exceeded OmniRoute's local rate-limit execution expiration (legacy resilienceSettings.requestQueue.maxWaitMs=15000ms) for gemini/gemini-3.8-flash. Bottleneck applies this deadline only after dispatch; it does not bound queue wait and is not an upstream-generated timeout.",
+        "ms": 20122
+      },
+      "headers": {}
+    },
+    {
+      "model": "gemini/gemma-4-26b-a4b-it",
+      "succeeded": 0,
+      "firstFailAt": 1,
+      "hitMax": false,
+      "seconds": 1.1,
+      "avgLatencyMs": null,
+      "callsPerMinute": 0,
+      "failure": {
+        "status": 500,
+        "err": "[500]: Internal error encountered.",
+        "ms": 1140
+      },
+      "headers": {}
+    },
+    {
+      "model": "mistral/mistral-vibe-cli-latest",
+      "succeeded": 0,
+      "firstFailAt": 1,
+      "hitMax": false,
+      "seconds": 30.2,
+      "avgLatencyMs": null,
+      "callsPerMinute": 0,
+      "failure": {
+        "status": 429,
+        "err": "[mistral/mistral-vibe-cli-latest] [429]: Rate limit exceeded (reset after 3s)",
+        "ms": 30220
+      },
+      "headers": {
+        "retry-after": "3"
+      }
+    },
+    {
+      "model": "gemini/gemma-4-31b-it",
+      "succeeded": 1,
+      "firstFailAt": 2,
+      "hitMax": false,
+      "seconds": 20.7,
+      "avgLatencyMs": 1384,
+      "callsPerMinute": 3,
+      "failure": {
+        "status": 500,
+        "err": "[500]: Internal error encountered.",
+        "ms": 19338
+      },
+      "headers": {}
+    }
+  ]
+}

@@ -48,10 +48,20 @@ const MAX_WAIT_S = 90;
 /** Model runs per job. A second run only happens when the first changed nothing. */
 const MAX_RUNS = 2;
 
-const PROTECTED = ['src/math/**', 'src/db/**', 'src/security/**', 'modules/pinch-capture/**',
-  ...['capture', 'parser', 'classification', 'backup', 'budget', 'settlement', 'transfer', 'revalidation']
-    .map((s) => `src/services/${s}Service.ts`),
-  'src/services/backupFiles.ts', 'src/services/smsPrivacy.ts'];
+/**
+ * Only code where a mistake is silent or cannot be undone (CLAUDE.md "Protected").
+ * Everything else in src/math, src/db and src/services is open to helpers.
+ */
+const PROTECTED = [
+  // Ledger truth: what counts as spending, income, a debt or a transfer.
+  ...['budget', 'reimbursement', 'splitEngine', 'transfers', 'classification'].map((s) => `src/math/${s}.ts`),
+  ...['transactions', 'ious', 'reimbursements', 'balance', 'budget'].map((s) => `src/db/repos/${s}.ts`),
+  ...['capture', 'parser', 'budget', 'settlement', 'transfer', 'revalidation'].map((s) => `src/services/${s}Service.ts`),
+  // Cannot be undone: schema, backup, erase.
+  'src/db/migrations.ts', 'src/db/schema.ts', 'src/db/repos/maintenance.ts',
+  'src/services/backupService.ts', 'src/services/backupFiles.ts',
+  // Encryption, app lock, SMS privacy, native capture.
+  'src/db/expoAdapter.ts', 'src/security/**', 'src/services/smsPrivacy.ts', 'modules/pinch-capture/**'];
 const READ_TOOLS = ['Read', 'Grep', 'Glob', 'Bash(git diff:*)', 'Bash(git show:*)', 'Bash(git log:*)',
   'Bash(git status:*)', 'Bash(git grep:*)', 'Bash(npm run test:q:*)', 'Bash(npm run typecheck)', 'Bash(npx jest:*)'];
 /** Edit rules cover every file-editing tool, Write included. */
@@ -66,8 +76,9 @@ const FRUGAL =
 
 const REVIEW =
   'You are the reviewer for Pinch. Read CLAUDE.md, then run `git status` and `git diff HEAD` and read changed files for ' +
-  'context. Review for correctness bugs, broken financial invariants from CLAUDE.md, privacy leaks, and any edit to ' +
-  'protected code. Report findings most severe first, each with file:line and a one-line failure scenario. ' +
+  'context. Review for correctness bugs, broken financial invariants from CLAUDE.md and privacy leaks. Edits to ' +
+  'protected code are made by the lead and are allowed: do not report them as a violation, review their logic ' +
+  'harder instead. Report findings most severe first, each with file:line and a one-line failure scenario. ' +
   'If nothing is wrong, say "No findings." Do not edit anything.';
 
 const [job, arg] = process.argv.slice(2);

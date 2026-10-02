@@ -37,7 +37,9 @@ describe('getSpendingHistorySummary', () => {
   });
 
   it('surfaces a subscription that has renewed for three straight months', async () => {
-    const now = new Date();
+    // A fixed date: built from today's date, "2, 32 and 62 days ago" lands
+    // two charges in one calendar month on some days and the test fails.
+    const now = new Date('2026-09-20T12:00:00Z');
     await spend(199, 'Netflix', 'Subscriptions', daysAgo(2, now));
     await spend(199, 'Netflix', 'Subscriptions', daysAgo(32, now));
     await spend(199, 'Netflix', 'Subscriptions', daysAgo(62, now));
