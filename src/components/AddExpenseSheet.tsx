@@ -92,6 +92,7 @@ export default function AddExpenseSheet({
   const [outingId, setOutingId] = useState<number | null>(defaultOutingId);
   const [outings, setOutings] = useState<OutingSummary[]>([]);
   const [saving, setSaving] = useState(false);
+  const [paidInCash, setPaidInCash] = useState(false);
 
   // Transfer-only.
   const [fromLabel, setFromLabel] = useState('');
@@ -118,6 +119,7 @@ export default function AddExpenseSheet({
     setType(defaultType);
     setAmount(defaultAmount);
     setMerchant('');
+    setPaidInCash(false);
     setChoice({ category: null, subcategory: null });
     setOutingId(defaultOutingId);
     setFromLabel('');
@@ -188,6 +190,7 @@ export default function AddExpenseSheet({
         source: 'MANUAL',
         kind: type === 'REFUND' ? 'REFUND' : undefined,
         isAdjustment: type === 'ADJUSTMENT',
+        paidInCash: type === 'EXPENSE' && paidInCash,
       });
       onSaved(transactionId);
     } finally {
@@ -323,6 +326,16 @@ export default function AddExpenseSheet({
             placeholder="Cash spending I forgot to log"
           />
         </>
+      ) : null}
+
+      {type === 'EXPENSE' ? (
+        <View style={styles.toggleRow}>
+          <Chip
+            label="Paid in cash"
+            selected={paidInCash}
+            onPress={() => setPaidInCash((on) => !on)}
+          />
+        </View>
       ) : null}
 
       <Button label={saving ? 'Saving…' : saveLabel} onPress={save} disabled={!canSave || saving} />

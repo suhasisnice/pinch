@@ -69,6 +69,8 @@ export interface TransactionRow {
    * budget/insights query. This only changes how it is labelled. 0 or 1.
    */
   is_adjustment: number;
+  /** Paid with notes from the wallet, so it moves the cash figure and not the bank one. 0 or 1. */
+  paid_in_cash: number;
   created_at: string;
 }
 

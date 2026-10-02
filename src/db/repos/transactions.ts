@@ -40,6 +40,8 @@ export interface NewTransaction {
   status?: TransactionStatus;
   /** A manual ledger correction, not a new kind — see TransactionRow.is_adjustment. */
   isAdjustment?: boolean;
+  /** Paid with notes from the wallet — see TransactionRow.paid_in_cash. */
+  paidInCash?: boolean;
 }
 
 /**
@@ -66,8 +68,8 @@ export async function addTransaction(input: NewTransaction): Promise<number> {
   const result = await db.runAsync(
     `INSERT INTO Transactions
        (amount, direction, kind, merchant, category, subcategory, category_source, occurred_at, source,
-        raw_text, external_ref, dedup_key, outing_id, note, status, is_adjustment, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        raw_text, external_ref, dedup_key, outing_id, note, status, is_adjustment, paid_in_cash, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
     [
       Math.abs(input.amount),
       input.direction,
@@ -85,6 +87,7 @@ export async function addTransaction(input: NewTransaction): Promise<number> {
       input.note ?? null,
       input.status ?? 'COMPLETED',
       input.isAdjustment ? 1 : 0,
+      input.paidInCash ? 1 : 0,
       now,
     ]
   );

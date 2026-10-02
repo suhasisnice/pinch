@@ -37,7 +37,7 @@ export default function AffordSheet({
         setAmount('');
         onClose();
       }}
-      title="Can I afford it?"
+      title="Test a purchase"
     >
       <Field
         label="How much is it?"

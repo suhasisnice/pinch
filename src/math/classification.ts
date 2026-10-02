@@ -66,6 +66,8 @@ export function classifyNonSpend(tx: ClassifiableTransaction): NonSpendReason | 
  * it: cash spending sends no messages, so nothing would ever replace it and
  * the month would look far cheaper than it was. Under-reporting is the worse
  * error, so the withdrawal stays counted and only gets a truthful category.
+ * (Once the user counts their wallet, cash spending is logged by hand and the
+ * withdrawal is tagged as a move instead — classificationService decides.)
  *
  * INVESTMENT removes from spending on *either* direction: a contribution
  * (debit) is money moved into a different asset the user still owns, same

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { BalanceState } from '../db/repos/balance';
+import { BalanceState, Pocket } from '../db/repos/balance';
 import * as db from '../db/dbService';
 import { formatMoney } from '../utils/format';
 import { layer, palette, radii, spacing, typography } from '../theme/theme';
@@ -10,6 +10,23 @@ import { MASK, useMoneyReveal } from '../security/MoneyReveal';
 import CushionFloor from './CushionFloor';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const COPY = {
+  BANK: {
+    title: 'In the bank',
+    sheet: 'Bank balance',
+    intro: "Type what your banking app shows. It's what you have, not what you can spend.",
+    field: 'Balance right now',
+    gap: 'usually cash, or a message Pinch missed.',
+  },
+  CASH: {
+    title: 'Cash in wallet',
+    sheet: 'Cash in wallet',
+    intro: 'Count the notes in your wallet. Withdrawals add to it; payments you log as cash take from it.',
+    field: 'Cash right now',
+    gap: 'usually cash you spent and did not log.',
+  },
+};
 
 function when(iso: string): string {
   const d = new Date(iso);
@@ -33,9 +50,12 @@ export default function BalanceCard({
   state,
   onChanged,
   cushion,
+  pocket = 'BANK',
 }: {
   state: BalanceState;
   onChanged: () => void;
+  /** Which figure this row shows: the bank account or the notes in the wallet. */
+  pocket?: Pocket;
   /** The emergency cushion, drawn as a floor under the balance once it holds something. */
   cushion?: { saved: number; target: number } | null;
 }) {
@@ -59,11 +79,11 @@ export default function BalanceCard({
           onPress={() => (value === null ? setEditing(true) : shown ? hide() : void reveal())}
           accessibilityRole="button"
           accessibilityLabel={
-            value === null ? 'Add your bank balance' : shown ? 'Hide balance' : 'Show balance'
+            value === null ? `Add ${COPY[pocket].title}` : shown ? 'Hide balance' : 'Show balance'
           }
         >
           <View style={styles.text}>
-            <Text style={styles.title}>In the bank</Text>
+            <Text style={styles.title}>{COPY[pocket].title}</Text>
             <Text style={styles.meta} numberOfLines={1}>
               {meta}
             </Text>
@@ -94,6 +114,7 @@ export default function BalanceCard({
       <UpdateBalanceSheet
         visible={editing}
         state={state}
+        pocket={pocket}
         onClose={() => setEditing(false)}
         onSaved={() => {
           setEditing(false);
@@ -107,11 +128,13 @@ export default function BalanceCard({
 function UpdateBalanceSheet({
   visible,
   state,
+  pocket,
   onClose,
   onSaved,
 }: {
   visible: boolean;
   state: BalanceState;
+  pocket: Pocket;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -129,7 +152,7 @@ function UpdateBalanceSheet({
     if (!canSave || saving) return;
     setSaving(true);
     try {
-      await db.recordBalance(parsed);
+      await db.recordBalance(parsed, new Date(), pocket);
       setAmount('');
       onSaved();
     } finally {
@@ -138,13 +161,11 @@ function UpdateBalanceSheet({
   }
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="Bank balance">
-      <Text style={styles.intro}>
-        Type what your banking app shows. It's what you have, not what you can spend.
-      </Text>
+    <Sheet visible={visible} onClose={onClose} title={COPY[pocket].sheet}>
+      <Text style={styles.intro}>{COPY[pocket].intro}</Text>
 
       <Field
-        label="Balance right now"
+        label={COPY[pocket].field}
         value={amount}
         onChangeText={setAmount}
         keyboardType="numeric"
@@ -155,8 +176,8 @@ function UpdateBalanceSheet({
         <View style={styles.driftBox}>
           <Icon name="info" size={15} color={palette.warning} />
           <Text style={styles.driftText}>
-            {formatMoney(Math.abs(drift))} {drift < 0 ? 'less' : 'more'} than expected — usually
-            cash, or a message Pinch missed.
+            {formatMoney(Math.abs(drift))} {drift < 0 ? 'less' : 'more'} than expected —{' '}
+            {COPY[pocket].gap}
           </Text>
         </View>
       ) : null}

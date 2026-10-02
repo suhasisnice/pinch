@@ -1047,6 +1047,23 @@ export const V20_CATEGORISER: Migration = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// v21 — cash in the wallet.
+//
+// A second balance beside the bank one. `pocket` says which of the two a
+// typed figure belongs to; `paid_in_cash` marks a hand-logged payment that
+// came out of the wallet, so it lowers the cash figure and leaves the bank
+// figure alone.
+// ---------------------------------------------------------------------------
+export const V21_CASH_WALLET: Migration = {
+  version: 21,
+  name: 'cash_wallet',
+  statements: [
+    `ALTER TABLE BalanceSnapshots ADD COLUMN pocket TEXT NOT NULL DEFAULT 'BANK';`,
+    `ALTER TABLE Transactions ADD COLUMN paid_in_cash INTEGER NOT NULL DEFAULT 0;`,
+  ],
+};
+
 export const MIGRATIONS: Migration[] = [
   V1_INITIAL,
   V2_CONTACT_PHONE,
@@ -1068,6 +1085,7 @@ export const MIGRATIONS: Migration[] = [
   V18_SMS_PRIVACY,
   V19_SPEND_CAPS,
   V20_CATEGORISER,
+  V21_CASH_WALLET,
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

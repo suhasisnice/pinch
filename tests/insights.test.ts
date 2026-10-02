@@ -23,6 +23,7 @@ function tx(overrides: Partial<TransactionRow>): TransactionRow {
     excluded_at: null,
     status: 'COMPLETED',
     is_adjustment: 0,
+    paid_in_cash: 0,
     created_at: '2026-09-08T12:00:00.000Z',
     ...overrides,
   };

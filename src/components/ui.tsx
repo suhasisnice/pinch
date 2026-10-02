@@ -13,7 +13,7 @@ import {
   ViewStyle,
   type RefreshControlProps,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import {
   elevation,
@@ -43,10 +43,13 @@ export function Screen({
   scroll = true,
   refreshControl,
   underHeader = false,
+  overlay,
 }: {
   children: React.ReactNode;
   scroll?: boolean;
   refreshControl?: React.ReactElement<RefreshControlProps>;
+  /** Controls that stay where they are while the page scrolls under them. */
+  overlay?: React.ReactNode;
   /**
    * A stack screen whose navigation header already clears the status bar.
    * Insetting again left a status-bar-sized gap under the back arrow.
@@ -54,6 +57,7 @@ export function Screen({
   underHeader?: boolean;
 }) {
   const edges: Array<'top'> = underHeader ? [] : ['top'];
+  const insets = useSafeAreaInsets();
   if (!scroll) {
     return (
       <SafeAreaView style={styles.screen} edges={edges}>
@@ -75,6 +79,14 @@ export function Screen({
       >
         {children}
       </ScrollView>
+      {overlay ? (
+        <View
+          pointerEvents="box-none"
+          style={[StyleSheet.absoluteFill, { top: underHeader ? 0 : insets.top }]}
+        >
+          {overlay}
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }

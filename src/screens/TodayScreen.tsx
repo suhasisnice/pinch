@@ -1,12 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import {
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as db from '../db/dbService';
 import { rowCategoryLabel } from '../math/categoryTaxonomy';
@@ -21,7 +14,7 @@ import {
   getNotificationSettings,
   setDismissedDiscrepancy,
 } from '../settings/settingsStore';
-import { computeToday, daysUntilBroke, shouldRaiseDiscrepancy } from '../math/budget';
+import { computeToday, shouldRaiseDiscrepancy } from '../math/budget';
 import {
   RecoveryView,
   WeekPatterns,
@@ -34,28 +27,20 @@ import { suggestedCap } from '../math/patterns';
 import CapSheet, { CapDraft } from '../components/CapSheet';
 import { celebrate } from '../components/Moment';
 import { TransactionRow } from '../db/types';
-import { formatMoney, formatTime } from '../utils/format';
+import { formatMoney } from '../utils/format';
 import {
   accentForState,
   amountColor,
   categoryColor,
   palette,
+  radii,
   spacing,
   typography,
 } from '../theme/theme';
 import { setTodayTone } from '../theme/todayTone';
 import LinkedGroupRow from '../components/LinkedGroupRow';
 import { ReimbursementLink, groupLinkedTransactions } from '../math/reimbursement';
-import {
-  Button,
-  Group,
-  Loading,
-  Row,
-  Screen,
-  Section,
-  SentenceRow,
-  TextLink,
-} from '../components/ui';
+import { Group, Loading, ProgressBar, Row, Screen, SentenceRow, TextLink } from '../components/ui';
 import AddExpenseSheet from '../components/AddExpenseSheet';
 import SplitModal from '../components/SplitModal';
 import TransactionDetailSheet from '../components/TransactionDetailSheet';
@@ -64,25 +49,17 @@ import NetOutSheet from '../components/NetOutSheet';
 import FreshStartSheet from '../components/FreshStartSheet';
 import BudgetBreakdownSheet from '../components/BudgetBreakdownSheet';
 import ReconcileSheet from '../components/ReconcileSheet';
-import QuickReimburseSheet from '../components/QuickReimburseSheet';
 import BalanceCard, { MoneyLine } from '../components/BalanceCard';
 import { showDialog } from '../components/Dialog';
 import type { LookalikePair } from '../db/repos/transactions';
-import AffordSheet from '../components/AffordSheet';
-import WeekStrip, { WeekDay } from '../components/WeekStrip';
-import Ring from '../components/Ring';
-import { AnimatedMoney, FadeSlideIn } from '../components/motion';
+import { AnimatedMoney, FadeSlideIn, useReducedMotion } from '../components/motion';
 import Icon from '../components/Icon';
-
-/** Below this, "for someone?" is noise — a solo coffee is never a split. */
-const REIMBURSE_PROMPT_MIN = 200;
 
 const minutesApart = (pair: LookalikePair) =>
   Math.round((Date.parse(pair.secondAt) - Date.parse(pair.firstAt)) / 60_000);
 
 export default function TodayScreen() {
   const navigation = useNavigation<any>();
-  const { height: windowHeight } = useWindowDimensions();
   const [snapshot, setSnapshot] = useState<BudgetSnapshot | null>(null);
   const [today, setToday] = useState<TransactionRow[]>([]);
   const [links, setLinks] = useState<ReimbursementLink[]>([]);
@@ -99,13 +76,11 @@ export default function TodayScreen() {
   const [linkFor, setLinkFor] = useState<TransactionRow | null>(null);
   const [freshVisible, setFreshVisible] = useState(false);
   const [breakdownVisible, setBreakdownVisible] = useState(false);
-  const [affordVisible, setAffordVisible] = useState(false);
-  const [reimburseFor, setReimburseFor] = useState<TransactionRow | null>(null);
   const [owedByTx, setOwedByTx] = useState<Map<number, number>>(new Map());
-  const [week, setWeek] = useState<WeekDay[]>([]);
   const [reconcileVisible, setReconcileVisible] = useState(false);
   const [showDiscrepancy, setShowDiscrepancy] = useState(false);
   const [lookalikes, setLookalikes] = useState<LookalikePair[]>([]);
+  const [cash, setCash] = useState<Awaited<ReturnType<typeof db.getCashState>> | null>(null);
   const [recovery, setRecovery] = useState<RecoveryView | null>(null);
   const [patterns, setPatterns] = useState<WeekPatterns>({ callouts: [], caps: [] });
   const [voice, setVoice] = useState<Tone>('SAVAGE');
@@ -154,6 +129,7 @@ export default function TodayScreen() {
     scheduleHeadsUps(next, settings).catch(() => undefined);
 
     setBalance(await db.getBalanceState());
+    setCash(await db.getCashState());
     const cushionId = await getCushionGoalId();
     const cushionGoal = cushionId === null ? null : await db.getGoalById(cushionId);
     setCushion(
@@ -163,7 +139,6 @@ export default function TodayScreen() {
     setLinks(await db.getReimbursementLinks());
     // One lookup for the whole day rather than one per row.
     setOwedByTx(await db.getOpenReceivableByTransaction());
-    setWeek(await loadWeek(start));
 
     const kept = await getKeptLookalikes();
     const twoWeeksAgo = new Date(Date.now() - 14 * 86_400_000).toISOString();
@@ -219,14 +194,15 @@ export default function TodayScreen() {
   const day = dayStatus ?? snapshot.today;
   const tone = accentForState(day.state);
   const pending = recovery?.progress.status === 'PENDING' ? recovery.mission : null;
-  const brokeIn = daysUntilBroke(snapshot.budget.spendablePool, snapshot.avgDailyBurn);
-  const runsOutEarly = brokeIn !== null && brokeIn < snapshot.daysRemaining;
   const periodLeft = Math.max(0, snapshot.availableBudget);
-  const weekTotal = week.reduce((sum, d) => sum + d.total, 0);
-  const worstDay = week.reduce<WeekDay | null>(
-    (worst, d) => (!d.isFuture && d.total > (worst?.total ?? 0) ? d : worst),
-    null
-  );
+  // Everything that wants an answer rides on the bell, most pressing first.
+  const gap = showDiscrepancy && snapshot.balanceConsistency ? 1 : 0;
+  const alertCount = snapshot.pendingCaptures + lookalikes.length + gap;
+  function openAlert() {
+    if (snapshot!.pendingCaptures > 0 || alertCount === 0) navigation.navigate('Review');
+    else if (lookalikes.length > 0) askLookalike(lookalikes[0]);
+    else setReconcileVisible(true);
+  }
 
   // Both rows are already logged; this only asks, and removes nothing unasked.
   async function askLookalike(pair: LookalikePair) {
@@ -247,6 +223,33 @@ export default function TodayScreen() {
 
   return (
     <Screen
+      overlay={
+        <>
+          <View style={styles.corner}>
+            <AlertBell active={alertCount > 0} onPress={openAlert} />
+            <Pressable
+              onPress={() => navigation.navigate('Settings')}
+              accessibilityRole="button"
+              accessibilityLabel="Settings"
+              hitSlop={8}
+              style={({ pressed }) => [styles.float, pressed && styles.pressed]}
+            >
+              <Icon name="settings" size={20} color={palette.textMuted} />
+            </Pressable>
+          </View>
+          <Pressable
+            onPress={() => {
+              setAddThenSplit(false);
+              setAddVisible(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Add a spend"
+            style={({ pressed }) => [styles.add, pressed && styles.pressed]}
+          >
+            <Icon name="addCircle" size={56} color={palette.accent} />
+          </Pressable>
+        </>
+      }
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -255,28 +258,19 @@ export default function TodayScreen() {
         />
       }
     >
-      {/* The first screenful is one number and one line. Everything else is
-          a scroll away — you came to learn one thing. */}
-      <View style={[styles.first, { minHeight: Math.round(windowHeight * 0.62) }]}>
-        <View style={styles.topBar}>
-          <Text style={styles.date}>{longDate(new Date())}</Text>
-          <Pressable
-            onPress={() => navigation.navigate('Settings')}
-            accessibilityRole="button"
-            accessibilityLabel="Settings"
-            hitSlop={14}
-            style={({ pressed }) => pressed && styles.pressed}
-          >
-            <Icon name="settings" size={20} color={palette.textMuted} />
-          </Pressable>
-        </View>
-
+      {/* One number, then the three figures behind it, then the day. Anything
+          that wants attention lives on the bell, not in the page. */}
+      <View style={styles.hero}>
+        <Text style={styles.date}>{longDate(new Date())}</Text>
         {snapshot.budget.spendablePool < 0 ? (
           <View style={styles.trouble}>
-            <Text style={styles.troubleText}>
-              The numbers say you're {formatMoney(-snapshot.budget.spendablePool)} past your
-              allowance. More likely, something got counted that shouldn't have.
-            </Text>
+            <View style={styles.troubleLine}>
+              <Icon name="alert" size={18} color={palette.warning} />
+              <Text style={styles.troubleText}>
+                {formatMoney(-snapshot.budget.spendablePool)} past your allowance. Likely a
+                miscount.
+              </Text>
+            </View>
             <View style={styles.inlineActions}>
               <TextLink
                 label="See what counted"
@@ -286,146 +280,98 @@ export default function TodayScreen() {
             </View>
           </View>
         ) : null}
-
-        <FadeSlideIn style={styles.hero}>
+        <FadeSlideIn>
           <Pressable
             onPress={() => setBreakdownVisible(true)}
             accessibilityRole="button"
             accessibilityLabel={`${formatMoney(Math.max(0, snapshot.today.remainingToday))} left to spend today. How this is worked out`}
-            style={({ pressed }) => pressed && styles.heroPressed}
+            style={({ pressed }) => [styles.heroPress, pressed && styles.heroPressed]}
           >
-            <View style={styles.ringWrap}>
-              <Ring fraction={1 - day.usedFraction} color={tone}>
-                <AnimatedMoney
-                  amount={Math.max(0, day.remainingToday)}
-                  style={styles.numeral}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                />
-                <Text style={[styles.ringLabel, { color: tone }]}>
-                  {recovery && onMission
-                    ? `recovery · day ${recovery.progress.dayNumber} of ${recovery.mission.daysNeeded}`
-                    : 'left today'}
-                </Text>
-              </Ring>
-            </View>
-            <Text style={styles.quip}>
+            <AnimatedMoney
+              amount={Math.max(0, day.remainingToday)}
+              style={styles.numeral}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            />
+            <Text style={[styles.heroLabel, { color: tone }]}>
               {recovery && onMission
-                ? missionQuip(recovery, day.state === 'OVER', voice)
-                : todayQuip(snapshot, runsOutEarly ? brokeIn : null)}
+                ? `left today · recovery day ${recovery.progress.dayNumber} of ${recovery.mission.daysNeeded}`
+                : 'left today'}
             </Text>
-            {pending ? (
-              <Text style={[styles.mission, { color: palette.warning }]}>
-                Recovery starts tomorrow: {pending.daysNeeded} days at {formatMoney(pending.target)}
-                .
-              </Text>
-            ) : null}
-            {reprimand ? (
-              <Text style={[styles.mission, { color: palette.danger }]}>{reprimand}</Text>
-            ) : null}
-            <Text style={styles.heroMeta}>
-              {formatMoney(day.spentToday)} of {formatMoney(day.dailyLimit)} gone ·{' '}
-              {recovery && onMission
-                ? `${formatMoney(recovery.mission.normalLimit)} a day again after`
-                : `${snapshot.daysRemaining} days to payday`}
-            </Text>
+            <ProgressBar fraction={1 - day.usedFraction} color={tone} height={4} />
           </Pressable>
         </FadeSlideIn>
-
-        <View style={styles.firstFooter}>
-          <TextLink label="All transactions" onPress={() => navigation.navigate('Transactions')} />
-          {snapshot.pendingCaptures > 0 ? (
-            <TextLink
-              label={
-                snapshot.pendingCaptures === 1
-                  ? '1 payment wants a word'
-                  : `${snapshot.pendingCaptures} payments want a word`
-              }
-              onPress={() => navigation.navigate('Review')}
-              accent
-            />
-          ) : null}
-          <View style={styles.actionRow}>
-            <Button
-              label="Add a spend"
-              icon="add"
-              variant="outlined"
-              size="small"
-              onPress={() => {
-                setAddThenSplit(false);
-                setAddVisible(true);
-              }}
-            />
-            <Text style={styles.scrollHint}>
-              {today.length === 0
-                ? 'nothing below yet'
-                : `${today.length} ${today.length === 1 ? 'spend' : 'spends'} below ↓`}
-            </Text>
-          </View>
-        </View>
+        {pending ? (
+          <Text style={[styles.note, { color: palette.warning }]}>
+            Recovery starts tomorrow: {pending.daysNeeded} days at {formatMoney(pending.target)}.
+          </Text>
+        ) : null}
+        {reprimand ? <Text style={[styles.note, { color: palette.danger }]}>{reprimand}</Text> : null}
       </View>
 
-      <Group title="Today">
+      <Group>
+        <MoneyLine
+          title="Left in budget"
+          meta={`For the next ${snapshot.daysRemaining} days`}
+          value={periodLeft}
+          onPress={() => setBreakdownVisible(true)}
+        />
+        {balance ? <BalanceCard state={balance} onChanged={load} cushion={cushion} /> : null}
+        {cash ? <BalanceCard state={cash} onChanged={load} pocket="CASH" /> : null}
+      </Group>
+
+      <View style={styles.list}>
+        <View style={styles.listHead}>
+          <Text style={styles.listTitle} accessibilityRole="header">
+            Today
+          </Text>
+          <Pressable
+            onPress={() => navigation.navigate('Transactions')}
+            accessibilityRole="button"
+            accessibilityLabel="All transactions"
+            hitSlop={12}
+            style={({ pressed }) => pressed && styles.pressed}
+          >
+            <Icon name="transactions" size={20} color={palette.textSecondary} />
+          </Pressable>
+        </View>
         {today.length === 0 ? (
-          <Text style={styles.empty}>Nothing yet. Frugal, or forgetful?</Text>
+          <View style={styles.empty}>
+            <Icon name="receipt" size={36} color={palette.textMuted} />
+            <Text style={styles.emptyText}>Nothing spent yet</Text>
+          </View>
         ) : (
-          // A spend and what paid it back show as one line at the net, as in Transactions.
-          groupLinkedTransactions(today, links).map((item) => {
-            if (item.type === 'group') {
-              return <LinkedGroupRow key={`g${item.key}`} group={item} onOpen={setDetailFor} />;
-            }
-            const tx = item.transaction;
-            const owed = owedByTx.get(tx.id);
-            // Only spending can be owed back, and only once. Kept for amounts
-            // big enough to plausibly have been for more than one person.
-            const canReimburse =
-              tx.kind === 'SPEND' && owed === undefined && tx.amount >= REIMBURSE_PROMPT_MIN;
-            return (
-              <Row
-                key={tx.id}
-                title={tx.merchant}
-                mark={categoryColor(tx.category)}
-                subtitle={`${formatTime(tx.occurred_at)} · ${rowCategoryLabel(tx, 'no category')}`}
-                onPress={() => setDetailFor(tx)}
-                right={
-                  <View style={styles.txRight}>
+          <Group>
+            {/* A spend and what paid it back show as one line at the net, as in Transactions. */}
+            {groupLinkedTransactions(today, links).map((item) => {
+              if (item.type === 'group') {
+                return <LinkedGroupRow key={`g${item.key}`} group={item} onOpen={setDetailFor} />;
+              }
+              const tx = item.transaction;
+              const owed = owedByTx.get(tx.id);
+              return (
+                <Row
+                  key={tx.id}
+                  title={tx.merchant}
+                  mark={categoryColor(tx.category)}
+                  subtitle={
+                    owed !== undefined
+                      ? `${formatMoney(owed)} coming back`
+                      : rowCategoryLabel(tx, '') || undefined
+                  }
+                  onPress={() => setDetailFor(tx)}
+                  right={
                     <Text style={[styles.txAmount, { color: amountColor(tx.direction) }]}>
                       {tx.direction === 'CREDIT' ? '+' : ''}
                       {formatMoney(tx.amount)}
                     </Text>
-                    {owed !== undefined ? (
-                      <Text style={styles.txNote}>{formatMoney(owed)} coming back</Text>
-                    ) : canReimburse ? (
-                      <Pressable
-                        onPress={() => setReimburseFor(tx)}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Say who ${tx.merchant} was for`}
-                      >
-                        <Text style={styles.txNote}>for someone?</Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                }
-              />
-            );
-          })
+                  }
+                />
+              );
+            })}
+          </Group>
         )}
-      </Group>
-
-      {week.length === 7 ? (
-        <Section title="This week">
-          <Text style={styles.sentence}>
-            {formatMoney(weekTotal)} so far
-            {worstDay && worstDay.total > snapshot.today.dailyLimit
-              ? `. ${FULL_DAYS[week.indexOf(worstDay)]} did most of the damage.`
-              : weekTotal > 0
-                ? '. Nothing dramatic.'
-                : '. Quiet week.'}
-          </Text>
-          <WeekStrip days={week} limit={snapshot.today.dailyLimit} todayColor={tone} />
-        </Section>
-      ) : null}
+      </View>
 
       {patterns.callouts.length > 0 || patterns.caps.length > 0 ? (
         <Group title="Patterns">
@@ -472,42 +418,6 @@ export default function TodayScreen() {
         </Group>
       ) : null}
 
-      <Group title="This month">
-        {lookalikes.map((pair) => (
-          <SentenceRow
-            key={`${pair.firstId}:${pair.secondId}`}
-            tone={palette.warning}
-            onPress={() => askLookalike(pair)}
-            text={`${formatMoney(pair.amount)} shows up twice, ${minutesApart(pair)} min apart. Same payment?`}
-          />
-        ))}
-        <MoneyLine
-          title="Left in budget"
-          meta={`For the next ${snapshot.daysRemaining} days`}
-          value={periodLeft}
-          onPress={() => setBreakdownVisible(true)}
-        />
-        {snapshot.protectedMoney > 0.009 ? (
-          <SentenceRow
-            onPress={() => navigation.navigate('Plans')}
-            text={`${formatMoney(snapshot.protectedMoney)} already spoken for by plans`}
-          />
-        ) : null}
-        {balance ? <BalanceCard state={balance} onChanged={load} cushion={cushion} /> : null}
-        {showDiscrepancy && snapshot.balanceConsistency ? (
-          <SentenceRow
-            onPress={() => setReconcileVisible(true)}
-            tone={palette.warning}
-            text={
-              snapshot.balanceConsistency.discrepancy > 0
-                ? `The bank has ${formatMoney(snapshot.balanceConsistency.discrepancy)} Pinch can't explain`
-                : `The bank has ${formatMoney(-snapshot.balanceConsistency.discrepancy)} less than it should`
-            }
-          />
-        ) : null}
-        <SentenceRow onPress={() => setAffordVisible(true)} text="Can I afford it?" />
-      </Group>
-
       <View style={styles.more}>
         <TextLink label="The long version" onPress={() => navigation.navigate('Insights')} />
       </View>
@@ -519,12 +429,6 @@ export default function TodayScreen() {
           setCapDraft(null);
           load();
         }}
-      />
-
-      <AffordSheet
-        visible={affordVisible}
-        snapshot={snapshot}
-        onClose={() => setAffordVisible(false)}
       />
 
       <AddExpenseSheet
@@ -549,15 +453,6 @@ export default function TodayScreen() {
           }
           setAddThenSplit(false);
           setAdjustmentPrefill(null);
-          load();
-        }}
-      />
-
-      <QuickReimburseSheet
-        transaction={reimburseFor}
-        onClose={() => setReimburseFor(null)}
-        onSaved={() => {
-          setReimburseFor(null);
           load();
         }}
       />
@@ -661,32 +556,10 @@ const MONTHS = [
   'November',
   'December',
 ];
-const FULL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 /** "Thursday, 24 September" */
 function longDate(d: Date): string {
   return `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
-}
-
-/**
- * The one line under the number. Dry, short, and always true: every
- * branch is decided by the same figures the number is, so the joke never
- * contradicts the maths.
- */
-export function todayQuip(snapshot: BudgetSnapshot, runsOutIn: number | null): string {
-  const t = snapshot.today;
-  if (t.state === 'OVER')
-    return `A little over, by ${formatMoney(-t.remainingToday)}. Tomorrow resets.`;
-  if (runsOutIn !== null) {
-    return runsOutIn <= 0
-      ? 'Running on fumes this month. Easy does it.'
-      : `At this pace it lasts ${runsOutIn} more ${runsOutIn === 1 ? 'day' : 'days'}, not ${snapshot.daysRemaining}. Easy does it.`;
-  }
-  if (t.spentToday <= 0) return 'Nothing spent yet. Nice and quiet.';
-  if (t.state === 'CLOSE') return 'Almost at today’s limit. Home stretch.';
-  if (snapshot.streakDays >= 3) return `${snapshot.streakDays} days under budget. Lovely.`;
-  return 'Going well. Keep it steady.';
 }
 
 /** A notification line, as a sentence on screen. */
@@ -695,57 +568,72 @@ function sentence(line: string): string {
   return /[.!?]$/.test(s) ? s : `${s}.`;
 }
 
-/** The line under the ring while a recovery mission runs. */
-export function missionQuip(recovery: RecoveryView, overToday: boolean, voice: Tone): string {
-  const { mission, progress } = recovery;
-  if (overToday) {
-    return voice === 'SAVAGE'
-      ? `Past ${formatMoney(mission.target)} on a recovery day. Bold. This one won't count.`
-      : "Over today's recovery number. This day won't count.";
-  }
-  if (progress.lastResult === 'SLIPPED') {
-    return voice === 'SAVAGE'
-      ? 'Yesterday slipped. The spare day is gone. No more of that.'
-      : 'Yesterday slipped, so the mission runs a day longer.';
-  }
-  if (progress.lastResult === 'HELD') return 'Yesterday held. Same again.';
-  return `${formatMoney(mission.overBy)} to win back. ${formatMoney(mission.target)} is the whole day.`;
-}
+/** How often the bell shakes while something is waiting. */
+const BELL_EVERY_MS = 150_000;
 
 /**
- * Monday to Sunday of the current week, each day's spend summed over the
- * phone's own midnight-to-midnight (not the UTC day).
+ * The one place alerts live. Quiet and grey when there is nothing; red, with
+ * a short shake every couple of minutes, while something wants an answer.
  */
-async function loadWeek(todayStart: Date): Promise<WeekDay[]> {
-  const monday = new Date(todayStart);
-  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-  return Promise.all(
-    DAY_LETTERS.map(async (label, i) => {
-      const from = new Date(monday);
-      from.setDate(monday.getDate() + i);
-      const to = new Date(from);
-      to.setDate(from.getDate() + 1);
-      const isFuture = from > todayStart;
-      const rows = isFuture ? [] : await db.getDailySpend(from.toISOString(), to.toISOString());
-      return {
-        label,
-        total: rows.reduce((sum, r) => sum + r.total, 0),
-        isToday: from.getTime() === todayStart.getTime(),
-        isFuture,
-      };
-    })
+function AlertBell({ active, onPress }: { active: boolean; onPress: () => void }) {
+  const shake = useRef(new Animated.Value(0)).current;
+  const reduced = useReducedMotion();
+
+  useEffect(() => {
+    if (!active || reduced) return;
+    const ring = () =>
+      Animated.sequence(
+        [1, -1, 1, -1, 0].map((toValue) =>
+          Animated.timing(shake, { toValue, duration: 90, useNativeDriver: true })
+        )
+      ).start();
+    ring();
+    const id = setInterval(ring, BELL_EVERY_MS);
+    return () => clearInterval(id);
+  }, [active, reduced, shake]);
+
+  const rotate = shake.interpolate({ inputRange: [-1, 1], outputRange: ['-14deg', '14deg'] });
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={active ? 'Something needs a look' : 'Review'}
+      hitSlop={8}
+      style={({ pressed }) => [styles.float, pressed && styles.pressed]}
+    >
+      <Animated.View style={{ transform: [{ rotate }] }}>
+        <Icon
+          name={active ? 'bellDot' : 'bell'}
+          size={20}
+          color={active ? palette.danger : palette.textMuted}
+        />
+      </Animated.View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   pressed: { opacity: 0.6 },
-  first: { justifyContent: 'space-between', gap: spacing.lg },
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  date: { ...typography.overline, color: palette.textMuted },
 
-  hero: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  ringWrap: { alignItems: 'center' },
-  ringLabel: { ...typography.caption, color: palette.textMuted, marginTop: 2 },
+  // Fixed over the page: the bell, the cog under it, and the add button.
+  corner: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.gutter,
+    gap: spacing.sm,
+    alignItems: 'center',
+  },
+  float: {
+    padding: spacing.sm,
+    borderRadius: radii.pill,
+    backgroundColor: palette.surfaceElevated,
+  },
+  add: { position: 'absolute', right: spacing.gutter, bottom: spacing.lg },
+
+  // Kept clear of the fixed corner so a wide number never runs under it.
+  hero: { gap: spacing.md, paddingRight: spacing.xxl + spacing.lg },
+  date: { ...typography.overline, color: palette.textMuted },
+  heroPress: { gap: spacing.xs },
   heroPressed: { opacity: 0.72 },
   numeral: {
     ...typography.numeral,
@@ -754,44 +642,20 @@ const styles = StyleSheet.create({
     letterSpacing: -3,
     color: palette.textPrimary,
   },
-  quip: {
-    ...typography.quip,
-    fontSize: 19,
-    lineHeight: 26,
-    color: palette.textPrimary,
-    marginTop: spacing.lg,
-    textAlign: 'center',
-  },
-  mission: {
-    ...typography.body,
-    marginTop: spacing.sm,
-    textAlign: 'center',
-  },
-  heroMeta: {
-    ...typography.caption,
-    color: palette.textMuted,
-    marginTop: spacing.sm,
-    textAlign: 'center',
-  },
-
-  firstFooter: { gap: spacing.lg },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  scrollHint: { ...typography.caption, color: palette.textMuted },
+  heroLabel: { ...typography.caption, marginBottom: spacing.sm },
+  note: { ...typography.body },
 
   trouble: { gap: spacing.sm },
-  troubleText: { ...typography.body, color: palette.warning },
+  troubleLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  troubleText: { ...typography.body, color: palette.warning, flex: 1 },
   inlineActions: { flexDirection: 'row', gap: spacing.lg },
 
-  empty: { ...typography.body, color: palette.textMuted, paddingVertical: spacing.md },
-  txRight: { alignItems: 'flex-end', gap: 1 },
+  list: { gap: spacing.sm },
+  listHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  listTitle: { ...typography.overline, color: palette.textMuted },
+  empty: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
+  emptyText: { ...typography.body, color: palette.textMuted },
   txAmount: { ...typography.body, color: palette.textPrimary },
-  txNote: { ...typography.caption, color: palette.textMuted },
 
-  sentence: { ...typography.quip, fontSize: 19, lineHeight: 26, color: palette.textPrimary },
   more: { paddingTop: spacing.sm },
 });
