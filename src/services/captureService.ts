@@ -425,6 +425,8 @@ export interface PostTransactionInput {
   silent?: boolean;
   /** A manual ledger correction rather than an ordinary purchase/allowance. See TransactionRow.is_adjustment. */
   isAdjustment?: boolean;
+  /** Paid with notes from the wallet. See TransactionRow.paid_in_cash. */
+  paidInCash?: boolean;
 }
 
 /**
@@ -478,6 +480,7 @@ export async function postTransaction(input: PostTransactionInput): Promise<numb
     dedupKey: input.dedupKey ?? null,
     outingId,
     isAdjustment: input.isAdjustment,
+    paidInCash: input.paidInCash,
   });
 
   if (input.settlesContactId) {

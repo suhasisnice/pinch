@@ -28,7 +28,9 @@ export interface ClassificationResult {
  */
 async function applyNonSpendClassification(
   row: TransactionRow,
-  cardTracked: boolean
+  cardTracked: boolean,
+  /** When the wallet was first counted; null if cash is not tracked. */
+  cashSince: string | null
 ): Promise<{ reason: NonSpendReason; removedFromSpending: number } | null> {
   if (row.excluded_at !== null || row.transfer_pair_id !== null) return null;
 
@@ -58,9 +60,14 @@ async function applyNonSpendClassification(
   }
 
   if (reason === 'CASH_WITHDRAWAL') {
-    // Still spending; it only wants an honest category.
     if (row.category !== 'Cash') await db.setTransactionCategory(row.id, 'Cash', { source: 'SURE' });
-    return null;
+    // With no counted wallet nothing would replace it, so it stays spending.
+    // From the first count on it is bank money becoming wallet money, and
+    // what it buys is logged as paid in cash.
+    if (cashSince === null || row.occurred_at < cashSince) {
+      if (row.non_spend_reason !== null) await db.setNonSpendReason(row.id, null);
+      return null;
+    }
   }
 
   if (row.non_spend_reason === reason) return null;
@@ -68,7 +75,10 @@ async function applyNonSpendClassification(
   await db.setNonSpendReason(row.id, reason);
   return {
     reason,
-    removedFromSpending: removesFromSpending(reason) && row.kind === 'SPEND' ? row.amount : 0,
+    removedFromSpending:
+      (removesFromSpending(reason) || reason === 'CASH_WITHDRAWAL') && row.kind === 'SPEND'
+        ? row.amount
+        : 0,
   };
 }
 
@@ -78,15 +88,16 @@ async function applyNonSpendClassification(
  * for the version that runs live as a transaction is posted.
  */
 export async function classifyStoredTransactions(): Promise<ClassificationResult> {
-  const [all, cardTracked] = await Promise.all([
+  const [all, cardTracked, cashSince] = await Promise.all([
     db.getAllTransactions(),
     db.hasCardTransactions(),
+    db.getCashTrackedSince(),
   ]);
 
   const result: ClassificationResult = { applied: [], removedFromSpending: 0 };
 
   for (const row of all) {
-    const applied = await applyNonSpendClassification(row, cardTracked);
+    const applied = await applyNonSpendClassification(row, cardTracked, cashSince);
     if (!applied) continue;
     result.applied.push({ id: row.id, merchant: row.merchant, amount: row.amount, reason: applied.reason });
     result.removedFromSpending += applied.removedFromSpending;
@@ -109,7 +120,7 @@ export async function classifyNewTransaction(
   if (!row) return null;
 
   const cardTracked = await db.hasCardTransactions();
-  return applyNonSpendClassification(row, cardTracked);
+  return applyNonSpendClassification(row, cardTracked, await db.getCashTrackedSince());
 }
 
 /** What a correction is about, beyond its merchant name. */
