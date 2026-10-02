@@ -1,0 +1,35 @@
+gemini/gemini-2.5-flash: 0 ok, then 404
+gemini/gemini-2.5-pro: 0 ok, then 404
+gemini/gemini-2.5-flash-lite: 0 ok, then 404
+mistral/codestral-latest: 40 ok (no limit in 40)
+groq/openai/gpt-oss-120b: 40 ok (no limit in 40)
+mistral/mistral-small-latest: 0 ok, then 429
+gemini/gemini-flash-latest: 4 ok, then 429 (reset 43s)
+groq/openai/gpt-oss-20b: 40 ok (no limit in 40)
+mistral/mistral-medium-latest: 0 ok, then 429
+ollama-cloud/nemotron-3-ultra: 40 ok (no limit in 40)
+groq/qwen/qwen3.8-27b: 40 ok (no limit in 40)
+mistral/mistral-medium-3-5: 0 ok, then 429
+mistral/magistral-small-latest: 0 ok, then 429
+groq/allam-2-7b: 40 ok (no limit in 40)
+ollama-cloud/nemotron-3-super: 40 ok (no limit in 40)
+gemini/gemini-flash-lite-latest: 17 ok, then 504
+mistral/magistral-medium-latest: 0 ok, then 429
+gemini/gemini-pro-latest: 0 ok, then 429 (reset 55s)
+mistral/ministral-3b-latest: 40 ok (no limit in 40)
+gemini/gemini-3-flash-preview: 0 ok, then 502
+gemini/gemini-3.1-pro-preview: 0 ok, then 429 (reset 34s)
+ollama-cloud/nemotron-3-nano:30b: 40 ok (no limit in 40)
+mistral/ministral-8b-latest: 40 ok (no limit in 40)
+gemini/gemini-3.1-flash-lite: 5 ok, then 504
+ollama-cloud/gemma4:31b: 40 ok (no limit in 40)
+ollama-cloud/gpt-oss:20b: 40 ok (no limit in 40)
+gemini/gemini-3.5-flash-lite: 10 ok, then 504
+gemini/gemini-3.6-flash: 0 ok, then 503
+gemini/gemini-3.7-flash: 1 ok, then 504
+mistral/ministral-14b-latest: 40 ok (no limit in 40)
+gemini/gemini-3.8-flash: 0 ok, then 504
+gemini/gemma-4-26b-a4b-it: 0 ok, then 500
+mistral/mistral-vibe-cli-latest: 0 ok, then 429
+gemini/gemma-4-31b-it: 1 ok, then 500
+wrote docs/AI_LIMITS.raw.json

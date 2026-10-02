@@ -166,8 +166,18 @@ const REVERSAL_MARKERS = /\b(?:reversed|refund(?:ed)?|cancell?ed|failed|returned
 const ARRIVED_MARKERS =
   /\b(?:credited\s+back|credited\s+to\s+your|has\s+been\s+credited|refunded\s+to\s+your|reversed\s+and\s+credited|money\s+is\s+back)\b/i;
 
+/**
+ * Card refunds that never say "credited back": HDFC's "refunded by X &
+ * adjusted against Credit Card", slice's "Refund of Rs.500 ... processed to
+ * your credit card", Axis's "Txn reversal of INR 2499 ... was successful" and
+ * HDFC's "Transaction Reversed!". "will be" is the same not-yet guard as above.
+ */
+const REFUND_SETTLED =
+  /\brefund(?:ed)?\b[\s\S]{0,100}?\b(?:credited\s+to|processed\s+to|adjusted\s+against)\b|\b(?:txn|transaction)\s+(?:reversed\b|reversal\s+of\b[^.]*\bsuccessful)/i;
+
 export function isReversalCredit(text: string): boolean {
-  return REVERSAL_MARKERS.test(text) && ARRIVED_MARKERS.test(text);
+  if (REVERSAL_MARKERS.test(text) && ARRIVED_MARKERS.test(text)) return true;
+  return REFUND_SETTLED.test(text) && !/\bwill\s+be\b/i.test(text);
 }
 
 /** Sender IDs are shaped like VM-HDFCBK, AD-ICICIB, JD-SBIINB. */
@@ -178,7 +188,8 @@ const KNOWN_BANK_TOKENS = [
   'PAYTM', 'PHONPE', 'GPAY', 'AMZNPY', 'MOBIKW', 'FREECH', 'SLICE', 'JUPITR', 'FAMPAY',
 ];
 
-const AMOUNT = String.raw`(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d{1,2})?)`;
+// "Rs.230", "INR.1,000" (IDFC) and "Rs:1500" (Union Bank).
+const AMOUNT = String.raw`(?:rs|inr|₹)[.:]?\s*([\d,]+(?:\.\d{1,2})?)`;
 const AMOUNT_TRAILING = String.raw`([\d,]+(?:\.\d{1,2})?)\s*(?:rs\.?|inr|₹)`;
 // SBI's UPI alerts (and some others) quote no currency symbol at all —
 // "debited by 150.0". Only trusted directly against a transaction verb, so a
@@ -188,14 +199,25 @@ const AMOUNT_VERB_ADJACENT = String.raw`\b(?:debited|credited|paid|sent|received
 
 // Compiled once at load, in priority order, rather than on every parse.
 const AMOUNT_PATTERNS: RegExp[] = [AMOUNT, AMOUNT_TRAILING, AMOUNT_VERB_ADJACENT].map(
-  (source) => new RegExp(source, 'i')
+  (source) => new RegExp(source, 'gi')
 );
+
+/**
+ * A rupee figure introduced by one of these is what is left, not what moved.
+ * A foreign-currency card spend quotes only its limit in rupees ("SGD 100
+ * spent ... Avbl Limit: INR 99999.9"), and reading that as the amount logged
+ * a ₹99,999.90 purchase at full confidence.
+ */
+const NOT_THE_AMOUNT = /\b(?:bal(?:ance)?|limit|lmt|due|outstanding)\s*(?:is|of)?\s*[:\-]?\s*$/i;
 
 /**
  * Verbs that can only mean money leaving. Nothing else in the sentence can
  * talk them out of it.
  */
-const DEBIT_VERBS_STRONG = /\b(?:debited|spent|withdrawn|deducted|purchase|txn of)\b/i;
+// "Dr." and a bare "Txn" count only right before an amount (or "Dr. from"),
+// so "Dr. Sharma" and "txn id" are not debits.
+const DEBIT_VERBS_STRONG =
+  /\b(?:debited|spent|withdrawn|deducted|purchase|txn of|used at|done at|done on)\b|\bdr\.?(?=\s+(?:from|rs|inr|₹))|\btxn(?=\s+(?:rs|inr|₹))/i;
 
 /**
  * Verbs that describe a payment without saying which end of it you are on.
@@ -215,9 +237,10 @@ const DEBIT_VERBS_DIRECTIONAL = /\b(?:paid|sent|transferred to|trf to)\b/i;
  * who it went to.
  */
 const INBOUND_MARKERS =
-  /\bto\s+you\b|\bto\s+your\s+(?:a\/c|acct|account|wallet|upi|vpa)\b|\b(?:sent|paid)\s+you\b/i;
+  /\bto\s+you\b|\bto\s+your\s+(?:bank\s+)?(?:a\/c|acct|account|wallet|upi|vpa)\b|\b(?:sent|paid)\s+you\b/i;
 
-const CREDIT_VERBS = /\b(?:credited|received|added|refunded|deposited)\b/i;
+const CREDIT_VERBS =
+  /\b(?:credited|received|added|refunded|deposited)\b|\bcr\.?(?=\s+(?:rs|inr|₹))/i;
 
 // ---------------------------------------------------------------------------
 // Which way the money went.
@@ -243,6 +266,8 @@ const CREDIT_G = new RegExp(CREDIT_VERBS.source, 'gi');
 interface DirectionHit {
   index: number;
   direction: ParsedDirection;
+  /** From "paid"/"sent": the direction was inferred from who received it, not stated. */
+  inferred?: boolean;
 }
 
 function matchPositions(pattern: RegExp, text: string): number[] {
@@ -269,7 +294,7 @@ function directionHits(text: string, inbound: boolean): DirectionHit[] {
   for (const index of matchPositions(DEBIT_STRONG_G, text)) hits.push({ index, direction: 'DEBIT' });
   for (const index of matchPositions(CREDIT_G, text)) hits.push({ index, direction: 'CREDIT' });
   for (const index of matchPositions(DEBIT_DIRECTIONAL_G, text)) {
-    hits.push({ index, direction: inbound ? 'CREDIT' : 'DEBIT' });
+    hits.push({ index, direction: inbound ? 'CREDIT' : 'DEBIT', inferred: true });
   }
   return hits;
 }
@@ -282,6 +307,13 @@ export interface ResolvedDirection {
    * for one whose own wording does not settle which way the money went.
    */
   unambiguous: boolean;
+  /**
+   * The deciding verb was "paid"/"sent", whose direction is only inferred,
+   * and another verb in the message says the opposite. That is a guess at
+   * the sign, and a wrong sign moves the budget by twice the amount, so the
+   * caller keeps it out of the ledger and asks instead.
+   */
+  guessed: boolean;
 }
 
 /**
@@ -311,9 +343,11 @@ export function resolveDirection(
   }
   if (!best) return null;
 
+  const unambiguous = hits.every((hit) => hit.direction === best!.direction);
   return {
     direction: best.direction,
-    unambiguous: hits.every((hit) => hit.direction === best!.direction),
+    unambiguous,
+    guessed: best.inferred === true && !unambiguous,
   };
 }
 
@@ -341,7 +375,8 @@ const STOP = String.raw`(?=\s+(?:on|via|using|from|ref|upi|txn|dated|at\s+\d)\b|
  * name stops at the emoji.
  */
 const INBOUND_MERCHANT_PATTERNS: RegExp[] = [
-  new RegExp(String.raw`^(${NAME})\s*[^A-Za-z0-9]*\s*(?:sent|paid)\s+`, 'i'),
+  // PhonePe puts its title in front and says "has sent": "Money received SWARNA P has sent ₹38 to your bank account".
+  new RegExp(String.raw`^(?:money\s+received\W*)?(${NAME})\s*[^A-Za-z0-9]*\s*(?:has\s+)?(?:sent|paid)\s+`, 'i'),
 ];
 
 const MERCHANT_PATTERNS: RegExp[] = [
@@ -403,6 +438,8 @@ const ACCOUNT_PATTERNS: RegExp[] = [
   /\b(?:ending|endg)\s*(?:with|in)?\s*(\d{3,6})\b/i,
   // A/c 1234, linked to 1234 — digits directly after an account word
   /\b(?:a\/c|acct|account)\s*(?:no\.?|number)?\s*(\d{4,6})\b/i,
+  // No mask at all: HDFC's "Card 0000", Kotak's "AC 1234"
+  /\b(?:card|ac)\s+(\d{4})\b/i,
   // Bare masked number: XXXX1234, ****1234
   /\b[Xx*]{2,}\s?(\d{3,6})\b/,
 ];
@@ -462,8 +499,9 @@ function extractFirstAt(
   patterns: RegExp[]
 ): { value: string; index: number } | null {
   for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match?.[1] && match.index !== undefined) {
+    for (const match of text.matchAll(pattern)) {
+      // A balance, a limit or a due figure is skipped; see NOT_THE_AMOUNT.
+      if (NOT_THE_AMOUNT.test(text.slice(Math.max(0, match.index - 24), match.index))) continue;
       return { value: match[1], index: match.index };
     }
   }
@@ -498,7 +536,37 @@ export function isLikelyBankSender(sender: string | null | undefined): boolean {
   return KNOWN_BANK_TOKENS.some((known) => token.includes(known) || upper.includes(known));
 }
 
+/**
+ * Union Bank signs every alert "Never Share PIN/OTP", which the OTP rule read
+ * as an OTP message, throwing away real credits. The warning is dropped before
+ * the reject rules run, but only for a message that names an account and says
+ * money was credited or debited; an OTP mentioned anywhere else still rejects.
+ */
+const SHARE_WARNING = /\b(?:never|don'?t|do\s+not)\s+share\b[^.]{0,40}/i;
+
+function withoutShareWarning(text: string, namesAccount: boolean): string {
+  return namesAccount && /\b(?:credited|debited)\b/i.test(text)
+    ? text.replace(SHARE_WARNING, '')
+    : text;
+}
+
+/**
+ * An SMS that names no account number is normally someone else's money. The
+ * exception is a known bank sender talking about "your account" or "your
+ * card" (Bank of Baroda's UPI credits do exactly this). Never logged on its
+ * own: parseMessage holds it under the accept threshold so it is asked about.
+ */
+const YOUR_ACCOUNT = /\byour\s+(?:\w+\s+){0,5}(?:account|a\/c|acct|card)\b/i;
+
+function vouchedWithoutAccount(text: string, sender?: string | null): boolean {
+  return isLikelyBankSender(sender) && (YOUR_ACCOUNT.test(text) || BENEFICIARY_RECEIVED.test(text));
+}
+
+/** "Your beneficiary X has received Rs.." is your money leaving, worded as a receipt. */
+const BENEFICIARY_RECEIVED = /\bbeneficiary\b[^.]{0,60}\bhas\s+received\b/i;
+
 export function isRejected(text: string, namesAccount = false): boolean {
+  text = withoutShareWarning(text, namesAccount);
   if (HARD_REJECT_PATTERNS.some((pattern) => pattern.test(text))) return true;
   return !namesAccount && SOFT_REJECT_PATTERNS.some((pattern) => pattern.test(text));
 }
@@ -512,6 +580,7 @@ export function isRejected(text: string, namesAccount = false): boolean {
  * string on every call just for the rare one a human will actually read.
  */
 export function rejectionReason(text: string, namesAccount = false): string | null {
+  text = withoutShareWarning(text, namesAccount);
   const hard = HARD_REJECT_PATTERNS.find((pattern) => pattern.test(text));
   if (hard) return `hard reject: ${hard.source}`;
   if (namesAccount) return null;
@@ -565,7 +634,8 @@ export function parseMessage(
 
   // A reversal is money arriving, whatever verbs the sentence also contains —
   // "Rs 250 debited ... has been reversed" names a debit and is a credit.
-  const direction: ParsedDirection = refund ? 'CREDIT' : resolved!.direction;
+  const outbound = !refund && BENEFICIARY_RECEIVED.test(text);
+  const direction: ParsedDirection = refund ? 'CREDIT' : outbound ? 'DEBIT' : resolved!.direction;
 
   const rawName = extractFirst(
     text,
@@ -580,7 +650,8 @@ export function parseMessage(
   // to review, because a review inbox full of coupons is its own kind of
   // broken. Notifications skip this: their package allowlist already did the
   // equivalent job.
-  if (options.source !== 'NOTIFICATION' && !accountHint) return null;
+  const vouched = !accountHint && vouchedWithoutAccount(text, sender);
+  if (options.source !== 'NOTIFICATION' && !accountHint && !vouched) return null;
 
   // Confidence is additive over independent corroborating signals.
   let confidence = 0.3;
@@ -604,6 +675,13 @@ export function parseMessage(
   // several points under the accept threshold for reasons that had nothing
   // to do with how trustworthy the message actually was.
   if (options.source === 'NOTIFICATION') confidence += 0.25;
+  // A guessed sign is never logged on its own, however much else lines up.
+  // Neither is anything else where the meaning, not the wording, is in doubt.
+  const doubtful =
+    (!refund && resolved!.guessed) ||
+    outbound ||
+    (vouched && options.source !== 'NOTIFICATION');
+  if (doubtful) confidence = Math.min(confidence, ACCEPT_THRESHOLD - 0.05);
 
   return {
     amount,
@@ -653,7 +731,7 @@ export function explainRejection(
     return 'no debit or credit verb found';
   }
 
-  if (options.source !== 'NOTIFICATION' && !accountHint) {
+  if (options.source !== 'NOTIFICATION' && !accountHint && !vouchedWithoutAccount(text, sender)) {
     return 'no account or card number named (and not a notification)';
   }
 

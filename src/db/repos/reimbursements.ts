@@ -72,8 +72,8 @@ export async function getReimbursementCandidates(
 
   const payerId = await findContactIdByNameOrAlias(credit.merchant);
   const arrived = new Date(credit.occurred_at);
-  // A minute of slack: two sources can stamp the same moment differently.
-  const upTo = new Date(arrived.getTime() + 60_000).toISOString();
+  // Either order: a friend can send their share before the bill is paid.
+  const upTo = new Date(arrived.getTime() + LOOKBACK_DAYS * 86_400_000).toISOString();
   const from = new Date(arrived.getTime() - LOOKBACK_DAYS * 86_400_000).toISOString();
 
   const rows = await db.getAllAsync<{
@@ -230,5 +230,97 @@ export async function unlinkReimbursement(creditId: number): Promise<void> {
   const credit = await getTransactionById(creditId);
   if (credit && credit.kind === 'SETTLE_IN') {
     await updateTransaction(creditId, { kind: 'INCOME' });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The same link, made from the spend's side: "net this out".
+// ---------------------------------------------------------------------------
+
+/** Your own spending, still counted: the same rows a payment is offered to cover. */
+export function canBeNettedOut(tx: TransactionRow): boolean {
+  return (
+    tx.direction === 'DEBIT' &&
+    tx.kind === 'SPEND' &&
+    tx.excluded_at === null &&
+    tx.transfer_pair_id === null &&
+    tx.non_spend_reason === null &&
+    tx.status === 'COMPLETED'
+  );
+}
+
+export interface NetOutCandidate {
+  id: number;
+  amount: number;
+  occurredAt: string;
+  merchant: string;
+  /** How much of it already pays this spend back. Zero when not linked. */
+  applied: number;
+}
+
+/**
+ * Money that came in after a spend and could be paying it back, soonest
+ * first. A payment already explained by something else is left out: a link
+ * accounts for the whole payment, so it has nothing left to give.
+ */
+export async function getNetOutCandidates(spendId: number): Promise<NetOutCandidate[]> {
+  const spend = await getTransactionById(spendId);
+  if (!spend) return [];
+
+  const paid = new Date(spend.occurred_at);
+  // Either order: a friend can send their share before the bill is paid.
+  const from = new Date(paid.getTime() - LOOKBACK_DAYS * 86_400_000).toISOString();
+  const upTo = new Date(paid.getTime() + LOOKBACK_DAYS * 86_400_000).toISOString();
+
+  return getAdapter().getAllAsync<NetOutCandidate>(
+    `SELECT * FROM (
+       SELECT
+         t.id AS id,
+         t.amount AS amount,
+         t.occurred_at AS occurredAt,
+         t.merchant AS merchant,
+         COALESCE((SELECT SUM(s.amount) FROM Settlements s JOIN IOUs i ON i.id = s.iou_id
+                    WHERE s.transaction_id = t.id AND i.transaction_id = ?3), 0) AS applied,
+         EXISTS (SELECT 1 FROM Settlements s WHERE s.transaction_id = t.id) AS used
+       FROM Transactions t
+       WHERE t.direction = 'CREDIT' AND t.kind IN ('INCOME', 'SETTLE_IN')
+         AND t.excluded_at IS NULL AND t.transfer_pair_id IS NULL
+         AND t.occurred_at >= ?1 AND t.occurred_at <= ?2
+     )
+     WHERE applied > 0 OR used = 0
+     ORDER BY applied > 0 DESC, ABS(julianday(occurredAt) - julianday(?4)) ASC
+     LIMIT 80;`,
+    [from, upTo, spendId, spend.occurred_at]
+  );
+}
+
+/**
+ * Sets which incoming payments pay `spendId` back, replacing whatever was
+ * linked to it before. Each payment keeps the other spends it already
+ * covers. All or nothing: one payment that does not fit undoes the lot.
+ */
+export async function netOut(spendId: number, creditIds: number[]): Promise<void> {
+  const links = await getReimbursementLinks();
+  const spendsOf = (creditId: number) =>
+    links.filter((link) => link.creditId === creditId).map((link) => link.spendId);
+  const dropped = links
+    .filter((link) => link.spendId === spendId && !creditIds.includes(link.creditId))
+    .map((link) => link.creditId);
+
+  const db = getAdapter();
+  await db.execAsync(`BEGIN;`);
+  try {
+    for (const creditId of dropped) {
+      const others = spendsOf(creditId).filter((id) => id !== spendId);
+      if (others.length > 0) await linkReimbursement(creditId, others);
+      else await unlinkReimbursement(creditId);
+    }
+    for (const creditId of creditIds) {
+      await linkReimbursement(creditId, [...new Set([...spendsOf(creditId), spendId])]);
+    }
+    await db.execAsync(`COMMIT;`);
+  } catch (error) {
+    await db.execAsync(`ROLLBACK;`);
+    throw error;
   }
 }

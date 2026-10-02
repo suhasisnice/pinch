@@ -78,6 +78,23 @@ const DISMISSED_GAP_KEY = 'pinch.dismissedDiscrepancy';
  * silence "₹4,000 unaccounted" next week, which is a different and much
  * more worrying fact.
  */
+const KEPT_LOOKALIKES_KEY = 'pinch.keptLookalikes';
+
+/** Lookalike pairs ("12:15") the user has said are two real payments. */
+export async function getKeptLookalikes(): Promise<string[]> {
+  try {
+    return JSON.parse((await AsyncStorage.getItem(KEPT_LOOKALIKES_KEY)) ?? '[]');
+  } catch {
+    return [];
+  }
+}
+
+export async function keepLookalike(pair: string): Promise<void> {
+  const kept = await getKeptLookalikes();
+  // Only recent pairs are ever asked about, so the list need not grow forever.
+  await AsyncStorage.setItem(KEPT_LOOKALIKES_KEY, JSON.stringify([...kept, pair].slice(-50)));
+}
+
 export async function getDismissedDiscrepancy(): Promise<number | null> {
   const stored = await AsyncStorage.getItem(DISMISSED_GAP_KEY);
   if (stored === null) return null;

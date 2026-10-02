@@ -1,0 +1,14 @@
+ollama-cloud/nemotron-3-ultra: {"200":5,"429":140,"504":1,"timeout":4} in 60s = 5 ok/min, first fail at #11
+mistral/codestral-latest: {"200":150} in 166.1s = 54 ok/min
+ollama-cloud/nemotron-3-super: {"200":67,"429":82,"timeout":1} in 114.9s = 35 ok/min, first fail at #77
+groq/openai/gpt-oss-120b: {"200":100,"429":50} in 225.1s = 27 ok/min, first fail at #9
+mistral/ministral-3b-latest: {"200":150} in 126.9s = 71 ok/min
+ollama-cloud/nemotron-3-nano:30b: {"200":150} in 134.1s = 67 ok/min
+groq/openai/gpt-oss-20b: {"200":108,"429":42} in 192.3s = 34 ok/min, first fail at #35
+mistral/ministral-8b-latest: {"200":150} in 163.4s = 55 ok/min
+ollama-cloud/gemma4:31b: {"200":105,"429":45} in 153.4s = 41 ok/min, first fail at #106
+groq/qwen/qwen3.8-27b: {"200":108,"429":42} in 189.4s = 34 ok/min, first fail at #33
+ollama-cloud/gpt-oss:20b: {"200":150} in 152.6s = 59 ok/min
+mistral/ministral-14b-latest: {"200":77,"429":72,"timeout":1} in 319.8s = 14 ok/min, first fail at #20
+groq/allam-2-7b: {"200":110,"429":40} in 199.4s = 33 ok/min, first fail at #43
+wrote docs/AI_LIMITS.raw.json

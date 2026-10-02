@@ -218,7 +218,76 @@ describe('linking a reimbursement', () => {
     expect(links.find((l) => l.spendId === cab)?.amount).toBe(400);
   });
 
-  it('offers a spend the payer already owes on first, and never a later one', async () => {
+  describe('net out, from the spend', () => {
+    // Paid 70 for the auto, the friend sent their half straight after.
+    async function autoAndHalf() {
+      const auto = await db.addTransaction({
+        amount: 70, direction: 'DEBIT', kind: 'SPEND', merchant: 'Auto', occurredAt: day(3, 18),
+      });
+      const half = await db.addTransaction({
+        amount: 35, direction: 'CREDIT', kind: 'INCOME', merchant: 'Rahul', occurredAt: day(3, 19),
+      });
+      return { auto, half };
+    }
+
+    it('offers money from before or after, nearest first, and nets the spend to your share', async () => {
+      const { auto, half } = await autoAndHalf();
+      const earlier = await db.addTransaction({
+        amount: 35, direction: 'CREDIT', kind: 'INCOME', merchant: 'Mum', occurredAt: day(2),
+      });
+
+      const ids = (await db.getNetOutCandidates(auto)).map((c) => c.id);
+      expect(ids).toEqual([half, earlier]);
+
+      await db.netOut(auto, [half]);
+
+      expect((await db.getTransactionById(half))?.kind).toBe('SETTLE_IN');
+      expect(await db.getIncomeBetween(...WINDOW)).toBe(35); // Mum's, untouched
+      expect(await db.getBorneBetween(...WINDOW)).toMatchObject({ paid: 70, borne: 35, recovered: 35 });
+      expect(await db.getReimbursementLinks()).toEqual([{ creditId: half, spendId: auto, amount: 35 }]);
+      expect((await db.getNetOutCandidates(auto))[0]).toMatchObject({ id: half, applied: 35 });
+    });
+
+    it('takes several payments, and unticking one puts it back as income', async () => {
+      const { auto, half } = await autoAndHalf();
+      const more = await db.addTransaction({
+        amount: 20, direction: 'CREDIT', kind: 'INCOME', merchant: 'Priya', occurredAt: day(4),
+      });
+
+      await db.netOut(auto, [half, more]);
+      expect((await db.getBorneBetween(...WINDOW)).borne).toBe(15);
+
+      await db.netOut(auto, [half]);
+      expect((await db.getTransactionById(more))?.kind).toBe('INCOME');
+      expect((await db.getBorneBetween(...WINDOW)).borne).toBe(35);
+
+      await db.netOut(auto, []);
+      expect(await db.getReimbursementLinks()).toEqual([]);
+      expect(await db.getIncomeBetween(...WINDOW)).toBe(55);
+    });
+
+    it('hides a payment that already paid something else back', async () => {
+      const { auto, half } = await autoAndHalf();
+      const chai = await db.addTransaction({
+        amount: 35, direction: 'DEBIT', kind: 'SPEND', merchant: 'Chai', occurredAt: day(3, 17),
+      });
+      await db.linkReimbursement(half, [chai]);
+      expect(await db.getNetOutCandidates(auto)).toEqual([]);
+    });
+
+    it('is all or nothing when one payment is too big for the spend', async () => {
+      const { auto, half } = await autoAndHalf();
+      const big = await db.addTransaction({
+        amount: 50, direction: 'CREDIT', kind: 'INCOME', merchant: 'Priya', occurredAt: day(4),
+      });
+
+      await expect(db.netOut(auto, [half, big])).rejects.toThrow();
+      expect(await db.getReimbursementLinks()).toEqual([]);
+      expect((await db.getTransactionById(half))?.kind).toBe('INCOME');
+    });
+  });
+
+  it('offers a spend the payer already owes on first, and a later one too', async () => {
     const { dinner, repaid } = await dinnerAndRepayment();
     const unrelated = await db.addTransaction({
       amount: 90, direction: 'DEBIT', kind: 'SPEND', merchant: 'Metro', occurredAt: day(3, 22),
@@ -232,6 +301,6 @@ describe('linking a reimbursement', () => {
     const ids = (await db.getReimbursementCandidates(repaid)).map((c) => c.id);
     expect(ids[0]).toBe(dinner);
     expect(ids).toContain(unrelated);
-    expect(ids).not.toContain(later);
+    expect(ids).toContain(later);
   });
 });

@@ -24,7 +24,7 @@ import MarkAsLoanSheet from '../components/MarkAsLoanSheet';
 import SplitModal from '../components/SplitModal';
 import { RootStackParamList } from '../navigation/RootNavigator';
 import FilterSheet from '../components/FilterSheet';
-import ReimburseLinkSheet from '../components/ReimburseLinkSheet';
+import NetOutSheet from '../components/NetOutSheet';
 import LinkedGroupRow from '../components/LinkedGroupRow';
 import { LedgerItem, ReimbursementLink, groupLinkedTransactions } from '../math/reimbursement';
 import {
@@ -281,7 +281,7 @@ export default function TransactionsScreen() {
         }}
       />
 
-      <ReimburseLinkSheet
+      <NetOutSheet
         transaction={linkFor}
         onClose={() => setLinkFor(null)}
         onSaved={() => {

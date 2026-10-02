@@ -1,4 +1,4 @@
-import { parseMessage } from '../src/services/parserService';
+import { ACCEPT_THRESHOLD, parseMessage } from '../src/services/parserService';
 
 /**
  * Real-world Indian bank and UPI SMS shapes, gathered because the hand-built
@@ -118,6 +118,12 @@ describe('payment-app notifications for money received', () => {
       counterparty: 'Rahul',
     },
     {
+      label: 'PhonePe: title in front, "has sent", "to your bank account"',
+      text: 'Money received SWARNA P has sent ₹38 to your bank account ICICI Bank-XX22',
+      amount: 38,
+      counterparty: 'Swarna P',
+    },
+    {
       label: 'paid you, rather than sent to you',
       text: 'Priya Sharma paid you ₹1,200',
       amount: 1200,
@@ -142,6 +148,17 @@ describe('payment-app notifications for money received', () => {
   it('never reads the recipient as a merchant called You', () => {
     const parsed = parseMessage('Piggy sent ₹230 to you.', null, { source: 'NOTIFICATION' });
     expect(parsed?.counterparty).not.toBe('You');
+  });
+
+  it('sends a guessed sign to review instead of logging it', () => {
+    // "received" says money in, "sent" (with no recipient this parser knows) says money out.
+    const parsed = parseMessage(
+      'Money received RAVI K has sent ₹50 into savings ICICI Bank-XX22',
+      null,
+      { source: 'NOTIFICATION' }
+    );
+    expect(parsed).not.toBeNull();
+    expect(parsed!.confidence).toBeLessThan(ACCEPT_THRESHOLD);
   });
 
   it('still reads an outgoing payment worded with the same verb as money out', () => {
